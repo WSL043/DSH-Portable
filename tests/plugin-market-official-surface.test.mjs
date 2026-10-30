@@ -1,8 +1,7 @@
 import assert from 'node:assert/strict'
 import { readFile } from 'node:fs/promises'
 import test from 'node:test'
-
-import { forgetOfficialMarket, readOfficialMarket } from '../app/vendor/dsh-portable-plugin-market/src/client/official-market.ts'
+import { assertMaintenanceReadOnly } from '../scripts/smoke-windows-market-categories.mjs'
 
 const vendor = path => new URL(`../app/vendor/dsh-portable-plugin-market/${path}`, import.meta.url)
 
@@ -13,7 +12,7 @@ test('the Portable market reports whether the official market bundle is on in th
   const route = routes.slice(at, at + 900)
   assert.ok(route.includes("allow: 'GET'"))
   assert.ok(route.includes('readProfileBundles(activeProfileDir).includes(OFFICIAL_MARKET_BUNDLE)'))
-  assert.ok(route.includes('active: false'), 'an unreadable profile never hides the Portable market')
+  assert.ok(route.includes('active: false'), 'an unreadable profile is not claimed as an active official market')
   assert.ok(routes.includes("const OFFICIAL_MARKET_BUNDLE = '@deepseek-ai/dsh-experimental-plugin-market-bundle'"))
 })
 
@@ -21,29 +20,35 @@ test('the shipped server bundle serves the official-market route', async () => {
   const bundle = await readFile(vendor('lib/index.js'), 'utf8')
   assert.ok(bundle.includes('/dsh-market/official-market'), 'rebuild the market server bundle')
   const client = await readFile(vendor('client/client.js'), 'utf8')
-  assert.ok(client.includes('/dsh-market/official-market'), 'rebuild the market client bundle')
+  assert.ok(!client.includes('/dsh-market/official-market'), 'current manager availability must not be inferred from official market activation')
 })
 
-test('with the official market on, the Portable market stays one click away as Advanced and the update status stays', async () => {
-  const action = await readFile(vendor('src/client/MarketAction.tsx'), 'utf8')
-  assert.ok(action.includes("official === 'active' ? props.t('navAdvanced') : props.t('nav')"), 'the button is relabelled, not removed')
-  assert.ok(action.includes('<PluginUpdateStatus'), 'updates stay available')
-  assert.ok(action.includes('<Button'), 'the button is always built')
-})
+test('official management has no Advanced tab and More only imports legacy plugin configuration', async () => {
+  const [entry, action, maintenance, locales] = await Promise.all([
+    readFile(vendor('src/client/index.ts'), 'utf8'),
+    readFile(vendor('src/client/MarketAction.tsx'), 'utf8'),
+    readFile(vendor('src/client/Maintenance.tsx'), 'utf8'),
+    readFile(vendor('src/client/locales.ts'), 'utf8'),
+  ])
+  assert.doesNotMatch(entry, /dsh-portable-plugin-advanced|navAdvanced/)
+  assert.match(entry, /official:\s*\(\) => \(\) => \{\}/)
+  assert.match(action, /return\s*(?:\(\s*)?<MarketErrorBoundary\s+view=(['"])installed\1\s*>\s*<PluginUpdateStatus\b/)
+  assert.doesNotMatch(action, /useOfficialMarket|MarketSection|<Modal|<Button/)
+  assert.doesNotMatch(action, /navAdvanced/)
+  assert.match(entry, /typeof primitives\.MenuItemButton !== 'function'[\s\S]+spec\?\.kind !== 'list' \|\| spec\.scope !== 'root'/)
+  assert.match(entry, /inject\('shell\.overlay',[\s\S]+inject\('sidebar\.panellist\.actions'/)
+  assert.match(entry, /id: 'dsh-portable-plugin-maintenance-overlay'/)
+  assert.match(maintenance, /<MenuItemButton onSelect=\{\(\) => \{ props\.onDismiss\(\); props\.controller\.show\(\) \}\}>/)
+  assert.doesNotMatch(maintenance, /Diagnostics|ActivationSnapshot|DisclosureRow|StateDot|\/dsh-market\/(?:backup|installed|check)/)
+  assert.match(maintenance, /if \(!file \|\| !confirming \|\| running\.current\) return/)
+  assert.match(maintenance, /file\.size > 2 \* 1024 \* 1024/)
+  assert.match(maintenance, /JSON\.parse\(await file\.text\(\)\)[\s\S]+fetch\('\/dsh-market\/restore', \{\s+method: 'POST'/)
+  assert.match(maintenance, /if \(running\.current\) return\s+setConfirming\(false\)\s+setFile\(null\)\s+if \(fileInput\.current\) fileInput\.current\.value = ''/)
+  assert.match(locales, /maintenanceTitle:\s*(['"])旧插件配置恢复\1/)
+  assert.match(locales, /maintenanceTitle:\s*(['"])Legacy plugin recovery\1/)
+  assert.match(locales, /新备份请使用 设置 → 桌面与数据 → 迁移与备份/)
+  assert.match(locales, /For new backups, use Settings → Desktop & data → Migration & backup/)
 
-test('the client reads the answer once, falls back to the Portable market on any failure and can re-ask', async () => {
-  forgetOfficialMarket()
-  const seen = []
-  const yes = async url => { seen.push(url); return new Response(JSON.stringify({ active: true })) }
-  assert.equal(await readOfficialMarket(yes), 'active')
-  assert.deepEqual(seen, ['/dsh-market/official-market'])
-
-  forgetOfficialMarket()
-  assert.equal(await readOfficialMarket(async () => new Response('x', { status: 500 })), 'inactive')
-  forgetOfficialMarket()
-  assert.equal(await readOfficialMarket(async () => { throw new Error('offline') }), 'inactive')
-  forgetOfficialMarket()
-  assert.equal(await readOfficialMarket(async () => new Response(JSON.stringify({ active: 'yes' }))), 'inactive')
 })
 
 test('every chunk the shipped server bundle imports exists, and no stale chunk is left behind', async () => {
@@ -75,7 +80,7 @@ test('the shipped server bundle carries the update support for index-installed p
   assert.ok(all.includes("kind:`pinned`") || all.includes('kind: "pinned"') || all.includes("kind:'pinned'") || all.includes('pinned'), 'the pinned rollback source exists')
 })
 
-test('Advanced skips Portable update lookups while the legacy installed view still refreshes them', async () => {
+test('official-owned fallback skips Portable updates while the legacy installed view still refreshes them', async () => {
   const { stripTypeScriptTypes } = await import('node:module')
   const { runInNewContext } = await import('node:vm')
   const section = (await readFile(vendor('src/client/MarketSection.tsx'), 'utf8')).replaceAll('\r\n', '\n')
@@ -117,4 +122,20 @@ test('Advanced skips Portable update lookups while the legacy installed view sti
   assert.match(memberRow, /!officialUpdates && \(/)
   assert.match(memberRow, /officialUpdates && props\.onOfficialManage/)
   assert.ok(memberRow.includes('props.onOfficialManage!(member)'))
+})
+
+test('legacy recovery cancellation requires a valid API fixture and rejects writes or compatibility reassessment', () => {
+  const reads = [{method:'GET',path:'/dsh-market/backup',status:200},
+    {method:'GET',path:'/dsh-market/installed',status:200}]
+  const fixture = {originMatched:true,path:'/dsh-market/backup',httpStatus:200,bytes:100,sha256:'a'.repeat(64),
+    format:'dsh-profile-backup',version:0.2,packageJson:true,manifestMatches:true}
+  assert.deepEqual(assertMaintenanceReadOnly(reads,fixture),{legacyExportApiCompatibility:true,diagnosticGets:0,installedReads:1,restorePosts:0,mutationRequests:0})
+  for(const path of ['/dsh-market/restore','/dsh-market/groups','/dsh-market/use-skin','/dsh-market/install','/dsh-market/uninstall','/dsh-market/bundle-order'])
+    assert.throws(()=>assertMaintenanceReadOnly([...reads,{method:'POST',path}],fixture),/must not mutate the profile/)
+  assert.throws(()=>assertMaintenanceReadOnly([...reads,{method:'GET',path:'/dsh-market/check',status:200}],fixture),/second compatibility assessment/)
+  assert.throws(()=>assertMaintenanceReadOnly(reads.slice(1),fixture),/actual legacy export API GET/)
+  for(const invalid of [undefined,{...fixture,httpStatus:500},{...fixture,format:'other'},{...fixture,version:0.1},
+    {...fixture,packageJson:false},{...fixture,manifestMatches:false},{...fixture,originMatched:false},
+    {...fixture,bytes:0},{...fixture,bytes:2*1024*1024+1},{...fixture,sha256:'invalid'}])
+    assert.throws(()=>assertMaintenanceReadOnly(reads,invalid),/valid owned profile fixture/)
 })

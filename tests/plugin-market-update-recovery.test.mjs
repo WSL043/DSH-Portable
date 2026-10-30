@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict'
 import { once } from 'node:events'
-import { mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises'
+import { mkdir, mkdtemp, readFile, rename, rm, symlink, writeFile } from 'node:fs/promises'
 import { createServer } from 'node:http'
 import os from 'node:os'
 import path from 'node:path'
@@ -286,6 +286,76 @@ test('external plugin sources never fall through to a same-name registry update'
   }
 })
 
+test('configuration recovery retains layer order on fallback and reports an all-failed rollback honestly', async t => {
+  for (const allFailed of [false, true]) await t.test(allFailed ? 'all failed' : 'partial recovery', async t => {
+    const restoredSpec = 'link:/owned-restore-fixture'
+    const failed = () => ({ ...ok(), exitCode: 1, stderr: 'fixture install failure' })
+    const bed = await updateTestbed(t, {
+      onInstall: async () => failed(),
+      async onAdd({ target, manifestFile, profile }) {
+        if (allFailed || target === 'broken-restore-plugin@1.0.0') return failed()
+        assert.equal(target, restoredSpec)
+        const manifest = JSON.parse(await readFile(manifestFile, 'utf8'))
+        manifest.dependencies['fixture-plugin'] = restoredSpec
+        manifest.dsh.profile.bundles.push('fixture-plugin')
+        await writeFile(manifestFile, JSON.stringify(manifest))
+        await writeInstalledPlugin(profile, '1.0.0')
+        return ok()
+      },
+    })
+    const original = await readFile(bed.manifestFile, 'utf8')
+    await writeFile(path.join(bed.profile, 'config.toml'), 'original configuration')
+    const backup = { format: 'dsh-profile-backup', version: 0.2, profile: 'web', createdAt: '2026-10-29', files: [
+      { path: 'package.json', json: {
+        dependencies: { 'fixture-plugin': restoredSpec, 'broken-restore-plugin': '1.0.0' },
+        dsh: { profile: { bundles: ['fixture-plugin', 'base-only', 'broken-restore-plugin', 'tail-only'] } },
+      } },
+      { path: 'config.toml', lines: ['recovered configuration'] },
+    ] }
+    const { response, body } = await bed.restore(backup)
+    assert.equal(response.status, 200, JSON.stringify(body))
+    assert.equal(bed.pnpmProbes, 1)
+    assert.equal(body.ok, true)
+    assert.deepEqual(body.errors.map(item => item.name), allFailed ? ['fixture-plugin', 'broken-restore-plugin'] : ['broken-restore-plugin'])
+    assert.equal(body.files, allFailed ? 0 : 2)
+    if (allFailed) {
+      assert.equal(await readFile(bed.manifestFile, 'utf8'), original)
+      assert.equal(await readFile(path.join(bed.profile, 'config.toml'), 'utf8'), 'original configuration')
+      assert.deepEqual(body.unportable, [])
+    } else {
+      const settled = JSON.parse(await readFile(bed.manifestFile, 'utf8'))
+      assert.deepEqual(settled.dsh.profile.bundles, ['fixture-plugin', 'base-only', 'tail-only'])
+      assert.deepEqual(settled.dependencies, { 'fixture-plugin': restoredSpec })
+      assert.equal(await readFile(path.join(bed.profile, 'config.toml'), 'utf8'), 'recovered configuration')
+      assert.deepEqual(body.unportable, [{ name: 'fixture-plugin', spec: restoredSpec }])
+    }
+  })
+})
+
+test('restore fallback rejects a profile directory swapped to a link while pnpm runs', async t => {
+  const outside = await mkdtemp(path.join(os.tmpdir(), 'dsh-restore-outside-'))
+  t.after(() => rm(outside, { recursive: true, force: true }))
+  const externalManifest = JSON.stringify({ dependencies: { sentinel: 'untouched' } })
+  await writeFile(path.join(outside, 'package.json'), externalManifest)
+  const bed = await updateTestbed(t, {
+    async onInstall({ profile }) {
+      await rename(profile, profile + '-original')
+      t.after(() => rm(profile + '-original', { recursive: true, force: true }))
+      await symlink(outside, profile, process.platform === 'win32' ? 'junction' : 'dir')
+      return { ...ok(), exitCode: 1, stderr: 'fixture failure after redirect' }
+    },
+    onAdd: async () => { throw new Error('redirected profile must not start fallback installs') },
+  })
+  const backup = { format: 'dsh-profile-backup', version: 0.2, profile: 'web', files: [
+    { path: 'package.json', json: { dependencies: { 'fixture-plugin': '1.0.0' } } },
+  ] }
+  const { response, body } = await bed.restore(backup)
+  assert.equal(response.status, 400, JSON.stringify(body))
+  assert.match(body.error, /unsafe backup root/)
+  assert.equal(await readFile(path.join(outside, 'package.json'), 'utf8'), externalManifest)
+  assert.equal(bed.calls.some(args => args[0] === 'add'), false)
+})
+
 const ok = (stdout = '') => ({
   exitCode: 0,
   timedOut: false,
@@ -339,6 +409,7 @@ async function updateTestbed(t, {
   if (installed) await writeInstalledPlugin(profile, installedVersion)
 
   const calls = []
+  let pnpmProbes = 0
   const commandRuntime = {
     async runPlugin(_profile, args) {
       calls.push(args)
@@ -347,7 +418,7 @@ async function updateTestbed(t, {
       if (args.at(-1) === 'install' && onInstall) return await onInstall({ args, manifestFile, profile })
       throw new Error(`unexpected plugin command: ${args.join(' ')}`)
     },
-    probePnpm: async () => true,
+    probePnpm: async () => { pnpmProbes++; return true },
     provisionPnpm: async () => ({ ok: true }),
     cancelActive: () => false,
   }
@@ -459,6 +530,15 @@ async function updateTestbed(t, {
         method: 'POST',
         headers: { 'content-type': 'application/json', origin },
         body: JSON.stringify({ url }),
+      })
+      return { response, body: await response.json() }
+    },
+    get pnpmProbes() { return pnpmProbes },
+    async restore(backup) {
+      const response = await originalFetch(origin + '/dsh-market/restore', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json', origin },
+        body: JSON.stringify({ backup }),
       })
       return { response, body: await response.json() }
     },

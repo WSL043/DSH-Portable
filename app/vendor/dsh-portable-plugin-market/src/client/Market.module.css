@@ -474,3 +474,11 @@
  .discoveryToolbar .tabSearch{flex-basis:100%}
  .discoveryToolbar .viewBar{margin-left:auto}
 }
+
+.maintenanceModal{width:min(520px,calc(100vw - 48px));max-width:calc(100vw - 48px)}
+.maintenanceModalContent{max-height:calc(100vh - 96px)}
+.maintenanceModalContent>div:last-child{min-height:0;overflow:auto}
+.maintenanceBody{display:flex;flex-direction:column;gap:16px;min-height:0}
+.maintenanceRecovery,.maintenanceConfirmation{display:flex;flex-direction:column;gap:10px;min-width:0}
+.maintenanceActions{display:flex;align-items:center;flex-wrap:wrap;gap:8px}
+.maintenanceConfirmation{padding-top:4px;overflow-wrap:anywhere}

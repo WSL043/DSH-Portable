@@ -243,6 +243,68 @@ export async function verifyDefaultPluginUi(page, evidence, title = 'Portable de
   }
 }
 
+/** Qualify the actual official UI when the product declares no community defaults. */
+export async function verifyOfficialCoreUi(page, evidence, theme) {
+  const errors = []
+  const onError = error => errors.push(error.message)
+  const onConsole = message => {
+    if (message.type() === 'error' && /React error|slot entry crashed|TypeError|ReferenceError/.test(message.text())) errors.push(message.text())
+  }
+  page.on('pageerror', onError)
+  page.on('console', onConsole)
+  try {
+    await dismissOnboarding(page)
+    await clickAfterOnboarding(page, page.getByRole('button', { name: /^(Plugins|插件)$/ }).first())
+    await page.getByRole('button', { name: /^(Add plugin|添加插件)$/ }).first().waitFor({ state: 'visible' })
+    const loading = page.getByText(/^(Reading plugins…|正在读取插件…)$/)
+    await loading.waitFor({ state: 'hidden' })
+    assert.equal(await page.getByText(/Could not read all plugins|无法读取全部插件/).count(), 0, 'official installed-plugin data loaded successfully')
+    for (const name of ['dsh-chat-manager', 'dsh-image-viewer']) {
+      assert.equal(await page.locator(`[data-plugin-package="${name}"]`).count(), 0, `${name} is absent from the official installed-plugin page`)
+    }
+    await page.screenshot({ path: path.join(evidence, 'official-plugins-without-defaults.png') })
+    await clickAfterOnboarding(page, page.getByRole('button', { name: /^(New session|新建会话|新会话)$/i }).first())
+    await dismissOnboarding(page)
+    const input = page.locator('[contenteditable="true"][role="textbox"]').first()
+    const draft = `Official core ${theme} qualification draft`
+    await input.fill(draft)
+    assert.equal(await input.isEditable(), true, 'official composer is editable without community plugins')
+    assert.equal(await input.innerText(), draft, 'official composer retains user input')
+    await page.waitForFunction(expected => document.documentElement.style.colorScheme === expected, theme)
+    const actualTheme = await page.evaluate(() => document.documentElement.style.colorScheme)
+    assert.equal(actualTheme, theme, 'the official layout applied the configured theme')
+    await page.screenshot({ path: path.join(evidence, 'official-core-composer.png') })
+    assert.deepEqual(errors, [], 'no official UI React or page errors')
+    return { ok: true, scope: 'official-core-ui-no-defaults', officialPluginPage: true, communityDefaultsAbsent: true, composerEditable: true, draftPreserved: true, actualTheme, errors }
+  } catch (error) {
+    await page.screenshot({ path: path.join(evidence, 'failure.png') }).catch(() => {})
+    await writeFile(path.join(evidence, 'errors.json'), JSON.stringify({ error: String(error), errors }, null, 2))
+    throw error
+  } finally {
+    page.off('pageerror', onError)
+    page.off('console', onConsole)
+  }
+}
+
+export async function assertNoDefaultPluginInstalls(root) {
+  for (const name of ['dsh-chat-manager', 'dsh-image-viewer']) {
+    for (const profile of ['web', 'headless']) {
+      const profileRoot = path.join(root, 'data/dsh-home/profiles', profile)
+      const installed = await readFile(path.join(profileRoot, 'node_modules', name, 'package.json'), 'utf8').then(() => true, error => {
+        if (error.code === 'ENOENT') return false
+        throw error
+      })
+      assert.equal(installed, false, `${name} must not be automatically installed in ${profile}`)
+      const manifest = await readFile(path.join(profileRoot, 'package.json'), 'utf8').then(JSON.parse, error => {
+        if (error.code === 'ENOENT') return {}
+        throw error
+      })
+      assert.equal(Object.hasOwn(manifest.dependencies ?? {}, name), false, `${name} must not be a profile dependency`)
+    }
+  }
+  return []
+}
+
 export async function seedStaleArchive(root, id) {
   const registryFile = path.join(root, 'data/dsh-home/storages/workspace.json')
   const registry = JSON.parse(await readFile(registryFile, 'utf8'))
@@ -257,6 +319,10 @@ export async function verifyNativeDefaultPlugins(root, playwrightManifest) {
   root = path.resolve(root)
   const { chromium } = createRequire(path.resolve(playwrightManifest))('playwright')
   const components = JSON.parse(await readFile(path.join(root, 'licenses/COMPONENTS.json'), 'utf8'))
+  assert.ok(Array.isArray(components.defaultPlugins), 'product must declare its default plugins')
+  const declaredDefaults = components.defaultPlugins
+  const hasDefaults = declaredDefaults.length > 0
+  if (hasDefaults) assert.deepEqual(declaredDefaults.map(plugin => plugin.package).sort(), ['dsh-chat-manager', 'dsh-image-viewer'], 'historical UI qualification covers the two reviewed defaults')
   const fixtureEnv = { ...process.env, DSH_PORTABLE_STATE_ROOT: root, DSH_PORTABLE_ENVIRONMENT: 'default',
     DSH_HOME: path.join(root, 'data/dsh-home'), DSH_TELEMETRY_MODE: 'DISABLED' }
   const seedEnv = { ...fixtureEnv }
@@ -276,7 +342,7 @@ export async function verifyNativeDefaultPlugins(root, playwrightManifest) {
     // Let the first web launch import the headless session and create its own
     // workspace registry. Precreating a partial registry suppresses that import.
     // Add the stale marker only after that host has shut down, before light mode.
-    const staleArchiveId = process.env.DSH_CHAT_TEST_STALE_ARCHIVE === '1' && theme === 'light' ? `session-acceptance-absent-${theme}` : undefined
+    const staleArchiveId = hasDefaults && process.env.DSH_CHAT_TEST_STALE_ARCHIVE === '1' && theme === 'light' ? `session-acceptance-absent-${theme}` : undefined
     if (staleArchiveId) {
       await seedStaleArchive(root, staleArchiveId)
     }
@@ -299,12 +365,19 @@ export async function verifyNativeDefaultPlugins(root, playwrightManifest) {
         try { browser = await chromium.connectOverCDP(`http://127.0.0.1:${port}`, { timeout: 2000 }) } catch { await delay(250) }
       }
       assert.ok(browser, 'native WebView2 remote debugging is available')
-      const page = browser.contexts()[0].pages()[0]
+      let page
+      while (!page && Date.now() < deadline) {
+        page = browser.contexts().flatMap(context => context.pages())[0]
+        if (!page) await delay(100)
+      }
+      assert.ok(page, 'native WebView2 page target is available before the connection deadline')
       page.setDefaultTimeout(20000)
       await page.waitForURL(/^http:\/\/127\.0\.0\.1:/, { timeout: 90000 })
       assert.equal(await page.evaluate(() => Boolean(window.chrome?.webview)), true, 'this is the native WebView, not a substitute browser')
       await page.waitForFunction(() => document.querySelector('[data-dsh-boot]') === null)
-      results.push({ theme, staleArchiveId, ...(await verifyDefaultPluginUi(page, evidence, title, { confirmDelete: theme === 'light', staleArchiveId })) })
+      results.push({ theme, staleArchiveId, ...(hasDefaults
+        ? await verifyDefaultPluginUi(page, evidence, title, { confirmDelete: theme === 'light', staleArchiveId })
+        : await verifyOfficialCoreUi(page, evidence, theme)) })
     } finally {
       await browser?.close().catch(() => {})
       try {
@@ -312,10 +385,10 @@ export async function verifyNativeDefaultPlugins(root, playwrightManifest) {
       } finally { if (child.exitCode === null) child.kill() }
     }
   }
-  const installedPlugins = await Promise.all(['dsh-chat-manager', 'dsh-image-viewer'].map(async name => {
+  const installedPlugins = hasDefaults ? await Promise.all(declaredDefaults.map(async ({ package: name }) => {
     const manifest = JSON.parse(await readFile(path.join(root, 'data/dsh-home/profiles/web/node_modules', name, 'package.json'), 'utf8'))
     return { package: name, version: manifest.version }
-  }))
+  })) : await assertNoDefaultPluginInstalls(root)
   const report = { ok: true, portableVersion: components.portableVersion, dshVersion: components.dshVersion, defaultPlugins: components.defaultPlugins, installedPlugins, results }
   await writeFile(path.join(root, 'acceptance/default-plugin-ui/result.json'), JSON.stringify(report, null, 2))
   return report

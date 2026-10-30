@@ -29,7 +29,7 @@ function fixture({ owned = true, details = 'host failed', cleanupError = null, q
     ownedState: state => { if (state?.pid === 123 && queryError) throw queryError; return Boolean(state?.pid === 123 && owned) },
     seedDefaultPlugins: async () => ({ status: 'unchanged' }),
     ensureOfficialMarket: async () => ({ status: 'unchanged', actions: [] }),
-    pauseIncompatibleProfileBundles: async () => ({ status: 'passed', paused: [] }),
+    checkProfileCompatibility: async () => ({ status: 'passed', incompatible: [] }),
     repairIncompleteProfileDependencies: async () => ({ profiles: [] }),
     applyPluginStorage: async () => ({ failed: 0, entries: [] }),
     reservePort: async () => ({ port: 3080, release() {} }), logSize: () => 0,

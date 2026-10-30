@@ -45,7 +45,7 @@
 | Installation and platforms | Installer; Windows and macOS | Portable; Windows, macOS, and Linux, with no installation or PATH changes |
 | Update cadence | Follows the official release schedule | Portable and core update separately; choose a core version |
 | Moving and maintenance | Standard desktop installation | After fully exiting, copy the whole folder to a USB drive or another computer with the same OS and architecture; data-preserving rollback and recovery tools are included |
-| Plugins | Official plugin management | The same plugin management, plus a Plugin Market entry and two default plugins |
+| Plugins | Official plugin management | The same official plugin management; More provides diagnostics and recovery, with community plugins installed on demand |
 | A good fit if… | You want an installed app on one computer | You want to carry it between devices or control updates |
 
 ## Downloads
@@ -98,7 +98,7 @@ The close button sends the app to the tray, so tasks continue. To quit, use **Fi
 
 ## Plugins
 
-Fresh installs include two removable defaults: [Image Viewer](https://github.com/WSL043/dsh-image-viewer) (zoom, gallery, original downloads, region annotations) and [Chat Manager](https://github.com/WSL043/dsh-chat-manager) (search archives, restore and safely delete sessions).
+New packages no longer install community plugins by default. Existing installations and their enablement states are preserved. Install [Image Viewer](https://github.com/WSL043/dsh-image-viewer) or [Chat Manager](https://github.com/WSL043/dsh-chat-manager) through the official plugin manager when needed.
 
 Find more in **Settings → Plugins → Plugin Market**; to add one manually, enter a package name or address in **Plugins → Add plugin**—not a terminal command. See the [plugin guide](docs/user-guide.en.md#plugins).
 
@@ -132,7 +132,7 @@ See the [updates and repair guide](docs/user-guide.en.md#updates-and-repair) for
 - **1.0 line:** Runs the official desktop app itself and only moves its data into the folder. Currently a Windows-only [alpha preview](https://github.com/WSL043/DSH-Portable/releases/tag/v1.0.0-alpha.5), not an upgrade path from 0.x:
   - Official files stay unchanged; when the official app ships a new version, "Install and Restart" inside the app follows it, with verification first and an automatic return to the previous version if the new one fails to start.
   - Sessions, settings, plugins, and sign-in live in the folder; copy it whole to another Windows PC and keep working.
-  - **Plugins (Chat Manager, Image Viewer):** the alpha.5 that is public today ships both, switched off by default; turn them on in the official Plugins page. **Alphas released after it will not ship them** (bundling made every start run an extra step first); install them when you need them from the official Plugins → Add plugin page: [Chat Manager](https://github.com/WSL043/dsh-chat-manager#install) and [Image Viewer](https://github.com/WSL043/dsh-image-viewer#install), using the version their pages list. The stable 0.x line is unchanged and still ships both.
+  - **Plugins (Chat Manager, Image Viewer):** the alpha.5 that is public today ships both, switched off by default; turn them on in the official Plugins page. **Alphas released after it will not ship them** (bundling made every start run an extra step first); install them when you need them from the official Plugins → Add plugin page: [Chat Manager](https://github.com/WSL043/dsh-chat-manager#install) and [Image Viewer](https://github.com/WSL043/dsh-image-viewer#install), using the version their pages list. New 0.x packages also omit both defaults; existing installations are preserved.
 - See the [1.0 roadmap](docs/roadmap-toward-1.0.md) and the [official desktop payload experiment](experiments/official-payload/README.md).
 
 ## Get help

@@ -136,9 +136,9 @@ test('the current product line pins one live visual catalog and no curated exten
   assert.doesNotMatch(patch, /session-delete|dsh-codex-subscription|ChatGPT\s*\/\s*Codex/i)
   assert.match(chinese, /可选 Provider：\[Codex Subscription\]\(https:\/\/github\.com\/WSL043\/dsh-codex-subscription\) 可通过现有插件市场或标准 DSH 命令连接 ChatGPT\/Codex 订阅；不会默认安装。/)
   assert.match(english, /Optional provider: \[Codex Subscription\]\(https:\/\/github\.com\/WSL043\/dsh-codex-subscription\) connects a ChatGPT\/Codex subscription through the existing Plugin Market or standard DSH command; it is not installed by default\./)
-  assert.match(chinese, /全新安装仅预装两个经过审核、可自行卸载的插件/)
+  assert.match(chinese, /新版本不再默认安装社区插件/)
   assert.match(chinese, /普通升级会完整保留现有 Profile/)
-  assert.match(english, /Fresh installs include only two reviewed, removable defaults/i)
+  assert.match(english, /New packages do not install community plugins by default/i)
   assert.match(english, /Normal upgrades preserve the existing Profile/i)
 })
 
@@ -162,7 +162,7 @@ test('the packaged market ships runtime artifacts only', async () => {
   assert.ok((await stat(path.join(root, 'app/vendor/dsh-portable-plugin-market/client/client.js'))).size < 220_000)
 })
 
-test('the Portable market reaches the modern manager and retains an old-host fallback', async () => {
+test('official management stays primary and only a missing manager slot retains the legacy fallback', async () => {
   const [app, market, registration, compat, action, section, styles, clientBundle] = await Promise.all([
     read('app/package.json').then(JSON.parse),
     read('app/vendor/dsh-portable-plugin-market/package.json').then(JSON.parse),
@@ -183,10 +183,9 @@ test('the Portable market reaches the modern manager and retains an old-host fal
   assert.match(compat, /settings\.plugins\.tab/)
   assert.match(compat, /spec\?/)
   assert.match(compat, /subscribe\?/)
-  assert.match(action, /<Modal/)
-  assert.match(action, /closeLabel=\{props\.t\('cancel'\)\}/)
-  assert.match(action, /className=\{css\.managerModal\}/)
-  assert.match(action, /view="discover"/)
+  assert.match(action, /return\s*(?:\(\s*)?<MarketErrorBoundary\s+view=(['"])installed\1\s*>\s*<PluginUpdateStatus\b/)
+  assert.doesNotMatch(action, /useOfficialMarket|readOfficialMarket|MarketSection|<Modal|<Button/)
+  assert.doesNotMatch(registration, /dsh-portable-plugin-advanced|navAdvanced/)
   assert.doesNotMatch(registration, /plugins\.item/)
   assert.doesNotMatch(registration, /ctx\.slots\.inject\('settings\.section'/)
   // Row-major grid: cards read left, right, left, right. A column-count gallery filled the left column first.
@@ -215,7 +214,7 @@ test('the Portable market reaches the modern manager and retains an old-host fal
   assert.match(clientBundle, /^window\.__ModuleLoader__\.load\(\{\s*id:\s*"@wsl043\/dsh-portable-plugin-market"/)
 })
 
-test('the market keeps one navigation layer inside the native Plugins page', async () => {
+test('the legacy fallback has one navigation layer and public maintenance adds no manager tab', async () => {
   const [entry, section, styles] = await Promise.all([
     read('app/vendor/dsh-portable-plugin-market/src/client/index.ts'),
     read('app/vendor/dsh-portable-plugin-market/src/client/MarketSection.tsx'),
@@ -223,6 +222,9 @@ test('the market keeps one navigation layer inside the native Plugins page', asy
   ])
 
   assert.match(entry, /id:\s*'market'[\s\S]*id:\s*'installed'/)
+  assert.match(entry, /official:\s*\(\) => \(\) => \{\}/)
+  assert.doesNotMatch(entry, /registerPublicMarket|readOfficialMarket|forgetOfficialMarket/)
+  assert.match(entry, /name: 'sidebar\.panellist\.actions', id: 'dsh-portable-plugin-maintenance'/)
   assert.doesNotMatch(section, /tabDiscover|marketViewSwitch/)
   assert.doesNotMatch(section, /className=\{css\.subTabs\}/)
   assert.doesNotMatch(styles, /^\.subTabs\b/m)
@@ -231,7 +233,7 @@ test('the market keeps one navigation layer inside the native Plugins page', asy
   assert.doesNotMatch(section, /tab === 'backup'/)
 })
 
-test('diagnostic override labels remain readable in both DSH themes', async () => {
+test('legacy diagnostic styles remain readable and current recovery text is checked in both DSH themes', async () => {
   const [styles, browserSmoke] = await Promise.all([
     read('app/vendor/dsh-portable-plugin-market/src/client/Market.module.css'),
     read('scripts/smoke-windows-tray-bridge.mjs'),
@@ -241,8 +243,11 @@ test('diagnostic override labels remain readable in both DSH themes', async () =
   assert.match(overrideStyle, /border:\s*1px solid var\(--dsw-alias-border-l3/)
   assert.match(overrideStyle, /color:\s*var\(--dsw-alias-label-primary/)
   assert.doesNotMatch(overrideStyle, /background:\s*var\(--dsw-alias-brand-primary/)
-  assert.match(browserSmoke, /verifyDiagnosticContrast\('light'\)/)
-  assert.match(browserSmoke, /verifyDiagnosticContrast\('dark'\)/)
+  assert.match(browserSmoke, /for\s*\(const theme of \[['"]light['"],\s*['"]dark['"]\]\)/)
+  assert.match(browserSmoke, /await\s+verifyLegacyRecoveryContrast\(theme\)/)
+  assert.match(browserSmoke, /openMaintenance\(themeLabel\)/)
+  assert.match(browserSmoke, /opening legacy recovery must not write configuration/)
+  assert.match(browserSmoke, /legacy recovery must not query a second compatibility assessment/)
   assert.match(browserSmoke, /contrastRatio >= 4\.5/)
 })
 
@@ -991,7 +996,7 @@ test('plugin profile transfer no longer duplicates Portable data migration in ma
 })
 
 test('finished products verify and smoke the visual market through the real DSH host', async () => {
-  const [runtime, smoke, browserSmoke, workflow, windows, mac, linux] = await Promise.all([
+  const [runtime, smoke, browserSmoke, workflow, windows, mac, linux, officialCycle, defaultPluginUi] = await Promise.all([
     read('scripts/verify-runtime.mjs'),
     read('scripts/smoke-plugin-marketplace.mjs'),
     read('scripts/smoke-windows-tray-bridge.mjs'),
@@ -999,6 +1004,8 @@ test('finished products verify and smoke the visual market through the real DSH 
     read('scripts/build-windows.ps1'),
     read('scripts/build-macos.sh'),
     read('scripts/build-linux.sh'),
+    read('scripts/smoke-windows-official-plugin-cycle.mjs'),
+    read('scripts/verify-default-plugin-ui.mjs'),
   ])
 
   assert.match(runtime, /@wsl043\/dsh-portable-plugin-market\/package\.json/)
@@ -1017,15 +1024,24 @@ test('finished products verify and smoke the visual market through the real DSH 
   assert.match(smoke, /plugins\.length\s*>=\s*1_000/)
   assert.match(smoke, /canonicalPluginIdentity/)
   assert.match(smoke, /plugin\.screenshots/)
-  assert.match(browserSmoke, /Plugin Market/)
-  assert.match(browserSmoke, /Search plugins/)
+  assert.match(browserSmoke, /DSH_PORTABLE_OFFICIAL_MARKET:\s*['"]1['"]/)
+  assert.match(browserSmoke, /data-plugin-panel/)
+  assert.match(browserSmoke, /data-market-entry/)
+  assert.match(browserSmoke, /input\[type="search"\]/)
   assert.match(browserSmoke, /installButtons/)
-  assert.match(browserSmoke, /screenshots/)
+  assert.match(browserSmoke, /data-portable-shot/)
+  assert.match(browserSmoke, /data-portable-viewer/)
   assert.match(browserSmoke, /projectHref/)
-  assert.match(browserSmoke, /projectHref:\s*plugin\.url/)
-  assert.match(browserSmoke, /cardShot/)
-  assert.match(browserSmoke, /persisted compact market view/)
-  assert.match(browserSmoke, /localStorage\.getItem\('dshm-market-view'\)/)
+  assert.match(browserSmoke, /Source code/)
+  assert.match(browserSmoke, /retiredPluginOptions/)
+  assert.doesNotMatch(browserSmoke, /Plugin Market settings section|persisted compact market view|localStorage\.getItem\('dshm-market-view'\)/)
+  assert.match(workflow, /node scripts\/smoke-windows-official-plugin-cycle\.mjs/)
+  assert.match(workflow, /node scripts\/verify-default-plugin-ui\.mjs/)
+  assert.match(officialCycle, /cycle\.cancelUninstall = true/)
+  assert.match(officialCycle, /cycle\.reinstalledAndEnabled = true/)
+  assert.match(officialCycle, /probeConcurrentWriters/)
+  assert.match(officialCycle, /update must preserve enablement/)
+  assert.match(defaultPluginUi, /draftPreserved:\s*true/)
   assert.equal((workflow.match(/smoke-plugin-marketplace\.mjs/g) || []).length, 3)
 
   for (const build of [windows, mac, linux]) {

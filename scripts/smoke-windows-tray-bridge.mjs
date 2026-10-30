@@ -1,11 +1,12 @@
 import assert from 'node:assert/strict'
 import { execFile, spawn } from 'node:child_process'
 import { existsSync } from 'node:fs'
-import { mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises'
+import { mkdtemp, rm, writeFile } from 'node:fs/promises'
 import { createServer } from 'node:net'
 import os from 'node:os'
 import path from 'node:path'
 import { promisify } from 'node:util'
+import { writeSmokeScreenshot } from './lib/smoke-screenshot.mjs'
 import { dismissOfficialOnboardingExpression } from './lib/official-onboarding.mjs'
 import { clickButton, builtInPluginCard, officialPowerShellDetailsReady } from './lib/native-smoke-interaction.mjs'
 
@@ -14,25 +15,24 @@ const root = path.resolve(process.argv[2] || '')
 if (!process.argv[2]) throw new Error('usage: node smoke-windows-tray-bridge.mjs <DSH-Portable root>')
 if (process.platform !== 'win32') throw new Error('the native tray bridge smoke is Windows-only')
 const targetLocale = process.env.DSH_SMOKE_LOCALE === 'en' ? 'en' : 'zh'
-const screenshotPath = process.env.DSH_SMOKE_SCREENSHOT ? path.resolve(process.env.DSH_SMOKE_SCREENSHOT) : ''
+const screenshotPath = process.env.DSH_SMOKE_SCREENSHOT ? process.env.DSH_SMOKE_SCREENSHOT : ''
 const generalScreenshotPath = process.env.DSH_SMOKE_GENERAL_SCREENSHOT
-  ? path.resolve(process.env.DSH_SMOKE_GENERAL_SCREENSHOT)
+  ? process.env.DSH_SMOKE_GENERAL_SCREENSHOT
   : ''
 const generalBottomScreenshotPath = process.env.DSH_SMOKE_GENERAL_BOTTOM_SCREENSHOT
-  ? path.resolve(process.env.DSH_SMOKE_GENERAL_BOTTOM_SCREENSHOT)
+  ? process.env.DSH_SMOKE_GENERAL_BOTTOM_SCREENSHOT
   : ''
 const installedScreenshotPath = process.env.DSH_SMOKE_INSTALLED_SCREENSHOT
-  ? path.resolve(process.env.DSH_SMOKE_INSTALLED_SCREENSHOT)
+  ? process.env.DSH_SMOKE_INSTALLED_SCREENSHOT
   : ''
 const diagnosticsScreenshotPath = process.env.DSH_SMOKE_DIAGNOSTICS_SCREENSHOT
-  ? path.resolve(process.env.DSH_SMOKE_DIAGNOSTICS_SCREENSHOT)
+  ? process.env.DSH_SMOKE_DIAGNOSTICS_SCREENSHOT
   : ''
-const activationPlugin = String(process.env.DSH_SMOKE_PLUGIN_ACTIVATION || '').trim()
-const updatePlugin = String(process.env.DSH_SMOKE_PLUGIN_UPDATE || '').trim()
-const activationScreenshotPath = process.env.DSH_SMOKE_PLUGIN_ACTIVATION_SCREENSHOT
-  ? path.resolve(process.env.DSH_SMOKE_PLUGIN_ACTIVATION_SCREENSHOT)
-  : ''
-const removeActivationPlugin = process.env.DSH_SMOKE_PLUGIN_REMOVE_AFTER === '1'
+const retiredPluginOptions = ['DSH_SMOKE_PLUGIN_ACTIVATION', 'DSH_SMOKE_PLUGIN_UPDATE',
+  'DSH_SMOKE_PLUGIN_REMOVE_AFTER', 'DSH_SMOKE_PLUGIN_ACTIVATION_SCREENSHOT'].filter(name => String(process.env[name] || '').trim())
+if (retiredPluginOptions.length) throw new Error(
+  'Retired private-market tray options: ' + retiredPluginOptions.join(', ') +
+  '; run scripts/smoke-windows-official-plugin-cycle.mjs for real official plugin update/uninstall/reinstall/enable acceptance')
 const checkPortableUpdate = process.env.DSH_SMOKE_CHECK_PORTABLE_UPDATE === '1'
 
 function redactSensitive(value) {
@@ -102,7 +102,7 @@ function lastJsonLine(source) {
 async function portable(args) {
   const result = await execFileAsync(portableNode, [runtimeEntry, path.basename(portableCli), ...args], {
     cwd: root,
-    env: { ...process.env, DSH_PORTABLE_SKIP_UPDATE_CHECK: '1', DSH_PORTABLE_OFFICIAL_MARKET: '0' },
+    env: { ...process.env, DSH_PORTABLE_SKIP_UPDATE_CHECK: '1', DSH_PORTABLE_OFFICIAL_MARKET: '1' },
     timeout: 90000,
     windowsHide: true,
   })
@@ -257,6 +257,7 @@ let profile = ''
 let started = false
 const exceptions = []
 const browserFailures = []
+const marketRequests = [], marketRequestById = new Map()
 const rememberBrowserFailure = value => {
   browserFailures.push(value)
   if (browserFailures.length > 40) browserFailures.shift()
@@ -302,7 +303,15 @@ try {
     type: event.type, error: event.errorText, canceled: event.canceled,
     blockedReason: event.blockedReason,
   }))
+  client.on('Network.requestWillBeSent', event => {
+    const url = new URL(event.request.url)
+    if (url.origin !== new URL(launch.url).origin || !url.pathname.startsWith('/dsh-market/')) return
+    const item = { method: event.request.method, path: url.pathname }
+    marketRequests.push(item); marketRequestById.set(event.requestId, item)
+  })
   client.on('Network.responseReceived', event => {
+    const item = marketRequestById.get(event.requestId)
+    if (item) item.status = event.response.status
     if (event.response.status < 400) return
     let resource = ''
     try { const url = new URL(event.response.url); resource = url.origin + url.pathname } catch { /* no credentials or query strings */ }
@@ -461,8 +470,7 @@ try {
   }
   if (generalScreenshotPath) {
     const screenshot = await client.send('Page.captureScreenshot', { format: 'png', fromSurface: true })
-    await mkdir(path.dirname(generalScreenshotPath), { recursive: true })
-    await writeFile(generalScreenshotPath, Buffer.from(screenshot.data, 'base64'))
+    await writeSmokeScreenshot(generalScreenshotPath, Buffer.from(screenshot.data, 'base64'))
   }
   await waitForValue(client, clickButton(['Desktop & data', '桌面与数据', 'Portable']), value => value?.clicked, 'Portable settings navigation after updates')
   if (generalBottomScreenshotPath) {
@@ -476,339 +484,203 @@ try {
     })()`)
     await new Promise(resolve => setTimeout(resolve, 120))
     const screenshot = await client.send('Page.captureScreenshot', { format: 'png', fromSurface: true })
-    await mkdir(path.dirname(generalBottomScreenshotPath), { recursive: true })
-    await writeFile(generalBottomScreenshotPath, Buffer.from(screenshot.data, 'base64'))
+    await writeSmokeScreenshot(generalBottomScreenshotPath, Buffer.from(screenshot.data, 'base64'))
   }
 
-  await waitForValue(client, clickButton(['Plugins', '插件']), value => value?.clicked, 'Plugins settings tab')
+  const closeOverlay = async label => {
+    await waitForValue(client, `(() => {
+      const dialog = [...document.querySelectorAll('[role="dialog"]')].find(item => item.getBoundingClientRect().width > 0)
+      const button = dialog && [...dialog.querySelectorAll('button')].find(item =>
+        ['Close', '关闭'].includes((item.getAttribute('aria-label') || item.textContent || '').trim())
+        && !item.disabled && item.getBoundingClientRect().width > 0)
+      button?.click(); return Boolean(button)
+    })()`, Boolean, label)
+    await waitForValue(client, `![...document.querySelectorAll('[role="dialog"]')].some(item => item.getBoundingClientRect().width > 0)`, Boolean, label + ' completes')
+  }
+  const openSettings = async label => {
+    await waitForValue(client, clickButton(['Settings', '设置']), value => value?.clicked, label)
+    await waitForValue(client, `Boolean([...document.querySelectorAll('[role="dialog"]')].some(item => item.getBoundingClientRect().width > 0 && /Settings|设置/.test(item.textContent || '')))`, Boolean, label + ' dialog')
+  }
+  const selectPluginTab = async (names, label) => {
+    await waitForValue(client, `(() => {
+      const names = ${JSON.stringify(names)}
+      const button = [...document.querySelectorAll('[role="tab"]')]
+        .find(item => names.includes((item.textContent || '').trim()) && !item.disabled
+          && item.getAttribute('aria-disabled') !== 'true' && !item.closest('[inert],[aria-hidden="true"]')
+          && getComputedStyle(item).visibility !== 'hidden'
+          && item.getBoundingClientRect().width > 0 && item.getBoundingClientRect().height > 0)
+      button?.click(); return Boolean(button)
+    })()`, Boolean, label)
+  }
+  const openMaintenance = async label => {
+    const from = marketRequests.length
+    await waitForValue(client, `(() => {
+      const button = [...document.querySelectorAll('button[aria-haspopup="menu"]')].find(item =>
+        ['More', '更多'].includes(item.getAttribute('aria-label')) && !item.closest('[role="dialog"]') && item.getBoundingClientRect().width > 0)
+      button?.click(); return Boolean(button)
+    })()`, Boolean, label + ' sidebar More')
+    await waitForValue(client, `(() => {
+      const button = [...document.querySelectorAll('[role="menu"] button,[role="menu"] [role="menuitem"]')].find(item =>
+        ['Legacy plugin recovery', '旧插件配置恢复'].includes((item.getAttribute('aria-label') || item.textContent || '').trim()) && item.getBoundingClientRect().width > 0)
+      button?.click(); return Boolean(button)
+    })()`, Boolean, label + ' legacy configuration recovery action')
+    await waitForValue(client, `Boolean([...document.querySelectorAll('[role="dialog"]')].find(item => {
+      const title = item.getAttribute('aria-label') || document.getElementById(item.getAttribute('aria-labelledby'))?.textContent
+      return ['Legacy plugin recovery', '旧插件配置恢复'].includes((title || '').trim()) && item.getBoundingClientRect().width > 0
+    }))`, Boolean, label + ' persistent maintenance overlay')
+    await waitForValue(client, 'document.querySelectorAll(\'[role="menu"]\').length', value => value === 0, label + ' More menu dismissed')
+    return from
+  }
+  await closeOverlay('close Settings before official plugin management')
+  await waitForValue(client, clickButton(['Plugins', '插件']), value => value?.clicked, 'official sidebar Plugins')
+  await waitForValue(client, 'document.querySelectorAll(\'[data-plugin-panel] [data-plugin-package]\').length', value => value > 0, 'official Installed cards')
   const extensionUi = await evaluate(client, `({
     root: Boolean(document.querySelector('.dspx-root')),
     tab: [...document.querySelectorAll('button')].some(item => ['Portable extensions', '便携扩展'].includes((item.textContent || '').trim())),
+    advanced: Boolean(document.querySelector('[role="tab"][id$="-dsh-portable-plugin-advanced"]')),
   })`)
-  assert.deepEqual(extensionUi, { root: false, tab: false })
-  await waitForValue(client, clickButton(['Plugin Market', '插件市场']), value => value?.clicked, 'Plugin Market settings section')
-  const expectedMarketSearch = targetLocale === 'zh'
-    ? '搜索插件，比如：通知、终端、记忆…'
-    : 'Search plugins: notify, terminal, memory…'
+  assert.deepEqual(extensionUi, { root: false, tab: false, advanced: false })
+  await selectPluginTab(['Discover', '发现'], 'official Discover tab')
   const marketUi = await waitForValue(client, `(() => {
-    const search = [...document.querySelectorAll('input')].find(item => item.placeholder === ${JSON.stringify(expectedMarketSearch)})
-    const controls = [...document.querySelectorAll('button')]
-    const installButtons = controls.filter(item => ['Install', '安装'].includes((item.textContent || '').trim())).length
-    const ownerImages = [...document.querySelectorAll('img')].filter(item => item.src.includes('github.com/') && item.src.includes('.png?size=96')).length
-    return { search: Boolean(search), installButtons, ownerImages }
-  })()`, value => value?.search && value.installButtons > 0 && value.ownerImages > 0, 'visual Plugin Market cards', 60000)
+    const pane = document.querySelector('[data-plugin-tab="discover"]'), cards = [...(pane?.querySelectorAll('[data-market-entry]') || [])]
+    const installButtons = cards.flatMap(card => [...card.querySelectorAll('button[aria-label]')]).filter(item => /^(Install |安装 )/.test(item.getAttribute('aria-label') || '') && !item.disabled).length
+    const icons = cards.filter(card => card.querySelector(':scope > span[aria-hidden="true"] img,:scope > span[aria-hidden="true"] svg')).length
+    return { search: Boolean(pane?.querySelector('input[type="search"]')), cards: cards.length, installButtons, icons }
+  })()`, value => value?.search && value.cards > 0 && value.installButtons > 0 && value.icons > 0, 'visual official Discover cards', 60000)
   assert.ok(marketUi.installButtons > 0)
-  assert.ok(marketUi.ownerImages > 0)
-  const picturedPlugin = await evaluate(client, `(async () => {
-    const response = await fetch('/dsh-market/registry', { cache: 'no-store' })
-    const body = await response.json()
-    const plugin = body.registry?.plugins?.find(item => Array.isArray(item.screenshots)
-      && item.screenshots.some(value => /^[\\x00-\\x7F]+$/.test(value))
-      && item.url)
-    return plugin ? { name: plugin.name, projectHref: plugin.url, screenshots: plugin.screenshots } : null
-  })()`)
-  assert.ok(picturedPlugin?.name)
-  assert.ok(picturedPlugin?.projectHref)
-  assert.ok(picturedPlugin?.screenshots?.length > 0)
-  await evaluate(client, `(() => {
-    const input = [...document.querySelectorAll('input')].find(item => item.placeholder === ${JSON.stringify(expectedMarketSearch)})
-    if (!input) return false
-    const setter = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')?.set
-    setter?.call(input, ${JSON.stringify(picturedPlugin.name)})
-    input.dispatchEvent(new Event('input', { bubbles: true }))
-    return true
-  })()`)
+  assert.ok(marketUi.icons > 0)
   const picturedUi = await waitForValue(client, `(() => {
-    const projectHref = new URL(${JSON.stringify(picturedPlugin.projectHref)}, location.href).href
-    const screenshotUrls = ${JSON.stringify(picturedPlugin.screenshots)}.map(value => new URL(value, location.href).href)
-    // Display names are not unique: match the repository identity first.
-    const card = [...document.querySelectorAll('[data-market-card]')].find(item =>
-      [...item.querySelectorAll('a[aria-label]')].some(node => node.href === projectHref)
-      && [...item.querySelectorAll('[title]')].some(node => node.title === ${JSON.stringify(picturedPlugin.name)}))
-    card?.scrollIntoView({ block: 'center' })
-    const titleLink = card && [...card.querySelectorAll('a[aria-label]')].find(item => item.href === projectHref)
-    const cardShot = card && [...card.querySelectorAll('img')].find(item => screenshotUrls.includes(item.src) && item.complete && item.naturalWidth > 0)
-    const rect = cardShot?.getBoundingClientRect()
-    return { projectHref: titleLink?.href || '', cardShot: Boolean(cardShot), width: rect?.width || 0, height: rect?.height || 0 }
-  })()`, value => value?.projectHref && value.cardShot && value.width >= 200 && value.height >= 140, 'pictured plugin card and project link', 60000)
-  assert.equal(picturedUi.projectHref, new URL(picturedPlugin.projectHref, launch.url).href)
+    const card = [...document.querySelectorAll('[data-plugin-tab="discover"] [data-market-entry]')].find(item => item.querySelector('[data-portable-shot]'))
+    const shot = card?.querySelector('[data-portable-shot]')
+    const open = card?.querySelector('button[aria-label^="View "],button[aria-label^="查看 "]')
+    shot?.scrollIntoView({ block: 'center' })
+    const rect = shot?.getBoundingClientRect()
+    return { name: card?.getAttribute('data-market-entry'), title: open?.textContent.trim(), cardShot: Boolean(shot?.complete && shot.naturalWidth > 0), width: rect?.width || 0, height: rect?.height || 0 }
+  })()`, value => value?.name && value.title && value.cardShot && value.width > 0 && value.height > 0, 'actual official catalog preview', 60000)
   assert.ok(picturedUi.cardShot)
   if (screenshotPath) {
     const screenshot = await client.send('Page.captureScreenshot', { format: 'png', fromSurface: true })
-    await mkdir(path.dirname(screenshotPath), { recursive: true })
-    await writeFile(screenshotPath, Buffer.from(screenshot.data, 'base64'))
+    await writeSmokeScreenshot(screenshotPath, Buffer.from(screenshot.data, 'base64'))
   }
-  await waitForValue(client, clickButton(['Compact', '紧凑']), value => value?.clicked, 'compact market view')
   await waitForValue(client, `(() => {
-    const active = [...document.querySelectorAll('button[aria-pressed="true"]')].find(item => ['Compact', '紧凑'].includes((item.textContent || '').trim()))
-    const screenshot = [...document.querySelectorAll('img')].find(item => item.naturalWidth > 0 && item.getBoundingClientRect().width >= 200)
-    return { active: Boolean(active), saved: localStorage.getItem('dshm-market-view'), screenshotVisible: screenshot ? getComputedStyle(screenshot).display !== 'none' : false }
-  })()`, value => value?.active && value.saved === 'compact' && value.screenshotVisible === false, 'persisted compact market view')
-  await waitForValue(client, clickButton(['Cards', '图文']), value => value?.clicked, 'card market view')
-  await waitForValue(client, `(() => ({
-    active: [...document.querySelectorAll('button[aria-pressed="true"]')].some(item => ['Cards', '图文'].includes((item.textContent || '').trim())),
-    saved: localStorage.getItem('dshm-market-view'),
-  }))()`, value => value?.active && value.saved === 'cards', 'persisted card market view')
-
-  if (updatePlugin !== '') {
-    await waitForValue(client, clickButton(['Installed', '已安装']), value => value?.clicked, 'Installed plugin section for update')
-    await waitForValue(client, `(() => {
-      const title = [...document.querySelectorAll('a')].find(item =>
-        (item.textContent || '').trim() === ${JSON.stringify(updatePlugin)}
-        && item.getBoundingClientRect().width > 0
-        && item.getBoundingClientRect().height > 0)
-      const card = title?.closest('div[class*="_irow"]')
-      const actions = card && [...card.querySelectorAll('button')].filter(item => ['Update', '更新'].includes((item.textContent || '').trim()))
-      if (actions?.length === 1) { actions[0].click(); return true }
-      return false
-    })()`, Boolean, `${updatePlugin} update action`, 90_000)
-    // A package inside the fresh-release safety window needs one explicit
-    // confirmation. Older releases skip this branch.
-    for (let attempt = 0; attempt < 30; attempt += 1) {
-      const confirmed = await evaluate(client, clickButton(['Update now', '立即更新']))
-      if (confirmed?.clicked) break
-      const started = await evaluate(client, `(${JSON.stringify(targetLocale === 'zh' ? `更新\n${updatePlugin}` : `Update\n${updatePlugin}`)} && (document.body?.innerText || '').includes(${JSON.stringify(targetLocale === 'zh' ? `更新\n${updatePlugin}` : `Update\n${updatePlugin}`)}))`)
-      if (started) break
-      await new Promise(resolve => setTimeout(resolve, 100))
-    }
-    const updated = await waitForValue(client, `(() => {
-      const text = document.body?.innerText || ''
-      const present = text.includes(${JSON.stringify(`${targetLocale === 'zh' ? '更新' : 'Update'}\n${updatePlugin}`)})
-      const refresh = /Complete · refresh to show changes|已完成 · 刷新页面后显示/.test(text)
-      const restart = /Complete · restart DeepSeek Harness to apply|已完成 · 重启 DeepSeek Harness 后生效/.test(text)
-      const live = /Complete and active|已完成并生效/.test(text)
-      const refreshButtons = [...document.querySelectorAll('button')].filter(item => ['Refresh page', '刷新页面'].includes((item.textContent || '').trim())).length
-      const restartButtons = [...document.querySelectorAll('button')].filter(item => ['Restart now', '立即重启'].includes((item.textContent || '').trim())).length
-      return { present, refresh, restart, live, refreshButtons, restartButtons, text: text.slice(-1400) }
-    })()`, value => value?.present && Number(value.refresh) + Number(value.restart) + Number(value.live) === 1, `${updatePlugin} update completion action`, 180_000)
-    assert.equal(updated.refreshButtons + updated.restartButtons <= 1, true, 'update must offer no more than one apply action')
-    process.stdout.write(`[plugin-update] ${updatePlugin}: ${updated.restart ? 'restart' : updated.refresh ? 'refresh' : 'live'}\n`)
-  }
-
-  if (activationPlugin !== '') {
-    await evaluate(client, `(() => {
-      const input = [...document.querySelectorAll('input')].find(item => ['Search plugins: notify, terminal, memory…', '搜索插件，比如：通知、终端、记忆…'].includes(item.placeholder || ''))
-      if (!input) return false
-      const setter = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')?.set
-      setter?.call(input, ${JSON.stringify(activationPlugin)})
-      input.dispatchEvent(new Event('input', { bubbles: true }))
-      return true
-    })()`)
-    const installClicked = await waitForValue(client, `(() => {
-      const title = [...document.querySelectorAll('a')].find(item => (item.textContent || '').trim() === ${JSON.stringify(activationPlugin)})
-      let card = title
-      while (card && card !== document.body) {
-        const action = [...card.querySelectorAll('button')].find(item => ['Install', '安装'].includes((item.textContent || '').trim()))
-        if (action) { action.click(); return true }
-        card = card.parentElement
-      }
-      return false
-    })()`, Boolean, `${activationPlugin} install action`, 60_000)
-    assert.equal(installClicked, true)
-    await waitForValue(client, clickButton(['Confirm install', '确认安装']), value => value?.clicked, 'plugin install confirmation')
-    const completion = await waitForValue(client, `(() => {
-      const text = document.body?.innerText || ''
-      const refresh = /Complete · refresh to show changes|已完成 · 刷新页面后显示/.test(text)
-      const restart = /Complete · restart DeepSeek Harness to apply|已完成 · 重启 DeepSeek Harness 后生效/.test(text)
-      const live = /Complete and active|已完成并生效/.test(text)
-      const refreshButtons = [...document.querySelectorAll('button')].filter(item => ['Refresh page', '刷新页面'].includes((item.textContent || '').trim())).length
-      const restartButtons = [...document.querySelectorAll('button')].filter(item => ['Restart now', '立即重启'].includes((item.textContent || '').trim())).length
-      return { refresh, restart, live, refreshButtons, restartButtons, text: text.slice(-1200) }
-    })()`, value => value && Number(value.refresh) + Number(value.restart) + Number(value.live) === 1, `${activationPlugin} completion action`, 180_000)
-    assert.equal(completion.refreshButtons + completion.restartButtons <= 1, true, 'a plugin operation must offer no more than one apply action')
-    if (completion.refresh) assert.equal(completion.refreshButtons, 1)
-    if (completion.restart) assert.equal(completion.restartButtons, 1)
-    if (completion.live) assert.equal(completion.refreshButtons + completion.restartButtons, 0)
-    if (activationScreenshotPath) {
-      const screenshot = await client.send('Page.captureScreenshot', { format: 'png', fromSurface: true })
-      await mkdir(path.dirname(activationScreenshotPath), { recursive: true })
-      await writeFile(activationScreenshotPath, Buffer.from(screenshot.data, 'base64'))
-    }
-    process.stdout.write(`[plugin-activation] ${activationPlugin}: ${completion.restart ? 'restart' : completion.refresh ? 'refresh' : 'live'}\n`)
-
-    if (removeActivationPlugin) {
-      if (completion.restart) throw new Error('remove-after smoke requires a live or refresh-activated plugin')
-      if (completion.refresh) {
-        await waitForValue(client, clickButton(['Refresh page', '刷新页面']), value => value?.clicked, 'apply plugin with page refresh')
-        await new Promise(resolve => setTimeout(resolve, 600))
-        await waitForValue(client, 'document.readyState', value => value === 'complete', 'reloaded DSH document readiness')
-        await waitForValue(client, `(() => {
-          const labels = [...document.querySelectorAll('button')].map(item => (item.textContent || '').trim())
-          return labels.some(label => ['Settings', '设置', 'More', '更多', 'Account menu', '账号菜单', '打开侧边栏', 'Open sidebar', 'Expand sidebar'].includes(label))
-        })()`, Boolean, 'reloaded DSH shell controls', 60_000)
-        let reopened = await evaluate(client, clickButton(['Settings', '设置']))
-        if (!reopened?.clicked) {
-          await waitForValue(client, clickButton(['打开侧边栏', 'Open sidebar', 'Expand sidebar']), value => value?.clicked, 'reloaded sidebar control')
-          reopened = await waitForValue(client, clickButton(['Settings', '设置']), value => value?.clicked, 'reloaded Settings button')
-        }
-        assert.equal(reopened.clicked, true)
-        await waitForValue(client, `Boolean([...document.querySelectorAll('[role="dialog"]')].find(item => /Settings|设置/.test(item.textContent || '')))`, Boolean, 'reloaded Settings dialog')
-        await waitForValue(client, clickButton(['Plugins', '插件']), value => value?.clicked, 'reloaded Plugins settings tab')
-      }
-      await waitForValue(client, clickButton(['Installed', '已安装']), value => value?.clicked, 'Installed plugin section')
-      await waitForValue(client, `(() => {
-        const title = [...document.querySelectorAll('a')].find(item =>
-          (item.textContent || '').trim() === ${JSON.stringify(activationPlugin)}
-          && item.getBoundingClientRect().width > 0
-          && item.getBoundingClientRect().height > 0)
-        const card = title?.closest('div[class*="_irow"]')
-        const actions = card && [...card.querySelectorAll('button')].filter(item => ['Uninstall', '卸载'].includes((item.textContent || '').trim()))
-        if (actions?.length === 1) { actions[0].click(); return true }
-        return false
-      })()`, Boolean, `${activationPlugin} uninstall action`, 60_000)
-      await waitForValue(client, `(() => {
-        const expectedTitle = ${JSON.stringify((targetLocale === 'zh' ? '卸载 ' : 'Uninstall ') + activationPlugin + '?')}
-        const heading = [...document.querySelectorAll('body *')].find(item =>
-          item.children.length === 0
-          && (item.textContent || '').trim() === expectedTitle
-          && item.getBoundingClientRect().width > 0)
-        let modal = heading?.parentElement
-        while (modal && modal !== document.body) {
-          const actions = [...modal.querySelectorAll('button')].filter(item => ['Uninstall', '卸载'].includes((item.textContent || '').trim()))
-          const cancels = [...modal.querySelectorAll('button')].filter(item => ['Cancel', '取消'].includes((item.textContent || '').trim()))
-          if (actions.length === 1 && cancels.length === 1) {
-            actions[0].click()
-            return true
-          }
-          modal = modal.parentElement
-        }
-        return false
-      })()`, Boolean, 'plugin uninstall confirmation')
-      const removal = await waitForValue(client, `(() => {
-        const text = document.body?.innerText || ''
-        const present = text.includes(${JSON.stringify(`${targetLocale === 'zh' ? '卸载' : 'Uninstall'}\n${activationPlugin}`)})
-        const refresh = /Complete · refresh to show changes|已完成 · 刷新页面后显示/.test(text)
-        const restart = /Complete · restart DeepSeek Harness to apply|已完成 · 重启 DeepSeek Harness 后生效/.test(text)
-        const live = /Complete and active|已完成并生效/.test(text)
-        const refreshButtons = [...document.querySelectorAll('button')].filter(item => ['Refresh page', '刷新页面'].includes((item.textContent || '').trim())).length
-        const restartButtons = [...document.querySelectorAll('button')].filter(item => ['Restart now', '立即重启'].includes((item.textContent || '').trim())).length
-        return { present, refresh, restart, live, refreshButtons, restartButtons, text: text.slice(-1400) }
-      })()`, value => value?.present && Number(value.refresh) + Number(value.restart) + Number(value.live) === 1, `${activationPlugin} uninstall completion action`, 180_000)
-      assert.equal(removal.refreshButtons + removal.restartButtons <= 1, true, 'uninstall must offer no more than one apply action')
-      const afterRemoval = await evaluate(client, `fetch('/dsh-market/status', { cache: 'no-store' }).then(response => response.json())`)
-      assert.equal(Object.hasOwn(afterRemoval.installed || {}, activationPlugin), false)
-      process.stdout.write(`[plugin-uninstall] ${activationPlugin}: ${removal.restart ? 'restart' : removal.refresh ? 'refresh' : 'live'}\n`)
-    }
-  }
-
+    const card = [...document.querySelectorAll('[data-plugin-tab="discover"] [data-market-entry]')].find(item => item.getAttribute('data-market-entry') === ${JSON.stringify(picturedUi.name)})
+    const shot = card?.querySelector('[data-portable-shot]')
+    shot?.click(); return Boolean(shot)
+  })()`, Boolean, 'open the actual official preview')
+  await waitForValue(client, 'Boolean(document.querySelector(\'[data-portable-viewer]\'))', Boolean, 'official preview viewer')
+  await client.send('Input.dispatchKeyEvent', { type: 'keyDown', key: 'Escape', code: 'Escape', windowsVirtualKeyCode: 27 })
+  await client.send('Input.dispatchKeyEvent', { type: 'keyUp', key: 'Escape', code: 'Escape', windowsVirtualKeyCode: 27 })
+  await waitForValue(client, '!document.querySelector(\'[data-portable-viewer]\')', Boolean, 'Escape closes only the preview')
+  await waitForValue(client, `(() => {
+    const card = [...document.querySelectorAll('[data-plugin-tab="discover"] [data-market-entry]')].find(item => item.getAttribute('data-market-entry') === ${JSON.stringify(picturedUi.name)})
+    const button = card && [...card.querySelectorAll('button[aria-label]')].find(item => ['View ', '查看 '].some(prefix => item.getAttribute('aria-label') === prefix + ${JSON.stringify(picturedUi.title)}))
+    button?.click(); return Boolean(button)
+  })()`, Boolean, 'open the actual official catalog detail')
+  const project = await waitForValue(client, `(() => {
+    const detail = document.querySelector('[data-plugin-tab="discover"] [data-market-detail]')
+    if (detail?.getAttribute('data-market-detail') !== ${JSON.stringify(picturedUi.name)} || detail.querySelector('h3')?.textContent.trim() !== ${JSON.stringify(picturedUi.title)}) return null
+    const source = [...detail.querySelectorAll('dt')].find(item => ['Source code', '源代码'].includes(item.textContent.trim()))
+    const link = source?.nextElementSibling?.querySelector('a[href]')
+    return { projectHref: link?.href || '', external: link?.target === '_blank' && link?.relList.contains('noopener') && link?.relList.contains('noreferrer') }
+  })()`, value => value?.projectHref && value.external, 'the selected official plugin project source')
+  assert.ok(['http:', 'https:'].includes(new URL(project.projectHref).protocol))
+  await waitForValue(client, `(() => {
+    const detail = document.querySelector('[data-plugin-tab="discover"] [data-market-detail]')
+    if (detail?.getAttribute('data-market-detail') !== ${JSON.stringify(picturedUi.name)}) return false
+    const button = [...detail.querySelectorAll(':scope > button')].find(item => ['Discover', '发现'].includes((item.getAttribute('aria-label') || item.textContent || '').trim()))
+    button?.click(); return Boolean(button)
+  })()`, Boolean, 'return via the actual official Discover breadcrumb')
+  await waitForValue(client, '!document.querySelector(\'[data-plugin-tab="discover"] [data-market-detail]\') && document.querySelectorAll(\'[data-plugin-tab="discover"] [data-market-entry]\').length > 0', Boolean, 'official catalog returns after details')
+  // Compact/Cards persistence belonged to the retired private renderer. The
+  // official catalog and preview above are the current visual integration gate.
   if (installedScreenshotPath) {
-    await waitForValue(client, clickButton(['Installed', '已安装']), value => value?.clicked, 'Installed native Plugins tab')
-    const installedUi = await waitForValue(client, `(() => {
-      const text = document.body?.innerText || ''
-      const search = [...document.querySelectorAll('input')].some(item => ['Search plugins: notify, terminal, memory…', '搜索插件，比如：通知、终端、记忆…'].includes(item.placeholder || ''))
-      const unexpectedDefaults = ['dsh-chat-manager', 'dsh-image-viewer'].filter(name => text.includes(name))
-      const marketSelected = [...document.querySelectorAll('button')].some(item => {
-        const label = (item.textContent || '').trim()
-        return ['Plugin Market', '插件市场'].includes(label) && item.getAttribute('aria-selected') === 'true'
-      })
-      return { search, unexpectedDefaults, marketSelected }
-    })()`, value => value?.search && value.unexpectedDefaults?.length === 0 && value.marketSelected === false, 'Installed sibling tab without bundled defaults', 60000)
-    assert.deepEqual(installedUi.unexpectedDefaults, [])
+    await selectPluginTab(['Installed', '已安装'], 'official Installed tab')
+    await waitForValue(client, 'document.querySelectorAll(\'[data-plugin-panel] [data-plugin-package]\').length', value => value > 0, 'official Installed screenshot inventory')
     const screenshot = await client.send('Page.captureScreenshot', { format: 'png', fromSurface: true })
-    await mkdir(path.dirname(installedScreenshotPath), { recursive: true })
-    await writeFile(installedScreenshotPath, Buffer.from(screenshot.data, 'base64'))
+    await writeSmokeScreenshot(installedScreenshotPath, Buffer.from(screenshot.data, 'base64'))
   }
+  await openSettings('Settings before theme and legacy recovery verification')
 
-  const diagnosticContrastExpression = `(() => {
-    const tag = [...document.querySelectorAll('[class*="_ovByTag"]')].find(item => {
-      const rect = item.getBoundingClientRect()
-      return rect.width > 0 && rect.height > 0
+  const legacyRecoveryContrastExpression = `(() => {
+    const dialog = [...document.querySelectorAll('[role="dialog"]')].find(item => {
+      const title = item.getAttribute('aria-label') || document.getElementById(item.getAttribute('aria-labelledby'))?.textContent
+      return ['Legacy plugin recovery', '旧插件配置恢复'].includes((title || '').trim()) && item.getBoundingClientRect().width > 0
     })
-    if (!tag) return null
-    const parse = value => {
-      const values = (value.match(/[\\d.]+/g) || []).map(Number)
-      return { r: values[0] || 0, g: values[1] || 0, b: values[2] || 0, a: values.length > 3 ? values[3] : 1 }
-    }
-    const blend = (front, back) => ({
-      r: front.r * front.a + back.r * (1 - front.a),
-      g: front.g * front.a + back.g * (1 - front.a),
-      b: front.b * front.a + back.b * (1 - front.a),
-      a: front.a + back.a * (1 - front.a),
-    })
-    let background = { r: 0, g: 0, b: 0, a: 0 }
-    let current = tag
-    while (current && background.a < 0.999) {
-      background = blend(background, parse(getComputedStyle(current).backgroundColor))
-      current = current.parentElement
-    }
-    if (background.a < 0.999) background = blend(background, { r: 255, g: 255, b: 255, a: 1 })
-    const foreground = parse(getComputedStyle(tag).color)
-    const luminance = color => {
-      const channel = value => {
-        const normalized = value / 255
-        return normalized <= 0.04045 ? normalized / 12.92 : ((normalized + 0.055) / 1.055) ** 2.4
+    const paragraphs = [...(dialog?.querySelectorAll('p') || [])]
+    const targets = [{ id: 'guidance', tag: paragraphs.find(item => /用于导入旧版插件配置 JSON|Import a legacy plugin configuration JSON file/.test(item.textContent || '')) },
+      { id: 'credentials', tag: paragraphs.find(item => /配置文件可能含凭据|Configuration files may contain credentials/.test(item.textContent || '')) }]
+    if (targets.some(({ tag }) => !tag || tag.getBoundingClientRect().width <= 0 || tag.getBoundingClientRect().height <= 0)) return null
+    const measure = tag => {
+      const parse = value => {
+        const values = (value.match(/[\\d.]+/g) || []).map(Number)
+        return { r: values[0] || 0, g: values[1] || 0, b: values[2] || 0, a: values.length > 3 ? values[3] : 1 }
       }
-      return 0.2126 * channel(color.r) + 0.7152 * channel(color.g) + 0.0722 * channel(color.b)
+      const blend = (front, back) => ({
+        r: front.r * front.a + back.r * (1 - front.a),
+        g: front.g * front.a + back.g * (1 - front.a),
+        b: front.b * front.a + back.b * (1 - front.a),
+        a: front.a + back.a * (1 - front.a),
+      })
+      let background = { r: 0, g: 0, b: 0, a: 0 }
+      let current = tag
+      while (current && background.a < 0.999) {
+        background = blend(background, parse(getComputedStyle(current).backgroundColor))
+        current = current.parentElement
+      }
+      if (background.a < 0.999) background = blend(background, { r: 255, g: 255, b: 255, a: 1 })
+      const foreground = parse(getComputedStyle(tag).color)
+      const luminance = color => {
+        const channel = value => {
+          const normalized = value / 255
+          return normalized <= 0.04045 ? normalized / 12.92 : ((normalized + 0.055) / 1.055) ** 2.4
+        }
+        return 0.2126 * channel(color.r) + 0.7152 * channel(color.g) + 0.0722 * channel(color.b)
+      }
+      const light = Math.max(luminance(foreground), luminance(background))
+      const dark = Math.min(luminance(foreground), luminance(background))
+      return {
+        text: (tag.textContent || '').trim(),
+        foreground: getComputedStyle(tag).color,
+        background: getComputedStyle(tag).backgroundColor,
+        contrastRatio: (light + 0.05) / (dark + 0.05),
+      }
     }
-    const light = Math.max(luminance(foreground), luminance(background))
-    const dark = Math.min(luminance(foreground), luminance(background))
-    return {
-      text: (tag.textContent || '').trim(),
-      foreground: getComputedStyle(tag).color,
-      background: getComputedStyle(tag).backgroundColor,
-      contrastRatio: (light + 0.05) / (dark + 0.05),
-    }
+    return targets.map(({ id, tag }) => ({ id, ...measure(tag) }))
   })()`
-  const verifyDiagnosticContrast = async (themeLabel) => {
-    await waitForValue(client, clickButton(['Installed', '已安装']), value => value?.clicked, `${themeLabel} installed plugin section`)
-    await waitForValue(client, clickButton(['Diagnostics', '诊断']), value => value?.clicked, `${themeLabel} diagnostics section`)
-    await waitForValue(client, `(() => {
-      if ([...document.querySelectorAll('[class*="_ovByTag"]')].some(item => item.getBoundingClientRect().width > 0)) return { clicked: true }
-      const titles = ['Override relationships', '覆盖关系']
-      const button = [...document.querySelectorAll('button')].find(item => titles.some(title => (item.textContent || '').includes(title)))
-      if (!button) return { clicked: false }
-      button.click()
-      return { clicked: true }
-    })()`, value => value?.clicked, `${themeLabel} override relationship section`)
-    const result = await waitForValue(client, diagnosticContrastExpression, value => value?.text && value.contrastRatio >= 4.5, `diagnostic override contrast in ${themeLabel} theme`)
-    assert.ok(result.contrastRatio >= 4.5, `${themeLabel} diagnostic override contrast was ${result.contrastRatio}`)
+  const verifyLegacyRecoveryContrast = async (themeLabel) => {
+    const from = await openMaintenance(themeLabel)
+    const result = await waitForValue(client, legacyRecoveryContrastExpression, value => value?.length === 2 && value.every(item => item.text && item.contrastRatio >= 4.5), 'legacy recovery text contrast in ' + themeLabel + ' theme')
+    for (const item of result) assert.ok(item.contrastRatio >= 4.5, themeLabel + ' ' + item.id + ' contrast was ' + item.contrastRatio)
+    assert.deepEqual(marketRequests.slice(from).filter(item => item.path === '/dsh-market/check'), [], 'legacy recovery must not query a second compatibility assessment')
+    assert.deepEqual(marketRequests.slice(from).filter(item => !['GET', 'HEAD', 'OPTIONS'].includes(item.method)), [], 'opening legacy recovery must not write configuration')
+    if (diagnosticsScreenshotPath && themeLabel === 'dark') {
+      const screenshot = await client.send('Page.captureScreenshot', { format: 'png', fromSurface: true })
+      await writeSmokeScreenshot(diagnosticsScreenshotPath, Buffer.from(screenshot.data, 'base64'))
+    }
+    await closeOverlay(themeLabel + ' close legacy recovery and return to the official shell')
   }
   const modernBuiltIns = await evaluate(client, `(() => [...document.querySelectorAll('button')].some(item =>
     ['Built-in plugins', '内置插件'].includes((item.textContent || '').trim()) && item.getBoundingClientRect().width > 0))()`)
-  if (modernBuiltIns) {
-    // Alpha.2 replaces the legacy Installed/Diagnostics surface. Exercise its
-    // real inventory details in both themes; do not pretend old forms or override tags exist.
-    for (const theme of ['light', 'dark']) {
-      await waitForValue(client, clickButton(['General', 'General settings', '通用设置']), value => value?.clicked, `${theme} general settings`)
-      await waitForValue(client, clickButton(theme === 'light' ? ['Light', '浅色', '亮色'] : ['Dark', '深色']), value => value?.clicked, `${theme} theme`)
-      await waitForValue(client, stateExpression, value => value?.theme === theme, `${theme} theme state`)
-      await waitForValue(client, clickButton(['Built-in plugins', '内置插件']), value => value?.clicked, `${theme} built-in plugin settings`)
-      // Use the exact Windows tool card and its official aria-controls detail.
-      // Collapse first so each theme must prove a real expansion click.
-      await waitForValue(client, builtInPluginCard('tool-pwsh', false), value => value?.ready, `${theme} official PowerShell card`)
-      await waitForValue(client, builtInPluginCard('tool-pwsh'), value => value?.ready && !value.expanded && !value.detailsPresent, `${theme} collapsed official PowerShell details`)
-      const expanded = await waitForValue(client, builtInPluginCard('tool-pwsh', true), value => value?.ready, `${theme} expand official PowerShell card`)
+  for (const theme of ['light', 'dark']) {
+    await waitForValue(client, clickButton(['General', 'General settings', '通用设置']), value => value?.clicked, theme + ' general settings')
+    await waitForValue(client, clickButton(theme === 'light' ? ['Light', '浅色', '亮色'] : ['Dark', '深色']), value => value?.clicked, theme + ' theme')
+    state = await waitForValue(client, stateExpression, value => value?.theme === theme, theme + ' theme state')
+    if (modernBuiltIns) {
+      await waitForValue(client, clickButton(['Built-in plugins', '内置插件']), value => value?.clicked, theme + ' built-in plugin settings')
+      await waitForValue(client, builtInPluginCard('tool-pwsh', false), value => value?.ready, theme + ' official PowerShell card')
+      await waitForValue(client, builtInPluginCard('tool-pwsh'), value => value?.ready && !value.expanded && !value.detailsPresent, theme + ' collapsed official PowerShell details')
+      const expanded = await waitForValue(client, builtInPluginCard('tool-pwsh', true), value => value?.ready, theme + ' expand official PowerShell card')
       assert.equal(expanded.clicked, true, 'the exact official PowerShell card must be clicked open')
-      await waitForValue(client, builtInPluginCard('tool-pwsh'), officialPowerShellDetailsReady, `${theme} official PowerShell inventory facts`)
-      const collapsed = await waitForValue(client, builtInPluginCard('tool-pwsh', false), value => value?.ready, `${theme} collapse official PowerShell card`)
+      await waitForValue(client, builtInPluginCard('tool-pwsh'), officialPowerShellDetailsReady, theme + ' official PowerShell inventory facts')
+      const collapsed = await waitForValue(client, builtInPluginCard('tool-pwsh', false), value => value?.ready, theme + ' collapse official PowerShell card')
       assert.equal(collapsed.clicked, true, 'the exact official PowerShell card must be clicked closed')
-      await waitForValue(client, builtInPluginCard('tool-pwsh'), value => value?.ready && !value.expanded && !value.detailsPresent, `${theme} official PowerShell details removed`)
+      await waitForValue(client, builtInPluginCard('tool-pwsh'), value => value?.ready && !value.expanded && !value.detailsPresent, theme + ' official PowerShell details removed')
     }
-    if (diagnosticsScreenshotPath) {
-      const screenshot = await client.send('Page.captureScreenshot', { format: 'png', fromSurface: true })
-      await mkdir(path.dirname(diagnosticsScreenshotPath), { recursive: true })
-      await writeFile(diagnosticsScreenshotPath, Buffer.from(screenshot.data, 'base64'))
-    }
-  } else {
-  await verifyDiagnosticContrast('light')
-  await waitForValue(client, clickButton(['General', 'General settings', '通用设置']), value => value?.clicked, 'General settings before dark diagnostics')
-  await waitForValue(client, clickButton(['Dark', '深色']), value => value?.clicked, 'dark theme button')
-  state = await waitForValue(client, stateExpression, value => value?.theme === 'dark', 'theme dark for diagnostic contrast')
-  await waitForValue(client, clickButton(['Plugins', '插件']), value => value?.clicked, 'Plugins settings tab in dark theme')
-  await verifyDiagnosticContrast('dark')
-  if (diagnosticsScreenshotPath) {
-    await evaluate(client, `(() => {
-      const tag = [...document.querySelectorAll('[class*="_ovByTag"]')].find(item => item.getBoundingClientRect().width > 0)
-      tag?.scrollIntoView({ block: 'center', inline: 'nearest' })
-      return Boolean(tag)
-    })()`)
-    await new Promise(resolve => setTimeout(resolve, 120))
-    const screenshot = await client.send('Page.captureScreenshot', { format: 'png', fromSurface: true })
-    await mkdir(path.dirname(diagnosticsScreenshotPath), { recursive: true })
-    await writeFile(diagnosticsScreenshotPath, Buffer.from(screenshot.data, 'base64'))
+    await closeOverlay(theme + ' close Settings before public maintenance')
+    await verifyLegacyRecoveryContrast(theme)
+    await openSettings(theme + ' reopen Settings after public maintenance')
   }
-  }
-  await waitForValue(client, clickButton(['General', 'General settings', '通用设置']), value => value?.clicked, 'General settings after dark diagnostics')
+  await waitForValue(client, clickButton(['General', 'General settings', '通用设置']), value => value?.clicked, 'General settings after dark legacy recovery')
   await waitForValue(client, clickButton(['Light', '浅色', '亮色']), value => value?.clicked, 'restore light theme button')
   state = await waitForValue(client, stateExpression, value => value?.theme === 'light', 'restored light theme')
 
@@ -863,8 +735,9 @@ try {
     sessions: state.sessions.length,
     headless: true,
     offlineLoopback: true,
-    pluginSettingsSurface: modernBuiltIns ? 'official-built-in-settings' : 'legacy-diagnostics',
-    legacyOverrideContrast: modernBuiltIns ? 'not-applicable-upstream-surface-removed' : 'passed-light-and-dark',
+    pluginSettingsSurface: 'official-manager-and-public-maintenance',
+    diagnosticOverrideContrast: 'passed-light-and-dark',
+    privateMarketLayout: 'retired-no-second-manager',
   })}\n`)
 } catch (error) {
   // Keep the actual UI and theme projection before closing the isolated host.

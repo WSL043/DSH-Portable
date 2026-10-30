@@ -1,7 +1,8 @@
 import assert from 'node:assert/strict'
 import { spawn } from 'node:child_process'
-import { lstat, mkdir, readFile, readdir, realpath, rename, rm, unlink, writeFile } from 'node:fs/promises'
+import { lstat, mkdir, readFile, readdir, realpath, rename, unlink, writeFile } from 'node:fs/promises'
 import path from 'node:path'
+import { safeDataTarget } from '../launcher/data-paths.mjs'
 
 const root = process.argv[2] && path.resolve(process.argv[2])
 const output = process.argv[3] && path.resolve(process.argv[3])
@@ -81,15 +82,40 @@ try {
   assert.equal(await lstat(journal).catch(error => { if (error.code === 'ENOENT') return null; throw error }), null)
   const runtimeFilesBefore = new Set(await readdir(runtime))
   const missingBundle = 'dsh-recovery-missing-fixture'
-  const communityIndex = manifestBefore.dsh.profile.bundles.indexOf('dsh-chat-manager') + 1
+  const installedName = 'dsh-recovery-installed-fixture'
+  assert.ok(!manifestBefore.dsh.profile.bundles.includes(installedName))
+  manifestBefore.dsh.profile.bundles.push(installedName)
+  const communityIndex = manifestBefore.dsh.profile.bundles.length
   const officialIndex = manifestBefore.dsh.profile.bundles.indexOf('@deepseek-ai/dsh-web-app') + 1
   const throwingName = 'dsh-recovery-throw-fixture'
-  const throwingDirectory = path.join(path.dirname(profile), 'node_modules', throwingName)
-  assert.ok((await realpath(path.dirname(throwingDirectory))).startsWith(root + path.sep))
-  assert.equal(await lstat(throwingDirectory).catch(error => { if (error.code === 'ENOENT') return null; throw error }), null)
-  assert.ok(communityIndex > 0 && officialIndex > 0, 'requires the default product profile')
+  const modules = path.join(path.dirname(profile), 'node_modules')
+  const installedDirectory = path.join(modules, installedName)
+  const throwingDirectory = path.join(modules, throwingName)
+  let createdModules = false, createdInstalledFixture = false, createdThrowingFixture = false, profileFixtureWritten = false
+  assert.ok(officialIndex > 0, 'requires the installed official web profile bundle')
   const readProfile = async () => JSON.parse(await readFile(profile, 'utf8'))
   try {
+    // Empty official profiles need no node_modules. Seed our own installed bundle,
+    // never depend on community defaults or replace an existing modules tree.
+    const canonicalRoot = await realpath(root)
+    const relativeProfile = path.relative(canonicalRoot, await realpath(path.dirname(profile)))
+    assert.ok(relativeProfile && relativeProfile !== '..' && !relativeProfile.startsWith('..' + path.sep) && !path.isAbsolute(relativeProfile), 'never mutate an external profile tree')
+    const existingModules = await lstat(modules).catch(error => { if (error.code === 'ENOENT') return null; throw error })
+    if (!existingModules) { await mkdir(modules); createdModules = true }
+    const modulesInfo = await lstat(modules)
+    assert.ok(modulesInfo.isDirectory() && !modulesInfo.isSymbolicLink(), 'fixture modules must be a real directory')
+    const relativeModules = path.relative(canonicalRoot, await realpath(modules))
+    assert.ok(relativeModules && relativeModules !== '..' && !relativeModules.startsWith('..' + path.sep) && !path.isAbsolute(relativeModules), 'never mutate an external modules tree')
+    for (const directory of [installedDirectory, throwingDirectory]) {
+      assert.equal(await lstat(directory).catch(error => { if (error.code === 'ENOENT') return null; throw error }), null, 'fixture package must not already exist')
+    }
+    await mkdir(installedDirectory); createdInstalledFixture = true
+    await writeFile(path.join(installedDirectory, 'package.json'), JSON.stringify({ name: installedName, version: '1.0.0',
+      type: 'module', exports: './index.js', dsh: { bundle: { patch: './cordis.patch.yml' } } }))
+    await writeFile(path.join(installedDirectory, 'index.js'), 'export default function recoveryFixture() {}\n')
+    await writeFile(path.join(installedDirectory, 'cordis.patch.yml'), '[]\n')
+    profileFixtureWritten = true
+    await writeFile(profile, JSON.stringify(manifestBefore, null, 2))
     const missing = structuredClone(manifestBefore)
     assert.ok(!missing.dsh.profile.bundles.includes(missingBundle))
     missing.dsh.profile.bundles.push(missingBundle)
@@ -105,11 +131,11 @@ try {
     assert.deepEqual(await readProfile(), manifestBefore)
     await recovery('pause-installed-community', `6\n${communityIndex}\n0\n`, /"status":"paused"/)
     assert.deepEqual((await readProfile()).dependencies, manifestBefore.dependencies)
-    assert.ok(!(await readProfile()).dsh.profile.bundles.includes('dsh-chat-manager'))
+    assert.ok(!(await readProfile()).dsh.profile.bundles.includes(installedName))
     await recovery('restore-installed-community', '7\n1\n0\n', /"status":"restored"/)
     assert.deepEqual(await readProfile(), manifestBefore)
     assert.deepEqual(JSON.parse(await readFile(journal, 'utf8')).pauses, [])
-    await mkdir(throwingDirectory)
+    await mkdir(throwingDirectory); createdThrowingFixture = true
     await writeFile(path.join(throwingDirectory, 'package.json'), JSON.stringify({ name: throwingName, version: '1.0.0',
       type: 'module', exports: './index.js', dsh: { bundle: { patch: './cordis.patch.yml' } } }))
     await writeFile(path.join(throwingDirectory, 'index.js'), 'import {writeFileSync} from "node:fs"; writeFileSync(new URL("./executed", import.meta.url), "executed"); throw new Error("DSH_RECOVERY_THROW_FIXTURE");\n')
@@ -142,8 +168,26 @@ try {
     assert.equal(await readFile(profile, 'utf8'), '{ malformed fixture')
   } finally {
     if (started) { await cli('stop'); started = false }
-    await writeFile(profile, profileBefore)
-    await rm(throwingDirectory, { recursive: true, force: true })
+    if (profileFixtureWritten) await writeFile(profile, profileBefore)
+    if (createdInstalledFixture || createdThrowingFixture || createdModules) {
+      const retired = path.dirname(await safeDataTarget(root, `acceptance/recovery-fixture-retired/${process.pid}-${Date.now()}/receipt.json`))
+      const retire = async (directory, name) => {
+        const destination = path.join(retired, name)
+        assert.equal(await lstat(destination).catch(error => { if (error.code === 'ENOENT') return null; throw error }), null)
+        await rename(directory, destination)
+        evidence.fixtureRetired ??= []
+        evidence.fixtureRetired.push(path.relative(root, destination))
+      }
+      if (createdThrowingFixture) await retire(throwingDirectory, throwingName)
+      if (createdInstalledFixture) await retire(installedDirectory, installedName)
+      if (createdModules) {
+        const entries = await readdir(modules)
+        if (entries.length) evidence.fixtureModulesRetained = { path: path.relative(root, modules), reason: 'unknown-content', entries: entries.slice(0, 32) }
+        assert.equal(entries.length, 0, 'new fixture modules contain unknown entries; leave them intact')
+        await retire(modules, 'empty-node_modules')
+      }
+      await writeFile(path.join(retired, 'receipt.json'), JSON.stringify(evidence.fixtureRetired, null, 2))
+    }
     await unlink(journal).catch(error => { if (error.code !== 'ENOENT') throw error })
     for (const name of await readdir(runtime)) {
       if (runtimeFilesBefore.has(name) || !/^startup-profile-backup-[a-f0-9-]+\.json$/.test(name)) continue

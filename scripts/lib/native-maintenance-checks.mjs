@@ -1,9 +1,11 @@
 import assert from 'node:assert/strict'
 import { access, mkdir, mkdtemp, readFile, readdir, rm, utimes, writeFile } from 'node:fs/promises'
 import path from 'node:path'
+import { createRequire } from 'node:module'
 import { createHash, randomBytes } from 'node:crypto'
-import { acquireRuntimeLease } from '../../launcher/runtime-capsule.mjs'
+import { acquireRuntimeLease, ensureRuntimeCapsule } from '../../launcher/runtime-capsule.mjs'
 import { cleanWebViewCaches } from '../../launcher/webview-cache.mjs'
+import { isEmptyStoreLock } from '../../launcher/store-reference-inventory.mjs'
 const digest = value => createHash('sha256').update(value).digest('hex')
 
 export async function verifyRetiredWebViewCleanup({ root, output }) {
@@ -156,7 +158,11 @@ export async function verifyMaintenance({ root, evaluate, until, click, send, ou
   if (verifyPluginCache) {
     const profile = path.join(root, 'data/dsh-home/profiles/web')
     const protectedFiles = ['package.json', 'pnpm-lock.yaml', 'node_modules/.modules.yaml']
-    const before = await Promise.all(protectedFiles.map(async name => digest(await readFile(path.join(profile, name)))))
+    const snapshot = () => Promise.all(protectedFiles.map(async name => {
+      try { return digest(await readFile(path.join(profile, name))) }
+      catch (error) { if (error.code !== 'ENOENT') throw error; return null }
+    }))
+    const before = await snapshot()
     await evaluate(`(() => {
       const original = window.fetch; window.__portableStoreResult = null;
       window.fetch = async (...args) => {
@@ -172,10 +178,19 @@ export async function verifyMaintenance({ root, evaluate, until, click, send, ou
     const response = await until('window.__portableStoreResult', Boolean, 'dependency cleanup response')
     assert.equal(response.status, 200, JSON.stringify(response))
     assert.equal(response.body.complete, true)
-    assert.ok(response.body.references > 0)
-    assert.deepEqual(await Promise.all(protectedFiles.map(async name => digest(await readFile(path.join(profile, name))))), before)
+    assert.ok(Number.isInteger(response.body.references) && response.body.references >= 0)
+    const manifest = JSON.parse(await readFile(path.join(profile, 'package.json'), 'utf8'))
+    const { runtimeRoot } = await ensureRuntimeCapsule(root, {
+      env: { ...process.env, DSH_PORTABLE_RUNTIME_CACHE: path.join(root, 'acceptance-runtime-cache') },
+    })
+    const parseYaml = createRequire(path.join(runtimeRoot, 'app/package.json'))('yaml').parse
+    const lock = before[protectedFiles.indexOf('pnpm-lock.yaml')] === null ? null
+      : parseYaml(await readFile(path.join(profile, 'pnpm-lock.yaml'), 'utf8'))
+    if (['dependencies', 'devDependencies', 'optionalDependencies'].some(field => Object.keys(manifest[field] || {}).length)
+      || (lock && !isEmptyStoreLock(lock))) assert.ok(response.body.references > 0)
+    assert.deepEqual(await snapshot(), before)
     await until(`document.body.innerText.includes('离线重建检查') || document.body.innerText.includes('offline rebuild checks')`, Boolean, 'dependency completion feedback')
-    await writeFile(path.join(output, 'dependency-cleanup.json'), JSON.stringify({ passed: true, ...response, unchanged: protectedFiles }))
+    await writeFile(path.join(output, 'dependency-cleanup.json'), JSON.stringify({ passed: true, ...response, scope: response.body.references > 0 ? 'retained-reference-offline-rebuild' : 'no-dependency-references-safe-noop', unchanged: protectedFiles }))
     await writeFile(path.join(output, 'dependency-cleanup.png'), Buffer.from((await send('Page.captureScreenshot', { format: 'png', fromSurface: true })).data, 'base64'))
   }
   await scan()

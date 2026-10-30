@@ -1,10 +1,6 @@
-import { useCallback, useState, useSyncExternalStore } from 'react'
-import { Button, IconCordisPluginOutline14, Modal } from './primitives.ts'
+import { useSyncExternalStore } from 'react'
 import { MarketErrorBoundary } from './MarketErrorBoundary.tsx'
-import { MarketSection } from './MarketSection.tsx'
 import { PluginUpdateStatus } from './PluginUpdates.tsx'
-import { useOfficialMarket } from './official-market.ts'
-import css from './Market.module.css'
 import type { Translate } from './market-data.ts'
 
 export interface MarketActionProps {
@@ -18,51 +14,15 @@ export interface MarketActionProps {
   editInstallSpec?: (spec: string) => void
 }
 
-/** The modern manager toolbar entry contributed through the Portable adapter. */
+/** The Portable adapter contributes update status, never a substitute manager. */
 export function MarketAction(props: MarketActionProps) {
-  const [open, setOpen] = useState(false)
   const locale = useSyncExternalStore(
     callback => props.locale.subscribe(callback),
     () => props.locale.getSnapshot(),
   )
-  const zh = locale.active.toLowerCase().startsWith('zh')
-  const official = useOfficialMarket()
-  const close = useCallback(() => {
-    setOpen(false)
-    props.refresh?.()
-  }, [props.refresh])
-
-  // With the official plugin market on, its Discover tab browses and installs, so "Advanced" opens the Portable market on its
-  // installed view only: groups, update and rollback, themes, diagnostics and the repair tools the official page does not have.
-  const label = official === 'active' ? props.t('navAdvanced') : props.t('nav')
-
   return (
-    <>
-      <Button
-        type="button"
-        variant="outline"
-        size="sm"
-        icon={<IconCordisPluginOutline14 size={14} />}
-        onClick={() => setOpen(true)}
-      >{label}</Button>
-      <MarketErrorBoundary view="installed"><PluginUpdateStatus zh={zh} /></MarketErrorBoundary>
-      <Modal
-        open={open}
-        onClose={close}
-        title={label}
-        closeLabel={props.t('cancel')}
-        className={css.managerModal}
-        contentClassName={css.managerModalContent}
-      >
-        <MarketErrorBoundary view="discover">
-          <MarketSection t={props.t} locale={props.locale} view={official === 'active' ? 'installed' : 'discover'}
-            onOfficialInstall={props.openInstall && props.editInstallSpec ? spec => {
-              setOpen(false)
-              props.openInstall!()
-              props.editInstallSpec!(spec)
-            } : undefined} />
-        </MarketErrorBoundary>
-      </Modal>
-    </>
+    <MarketErrorBoundary view="installed">
+      <PluginUpdateStatus zh={locale.active.toLowerCase().startsWith('zh')} />
+    </MarketErrorBoundary>
   )
 }

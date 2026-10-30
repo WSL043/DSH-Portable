@@ -6,8 +6,11 @@
 // The one thing done on every start is suspending the bundle when the active core does not ship it (0.2.0-rc.2): the
 // profile must never name a bundle its core cannot resolve.
 import { existsSync } from 'node:fs'
+import { createRequire } from 'node:module'
 import { mkdir, readFile, rename, writeFile } from 'node:fs/promises'
 import path from 'node:path'
+import { pathToFileURL } from 'node:url'
+import { loadOfficialProfileBundles } from './official-profile-bundles.mjs'
 
 export const OFFICIAL_MARKET_BUNDLE = '@deepseek-ai/dsh-experimental-plugin-market-bundle'
 // A raw.githubusercontent.com file is served without a redirect, which the official market requires of an index.
@@ -47,6 +50,24 @@ async function writeAtomic(filename, content, save, move) {
   await move(temporary, filename)
 }
 
+async function loadProfileInitialization(layout) {
+  // Resolve the CLI's declared dependencies, including a strict pnpm layout.
+  // Profile initialization does not require plugin-manager operations exports.
+  const require = createRequire(layout.dshBin)
+  const bootEntry = require.resolve('@deepseek-ai/dsh-app-boot')
+  const bootRequire = createRequire(bootEntry)
+  const [boot, atomic] = await Promise.all([
+    import(pathToFileURL(bootEntry).href),
+    import(pathToFileURL(require.resolve('@deepseek-ai/dsh-atomic-write')).href),
+  ])
+  if (typeof boot.initProfile !== 'function' || typeof atomic.withFileLock !== 'function') {
+    throw new Error('Selected runtime has no official profile initialization API.')
+  }
+  const load = name => import(pathToFileURL(bootRequire.resolve(name)).href)
+  return { initProfile: boot.initProfile, withFileLock: atomic.withFileLock,
+    ...await loadOfficialProfileBundles(load, boot) }
+}
+
 export async function ensureOfficialMarket(layout, adapters = {}) {
   const paths = layout.platform === 'win32' ? path.win32 : path.posix
   const exists = adapters.existsSync ?? existsSync
@@ -58,13 +79,26 @@ export async function ensureOfficialMarket(layout, adapters = {}) {
   if ((adapters.env ?? process.env).DSH_PORTABLE_OFFICIAL_MARKET === '0') return { status: 'skipped', reason: 'disabled-by-environment' }
   const profileRoot = paths.join(layout.dshHome, 'profiles', 'web')
   const manifestPath = paths.join(profileRoot, 'package.json')
-  if (!exists(manifestPath)) return { status: 'skipped', reason: 'no-profile' }
+  const shipped = exists(paths.join(paths.dirname(layout.dshBin), '..', '..', '..', ...OFFICIAL_MARKET_BUNDLE.split('/'), 'package.json'))
+  if (!exists(manifestPath)) {
+    if (!shipped) return { status: 'skipped', reason: 'no-profile' }
+    const api = await (adapters.loadProfileInitialization ?? loadProfileInitialization)(layout)
+    await makeDirectory(profileRoot, { recursive: true })
+    return api.withFileLock(manifestPath, async () => {
+      if (!exists(manifestPath)) {
+        await api.initProfile(profileRoot, api.PROFILE_TEMPLATES.web?.bundles ?? api.DEFAULT_PROFILE_BUNDLES)
+      }
+      if (!exists(manifestPath)) throw new Error('Official profile initialization did not create its manifest.')
+      // Continue the existing one-time offer while the official writer lock is
+      // held. A profile created by another writer keeps its bundles and choices.
+      return ensureOfficialMarket(layout, adapters)
+    }, { waitMs: 0 })
+  }
 
   const manifest = await readJson(manifestPath, null, load)
   if (manifest === null || typeof manifest !== 'object') return { status: 'skipped', reason: 'unreadable-profile' }
   const statePath = paths.join(profileRoot, STATE_FILE)
   const state = await readJson(statePath, {}, load)
-  const shipped = exists(paths.join(paths.dirname(layout.dshBin), '..', '..', '..', ...OFFICIAL_MARKET_BUNDLE.split('/'), 'package.json'))
   const bundles = Array.isArray(manifest.dsh?.profile?.bundles) ? manifest.dsh.profile.bundles : null
   if (bundles === null) return { status: 'skipped', reason: 'profile-without-bundle-list' }
 

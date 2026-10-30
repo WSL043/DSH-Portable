@@ -489,7 +489,7 @@ test('installable official updates use a short-lived PR, full product gates, and
   assert.doesNotMatch(updater, /process\.platform\s*===\s*['"]win32['"]\s*\?\s*['"]npm\.cmd['"]/)
 })
 
-test('plugins beyond the two reviewed defaults remain market-discovered', async () => {
+test('community plugins remain optional and market-discovered', async () => {
   const [workflow, ci, publish, chinese, english, landingChinese, landingEnglish] = await Promise.all([
     read('.github/workflows/upstream-watch.yml'),
     readNativeWorkflow(),
@@ -511,14 +511,14 @@ test('plugins beyond the two reviewed defaults remain market-discovered', async 
     assert.doesNotMatch(source, /update-default-plugin\.mjs|source:\s*default-plugin/)
   }
   assert.equal(await exists('scripts/update-default-plugin.mjs'), false)
-  assert.match(chinese, /全新安装仅预装两个经过审核、可自行卸载的插件/)
+  assert.match(chinese, /新版本不再默认安装社区插件/)
   assert.match(chinese, /其他社区插件仍按需从插件市场/)
   assert.match(chinese, /插件市场/)
-  assert.match(english, /Fresh installs include only two reviewed, removable defaults/i)
+  assert.match(english, /New packages do not install community plugins by default/i)
   assert.match(english, /Other community plugins remain opt-in through the Plugin Market/i)
   assert.match(english, /plugin market/i)
-  assert.match(landingChinese, /两个可卸载插件/)
-  assert.match(landingEnglish, /two removable defaults/i)
+  assert.match(landingChinese, /不再默认安装社区插件/)
+  assert.match(landingEnglish, /no longer install community plugins by default/i)
 })
 
 test('desktop icons are derived from the pinned official DSH mark', async () => {
@@ -726,7 +726,7 @@ test('macOS and Linux finished products verify official bare dsh syntax in an is
   assert.match(english, /macOS[\s\S]+Linux[\s\S]+DSH Terminal[\s\S]+dsh plugin/i)
 })
 
-test('fresh products bundle only reviewed removable defaults and upgrades preserve user profiles', async () => {
+test('fresh products declare no community defaults and upgrades preserve user profiles', async () => {
   const [lock, previewLock, windows, macos, linux, cli, core] = await Promise.all([
     read('upstream.lock.json').then(JSON.parse),
     read('upstream.preview.lock.json').then(JSON.parse),
@@ -736,10 +736,10 @@ test('fresh products bundle only reviewed removable defaults and upgrades preser
     read('launcher/portable-cli.mjs'),
     read('launcher/default-plugins.mjs'),
   ])
-  assert.deepEqual(Object.keys(lock.defaultPlugins).sort(), ['chatManager', 'imageViewer'])
+  assert.deepEqual(lock.defaultPlugins, {})
   assert.deepEqual(Object.keys(previewLock.defaultPlugins).sort(), Object.keys(lock.defaultPlugins).sort())
-  assert.deepEqual(Object.values(lock.defaultPlugins).map(plugin => plugin.package), ['dsh-image-viewer', 'dsh-chat-manager'])
-  assert.equal(new Set(Object.values(lock.defaultPlugins).map(plugin => plugin.filename)).size, 2)
+  assert.deepEqual(previewLock.defaultPlugins, {})
+  assert.equal(new Set(Object.values(lock.defaultPlugins).map(plugin => plugin.filename)).size, 0)
   for (const plugin of [...Object.values(lock.defaultPlugins), ...Object.values(previewLock.defaultPlugins)]) {
     assert.match(plugin.sha256, /^[0-9a-f]{64}$/)
     assert.match(plugin.integrity, /^sha512-[A-Za-z0-9+/]+={0,2}$/)
@@ -1156,10 +1156,10 @@ test('macOS qualification reuses one runner per architecture without omitting pr
 
 test('main CI pins reviewed stable and preview source independently of mutable lock data', async () => {
   const workflow = await read('.github/workflows/ci.yml')
-  const stable = '504a01a9578abc2c6f1fb896b1dc322c9fe24f66'
+  const stable = 'b830ec950faba0a46dda564be3e2d854afed94f1'
   const preview = 'f3803c96974ad4a94195fb97e5c637e9c2a3afe3'
   const pnpm = '8e1e4c0aaece387dfda16377b2ba31f7a1a2602c'
-  assert.equal(workflow.split(stable).length - 1, 2, 'both immutable guard and default-branch checkout pin RC4')
+  assert.equal(workflow.split(stable).length - 1, 2, 'both immutable guard and default-branch checkout pin RC5')
   assert.equal(workflow.split(preview).length - 1, 2, 'preview pin remains independent')
   assert.doesNotMatch(workflow, /1f81c047fc48fa190a683e469daa699857e9afe8/)
   assert.ok(workflow.includes("github.ref == 'refs/heads/main' && (steps.preview.outputs.lockFile == 'upstream.preview.lock.json' && '" + preview + "' || '" + stable + "') || steps.preview.outputs.commit"))

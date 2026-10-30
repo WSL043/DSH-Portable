@@ -155,6 +155,16 @@ try {
       timeout: 120_000, windowsHide: true,
     })
   }
+  const historicalCommunityNames = ['dsh-image-viewer', 'dsh-chat-manager']
+  const emptyDefaultTarget = Object.keys(expectedPluginVersions).length === 0
+  const priorProfile = await readFile(path.join(destination, 'data/dsh-home/profiles/web/package.json'), 'utf8').then(JSON.parse, error => { if (error.code === 'ENOENT') return {}; throw error })
+  const priorCommunitySelection = (priorProfile.dsh?.profile?.bundles ?? []).filter(name => historicalCommunityNames.includes(name))
+  if (emptyDefaultTarget) {
+    for (const name of historicalCommunityNames) {
+      const prior = await readFile(path.join(destination, 'data/dsh-home/profiles/web/node_modules', name, 'package.json'), 'utf8').then(JSON.parse, error => { if (error.code === 'ENOENT') return null; throw error })
+      expectedPluginVersions[name] = prior?.version ?? null
+    }
+  }
   const markers = new Map([
     [path.join(destination, 'data', 'dsh-home', 'settings.yaml'), 'locale:\n  preference: zh\n'],
     [path.join(destination, 'data', 'dsh-home', 'portable-upgrade-session.marker'), 'keep-session\n'],
@@ -406,6 +416,13 @@ try {
     actualPluginVersions[name] = installedManifest?.version ?? null
     if (actualPluginVersions[name] !== expectedPluginVersions[name]) {
       pluginRefreshFailures.push(`${name}: expected ${expectedPluginVersions[name]}, found ${actualPluginVersions[name] ?? 'not installed'}`)
+    }
+  }
+  if (emptyDefaultTarget) {
+    const currentProfile = await readFile(path.join(activeProductRoot, 'data/dsh-home/profiles/web/package.json'), 'utf8').then(JSON.parse, error => { if (error.code === 'ENOENT') return {}; throw error })
+    assert.deepEqual((currentProfile.dsh?.profile?.bundles ?? []).filter(name => historicalCommunityNames.includes(name)), priorCommunitySelection, 'removing defaults preserves existing community-plugin enablement')
+    for (const name of historicalCommunityNames) {
+      assert.equal(currentProfile.dependencies?.[name], priorProfile.dependencies?.[name], 'removing defaults preserves existing community-plugin dependency choices')
     }
   }
   const updatedLauncherLog = (await launcherLog(activeProductRoot)).slice(productUpgradeLogOffset)

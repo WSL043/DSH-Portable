@@ -35,17 +35,18 @@ test('packaged default plugins use real semver to accept compatible prerelease h
     await writeFile(path.join(source, 'package', 'package.json'), JSON.stringify({ name, version: '1.0.0', peerDependencies: { [peer]: range } }))
     execFileSync(process.platform === 'win32' ? 'tar.exe' : 'tar', ['-czf', path.join(archives, `${name}.tgz`), '-C', source, 'package'], { windowsHide: true })
   }
+  const defaultPlugins = ['dsh-chat-manager', 'dsh-image-viewer'].map(packageName => ({ package: packageName }))
   await pack('dsh-chat-manager', '>=0.2.0-rc.0 <0.3.0')
   await pack('dsh-image-viewer', '^0.2.0')
-  assert.deepEqual(await verifyDefaultPluginPeers(stage), [
+  assert.deepEqual(await verifyDefaultPluginPeers(stage, { defaultPlugins }), [
     { name: 'dsh-chat-manager', version: '1.0.0' },
     { name: 'dsh-image-viewer', version: '1.0.0' },
   ])
 
   for (const range of ['0.2.1-alpha.5', '^0.3.0']) {
     await pack('dsh-chat-manager', range)
-    await assert.rejects(verifyDefaultPluginPeers(stage), error => {
-      assert.match(error.message, /dsh-chat-manager would be paused/)
+    await assert.rejects(verifyDefaultPluginPeers(stage, { defaultPlugins }), error => {
+      assert.match(error.message, /dsh-chat-manager has incompatible Portable host peers/)
       assert.ok(error.message.includes(range))
       return true
     })

@@ -27,7 +27,7 @@ test('market render failures are isolated, reported once, and manually retryable
   assert.equal((boundary.match(/<button\b/g) ?? []).length, 1)
   assert.match(index, /h\(MarketErrorBoundary, \{ view: 'discover' \}, h\(MarketSection/)
   assert.match(index, /h\(MarketErrorBoundary, \{ view: 'installed' \}, h\(MarketSection/)
-  assert.match(action, /<MarketErrorBoundary view="discover">/)
+  assert.match(action, /return\s*(?:\(\s*)?<MarketErrorBoundary\s+view=(['"])installed\1\s*>\s*<PluginUpdateStatus\b/)
 
   const route = routes.slice(routes.indexOf("path: '/dsh-market/client-error'"))
   assert.match(route, /kind: 'exact'/)

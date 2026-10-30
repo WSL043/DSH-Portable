@@ -10,8 +10,13 @@ export function assertPublishReadiness({ productVersion, stableLock, previewLock
   }
   const prerelease = policy.prerelease
   if (!prerelease) {
-    const plugins = Object.values(stableLock?.defaultPlugins ?? {})
-    if (plugins.length === 0 || plugins.some(plugin => plugin?.releaseChannel !== 'stable'
+    const declared = stableLock?.defaultPlugins
+    if (!declared || typeof declared !== 'object' || Array.isArray(declared)
+      || ![Object.prototype, null].includes(Object.getPrototypeOf(declared))) {
+      throw new Error('Stable Portable publication requires an explicit defaultPlugins object, including an empty object when no defaults are bundled.')
+    }
+    const plugins = Object.values(declared)
+    if (plugins.some(plugin => plugin?.releaseChannel !== 'stable'
       || !/^\d+\.\d+\.\d+$/.test(plugin?.version ?? ''))) {
       throw new Error('Stable Portable publication requires reviewed stable versions of every default plugin.')
     }

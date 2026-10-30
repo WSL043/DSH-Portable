@@ -5,7 +5,8 @@ import os from 'node:os'
 import path from 'node:path'
 import test from 'node:test'
 import { createProfileBackup, restoreProfileBackup, validatedBackup } from '../app/vendor/dsh-portable-plugin-market/src/backup.ts'
-import { canonicalBackupPath, writeBackupFileAtomic } from '../app/vendor/dsh-portable-plugin-market/src/backup-files.ts'
+import { canonicalBackupPath, readBackupManifest, writeBackupManifest, writeBackupFileAtomic } from '../app/vendor/dsh-portable-plugin-market/src/backup-files.ts'
+import { profileDir } from '../app/vendor/dsh-portable-plugin-market/src/profile.ts'
 import { writeJsonAtomic } from '../launcher/portable-core.mjs'
 
 async function fixture(t) {
@@ -132,4 +133,25 @@ test('concurrent shared writes use independent staging paths and leave a whole J
   assert.ok(value.index >= 0 && value.index < 12)
   assert.equal(value.text, 'x'.repeat(4096))
   assert.equal((await readdir(profile)).some(n => n.startsWith('.dsh-data-')), false)
+})
+
+for (const operation of [readBackupManifest, root => writeBackupManifest(root, { dependencies: {} })]) {
+  test('restore manifest access rejects a directory replacement after earlier validation', async t => {
+    const { root, profile } = await fixture(t)
+    const outside = path.join(root, 'outside')
+    await mkdir(outside)
+    await writeFile(path.join(outside, 'package.json'), 'external sentinel')
+    await rm(profile, { recursive: true })
+    await symlink(outside, profile, dirLink)
+    assert.throws(() => operation(profile), /unsafe backup root/)
+    assert.equal(await readFile(path.join(outside, 'package.json'), 'utf8'), 'external sentinel')
+  })
+}
+
+test('profile names cannot traverse or select absolute paths while host directory authority is preserved', () => {
+  for (const name of ['../escape', '..', '.', '', '/absolute', 'C:\\absolute', 'C:relative', 'a/b', 'a\\b', 'nul\0name']) {
+    assert.throws(() => profileDir(name), /unsafe profile name/)
+  }
+  assert.equal(path.basename(profileDir('ordinary-profile')), 'ordinary-profile')
+  assert.equal(profileDir('ignored', '/host-owned/profile'), '/host-owned/profile')
 })

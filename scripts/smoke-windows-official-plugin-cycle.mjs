@@ -62,6 +62,15 @@ const resultFile = await safeDataTarget(root, `${evidenceRelative}/result.json`)
 const evidence = path.dirname(resultFile)
 assert.deepEqual(await readdir(evidence), [], 'Evidence directory must be new or empty')
 const evidenceFile = name => safeDataTarget(root, `${evidenceRelative}/${name}`)
+// Products without community defaults still run real native official-UI qualification.
+if (Array.isArray(components.defaultPlugins) && components.defaultPlugins.length === 0) {
+  const { verifyNativeDefaultPlugins } = await import('./verify-default-plugin-ui.mjs')
+  const coreUi = await verifyNativeDefaultPlugins(root, driverPackage)
+  const result = { ok: true, scope: 'official-core-ui-no-defaults', requestedMode: mode ?? 'fresh', coreUi }
+  await writeFile(resultFile, JSON.stringify(result, null, 2))
+  console.log(JSON.stringify(result))
+  process.exit(0)
+}
 const reviewedNames = ['dsh-image-viewer', 'dsh-chat-manager']
 assert.deepEqual(components.defaultPlugins?.map(plugin => plugin.package).sort(), [...reviewedNames].sort(),
   'the disposable component manifest must contain exactly the two reviewed default plugins')

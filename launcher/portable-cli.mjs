@@ -58,7 +58,7 @@ import { formatRecoveryResult } from './recovery-presentation.mjs'
 import { recoverInterruptedImport } from './data-import-journal.mjs'
 import { createDataArchive, inspectDataArchive, restoreDataArchiveAllowingPluginFailure } from './data-transfer.mjs'
 import { rehydrateImportedProfiles, repairIncompleteProfileDependencies } from './data-import-preflight.mjs'
-import { pauseIncompatibleProfileBundles } from './profile-compatibility.mjs'
+import { checkProfileCompatibility } from './profile-compatibility.mjs'
 import { installSystemProxy } from './system-proxy.mjs'
 import { inspectStartupProfile, pauseStartupProfileBundle, restoreStartupProfileBundle } from './startup-profile-recovery.mjs'
 import { cleanUnusedRuntimeCaches, ensureRuntimeCapsule, runtimeCacheStatus } from './runtime-capsule.mjs'
@@ -592,16 +592,16 @@ async function startAttempt(noBrowser, portRetry, startedAt) {
   if (defaultPlugins.status === 'warning') {
     process.stderr.write(`${JSON.stringify({ type: 'portable-warning', ...defaultPlugins })}\n`)
   }
-  const compatibility = await pauseIncompatibleProfileBundles(layout)
+  const compatibility = await checkProfileCompatibility(layout)
   startupLog(startedAt, 'plugin-compatibility-ready', {
     status: compatibility.status,
-    paused: compatibility.paused.length,
-    plugins: compatibility.paused.map(item => item.name).join(','),
+    incompatible: compatibility.incompatible.length,
+    plugins: compatibility.incompatible.map(item => item.name).join(','),
   })
-  if (compatibility.paused.length) {
+  if (compatibility.incompatible.length) {
     process.stderr.write(`${JSON.stringify({
-      type: 'portable-warning', code: 'incompatible_plugins_paused',
-      plugins: compatibility.paused.map(item => ({ name: item.name, version: item.version })),
+      type: 'portable-warning', code: 'incompatible_plugins_detected',
+      plugins: compatibility.incompatible,
     })}\n`)
   }
   const repairedPluginProfiles = await repairIncompleteProfileDependencies({

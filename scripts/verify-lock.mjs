@@ -30,6 +30,7 @@ const desktopBridgePackage = '@wsl043/dsh-portable-desktop-bridge'
 const settingsPackage = '@deepseek-ai/dsh-settings'
 assert.deepEqual(root?.dependencies, {
   [upstream.dsh.package]: upstream.dsh.version,
+  '@deepseek-ai/dsh-atomic-write': upstream.dsh.version,
   '@deepseek-ai/dsh-brand': upstream.dsh.version,
   '@deepseek-ai/dsh-session': upstream.dsh.version,
   [settingsPackage]: upstream.dsh.version,
@@ -46,6 +47,10 @@ assert.equal(installed?.version, upstream.dsh.version, 'pinned DSH version')
 assert.equal(installed?.integrity, upstream.dsh.integrity, 'pinned DSH integrity')
 assert.equal(installed?.license, 'MIT', 'DSH npm license')
 assert.equal(lockfile.packages?.[`node_modules/${settingsPackage}`]?.version, upstream.dsh.version, 'plugin market settings runtime')
+const atomicWriter = lockfile.packages?.['node_modules/@deepseek-ai/dsh-atomic-write']
+assert.equal(atomicWriter?.version, upstream.dsh.version, 'Portable storage uses the selected core atomic writer')
+assert.equal(atomicWriter?.license, 'MIT', 'atomic writer npm license')
+assert.match(atomicWriter?.integrity ?? '', /^sha512-[A-Za-z0-9+/]+={0,2}$/, 'atomic writer artifact integrity')
 const packageManager = lockfile.packages?.[`node_modules/${upstream.pnpm.package}`]
 assert.equal(packageManager?.version, upstream.pnpm.version, 'pinned pnpm version')
 assert.equal(packageManager?.integrity, upstream.pnpm.integrity, 'pinned pnpm integrity')
@@ -65,9 +70,8 @@ assert.equal(desktopBridgeSource?.name, desktopBridgePackage, 'desktop bridge li
 assert.equal(desktopBridgeSource?.license, 'Apache-2.0', 'desktop bridge license')
 
 const defaultPlugins = upstream.defaultPlugins ?? {}
-assert.deepEqual(Object.keys(defaultPlugins).sort(), ['chatManager', 'imageViewer'], 'Portable must pin only the two reviewed defaults')
-assert.deepEqual(Object.values(defaultPlugins).map(plugin => plugin.package), ['dsh-image-viewer', 'dsh-chat-manager'])
-assert.equal(new Set(Object.values(defaultPlugins).map(plugin => plugin.filename)).size, 2, 'default plugin archive names must be unique')
+assert.equal(new Set(Object.values(defaultPlugins).map(plugin => plugin.package)).size, Object.keys(defaultPlugins).length, 'default plugin package names must be unique')
+assert.equal(new Set(Object.values(defaultPlugins).map(plugin => plugin.filename)).size, Object.keys(defaultPlugins).length, 'default plugin archive names must be unique')
 for (const plugin of Object.values(defaultPlugins)) {
   assert.ok(['stable', 'prerelease'].includes(plugin.releaseChannel), `${plugin.package} release channel`)
   if (plugin.releaseChannel === 'stable') {

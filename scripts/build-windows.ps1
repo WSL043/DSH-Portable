@@ -271,9 +271,10 @@ try {
     if ($LASTEXITCODE -ne 0) { throw "Windows subprocess hiding adaptation failed with exit code $LASTEXITCODE" }
     [System.IO.Directory]::Delete((Join-Path $Stage 'desktop-bridge'), $true)
 
-    & $NodeExe (Join-Path $ProjectRoot 'scripts\prepare-default-plugin-store.mjs') $Stage
+    $DefaultPluginComponentLock = Join-Path $ProjectRoot $(if ($UsePreviewLock) { 'upstream.preview.lock.json' } else { 'upstream.lock.json' })
+    & $NodeExe (Join-Path $ProjectRoot 'scripts\prepare-default-plugin-store.mjs') $Stage $Stage $DefaultPluginComponentLock
     if ($LASTEXITCODE -ne 0) { throw 'Default plugin offline dependency preparation failed.' }
-    & $NodeExe (Join-Path $ProjectRoot 'scripts\verify-default-plugin-peers.mjs') $Stage
+    & $NodeExe (Join-Path $ProjectRoot 'scripts\verify-default-plugin-peers.mjs') $Stage $DefaultPluginComponentLock
     if ($LASTEXITCODE -ne 0) { throw 'Default plugins are incompatible with the staged DSH runtime.' }
     & $NodeExe (Join-Path $ProjectRoot 'scripts\prune-runtime.mjs') (Join-Path $Stage 'app') win32 x64
     if ($LASTEXITCODE -ne 0) { throw "runtime pruning failed with exit code $LASTEXITCODE" }

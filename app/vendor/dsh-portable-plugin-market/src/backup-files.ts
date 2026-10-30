@@ -1,5 +1,5 @@
 import { randomUUID } from 'node:crypto'
-import { closeSync, lstatSync, mkdirSync, openSync, renameSync, rmSync, writeFileSync } from 'node:fs'
+import { closeSync, lstatSync, mkdirSync, openSync, readFileSync, renameSync, rmSync, writeFileSync } from 'node:fs'
 import { dirname, isAbsolute, join, relative, resolve, sep, win32 } from 'node:path'
 
 const EXCLUDED = new Set(['node_modules', '.dsh-market', '.git', 'pnpm-lock.yaml'])
@@ -39,6 +39,8 @@ export function backupFileTarget(root: string, value: string): string {
     throw new Error(`unsafe backup path: ${value}`)
   }
   mkdirSync(base, { recursive: true })
+  const baseStat = lstatSync(base)
+  if (baseStat.isSymbolicLink() || !baseStat.isDirectory()) throw new Error(`unsafe backup root: ${root}`)
   let current = base
   for (const part of normalized.split('/').slice(0, -1)) {
     current = join(current, part)
@@ -69,4 +71,13 @@ export function writeBackupFileAtomic(target: string, content: string | Buffer):
     if (fd !== -1) closeSync(fd)
     rmSync(temporary, { force: true })
   }
+}
+
+/** Revalidate the fixed restore manifest after each asynchronous package-manager call. */
+export function readBackupManifest(root: string): Record<string, unknown> {
+  return JSON.parse(readFileSync(backupFileTarget(root, 'package.json'), 'utf8')) as Record<string, unknown>
+}
+
+export function writeBackupManifest(root: string, value: unknown): void {
+  writeBackupFileAtomic(backupFileTarget(root, 'package.json'), `${JSON.stringify(value, null, 2)}\n`)
 }

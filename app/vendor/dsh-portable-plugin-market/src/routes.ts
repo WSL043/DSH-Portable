@@ -1,3 +1,4 @@
+import { readBackupManifest, writeBackupManifest } from './backup-files.ts'
 import { profileRevision } from './profile-revision.ts'
 import { getDownloadTotal, getDownloadTotalsTable } from './download-totals.ts'
 import { buildOfficialExtras } from './extras.ts'
@@ -633,22 +634,22 @@ export function mountMarketRoutes(
   }
 
   async function restoreBackup(value: unknown): Promise<{ files: number; errors: { name: string; error: string }[]; unportable?: Array<{ name: string; spec: string }> }> {
-    if (!await probePnpm()) throw new Error('pnpm is required to restore plugins')
+    if (!await commands.probePnpm()) throw new Error('pnpm is required to restore plugins')
     // Snapshot the target's manifest BEFORE the backup files overwrite it, so
     // the restore can merge rather than replace: plugins the target already
     // has that are NOT in the backup stay installed instead of silently
     // dropping off the manifest (partial exports, issue #89). The mutation
     // lock is owned by withMutationLock now, so no `installing` flag here.
-    const manifestBefore = JSON.parse(readFileSync(join(activeProfileDir, 'package.json'), 'utf8')) as Record<string, unknown>
+    const manifestBefore = readBackupManifest(activeProfileDir)
     const restored = restoreProfileBackup(config.profile, value, activeProfileDir)
     try {
       // Merge: current deps stay, backup specs win on name conflicts; bundle
       // lists are unioned. Full exports merge to the backup view unchanged.
       const mergedManifest = mergeRestoreManifest(
-        JSON.parse(readFileSync(join(activeProfileDir, 'package.json'), 'utf8')) as Record<string, unknown>,
+        readBackupManifest(activeProfileDir),
         manifestBefore,
       )
-      writeFileSync(join(activeProfileDir, 'package.json'), `${JSON.stringify(mergedManifest, null, 2)}\n`)
+      writeBackupManifest(activeProfileDir, mergedManifest)
       const unportable = unportableDeps(mergedManifest.dependencies)
       const result = await runPlugin(config.profile, ['install'])
       if (result.exitCode === 0 && !result.timedOut && !result.cancelled) {
@@ -661,8 +662,7 @@ export function mountMarketRoutes(
       // activeProfileDir, NOT profileDir(config.profile): in DSH Desktop the
       // profile directory is host-authoritative (#72) and the ambient
       // derivation would edit the WRONG profile's manifest.
-      const manifestFile = join(activeProfileDir, 'package.json')
-      const manifest = JSON.parse(readFileSync(manifestFile, 'utf8')) as {
+      const manifest = readBackupManifest(activeProfileDir) as {
         dependencies?: Record<string, string>
         dsh?: { profile?: { bundles?: string[] } }
       }
@@ -673,7 +673,7 @@ export function mountMarketRoutes(
       if (Array.isArray(manifest.dsh?.profile?.bundles)) {
         manifest.dsh.profile.bundles = desiredBundles.filter(bundle => !dependencyNames.has(bundle))
       }
-      writeFileSync(manifestFile, `${JSON.stringify(manifest, null, 2)}\n`)
+      writeBackupManifest(activeProfileDir, manifest)
       const errors: { name: string; error: string }[] = []
       let installed = 0
       for (const [name, spec] of dependencies) {
@@ -684,12 +684,12 @@ export function mountMarketRoutes(
             && existsSync(join(activeProfileDir, 'node_modules', name, 'package.json'))) {
             installed += 1
             if (desiredBundles.includes(name)) {
-              const current = JSON.parse(readFileSync(manifestFile, 'utf8')) as typeof manifest
+              const current = readBackupManifest(activeProfileDir) as typeof manifest
               current.dsh ??= {}
               current.dsh.profile ??= {}
               current.dsh.profile.bundles ??= []
               if (!current.dsh.profile.bundles.includes(name)) current.dsh.profile.bundles.push(name)
-              writeFileSync(manifestFile, `${JSON.stringify(current, null, 2)}\n`)
+              writeBackupManifest(activeProfileDir, current)
             }
             continue
           }
@@ -697,15 +697,26 @@ export function mountMarketRoutes(
         } catch (error) {
           errors.push({ name, error: error instanceof Error ? error.message : String(error) })
         }
-        const current = JSON.parse(readFileSync(manifestFile, 'utf8')) as typeof manifest
+        const current = readBackupManifest(activeProfileDir) as typeof manifest
         if (current.dependencies !== undefined) delete current.dependencies[name]
-        writeFileSync(manifestFile, `${JSON.stringify(current, null, 2)}\n`)
+        writeBackupManifest(activeProfileDir, current)
       }
-      if (installed === 0 && dependencies.length > 0) {
-        restored.rollback()
+      const rolledBack = installed === 0 && dependencies.length > 0
+      if (rolledBack) restored.rollback()
+      const settled = readBackupManifest(activeProfileDir) as typeof manifest
+      const enabled = settled.dsh?.profile?.bundles
+      if (!rolledBack && Array.isArray(enabled)) {
+        // Adding packages may append their bundles; retain the requested layer order.
+        const selected = new Set(enabled)
+        const requested = new Set(desiredBundles)
+        const ordered = [...desiredBundles.filter(name => selected.has(name)), ...enabled.filter(name => !requested.has(name))]
+        if (ordered.length !== enabled.length || ordered.some((name, index) => name !== enabled[index])) {
+          settled.dsh!.profile!.bundles = ordered
+          writeBackupManifest(activeProfileDir, settled)
+        }
       }
       invalidateUpdates()
-      return { files: restored.files, errors, unportable: unportableDeps(manifest.dependencies) }
+      return { files: rolledBack ? 0 : restored.files, errors, unportable: unportableDeps(settled.dependencies) }
     } catch (error) {
       restored.rollback()
       throw error

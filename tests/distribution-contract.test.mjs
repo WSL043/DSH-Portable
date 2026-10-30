@@ -20,6 +20,7 @@ test('runtime dependency boundary includes only reviewed host components and the
   ])
   assert.deepEqual(runtime.dependencies, {
     '@deepseek-ai/dsh': upstream.dsh.version,
+    '@deepseek-ai/dsh-atomic-write': upstream.dsh.version,
     '@deepseek-ai/dsh-brand': upstream.dsh.version,
     '@deepseek-ai/dsh-session': upstream.dsh.version,
     '@deepseek-ai/dsh-settings': upstream.dsh.version,
@@ -87,6 +88,7 @@ test('committed npm lock resolves the exact reviewed DSH artifact', async () => 
   const rootPackage = lockfile.packages['']
   assert.deepEqual(rootPackage.dependencies, {
     '@deepseek-ai/dsh': upstream.dsh.version,
+    '@deepseek-ai/dsh-atomic-write': upstream.dsh.version,
     '@deepseek-ai/dsh-brand': upstream.dsh.version,
     '@deepseek-ai/dsh-session': upstream.dsh.version,
     '@deepseek-ai/dsh-settings': upstream.dsh.version,

@@ -470,15 +470,15 @@ namespace DshPortable
                 RememberUpdateAvailability(engineScope, "current");
                 HideDesktopOperation();
                 string completionMessage = targetName + L(" 更新已完成。", " update is complete.");
-                string[] disabledPlugins = JsonUpdateWarningPlugins(updated.Item2);
-                if (disabledPlugins.Length > 0)
+                string[] incompatiblePlugins = JsonUpdateWarningPlugins(updated.Item2);
+                if (incompatiblePlugins.Length > 0)
                 {
-                    string pluginList = String.Join("、", disabledPlugins);
+                    string pluginList = String.Join("、", incompatiblePlugins);
                     completionMessage += Environment.NewLine + String.Format(CultureInfo.CurrentCulture,
                         L(
-                            "{0} 个插件与新版本不兼容，已被自动停用：{1}。请到插件页更新它们。",
-                            "{0} plugins are incompatible with the new version and were automatically disabled: {1}. Update them on the Plugins page."),
-                        disabledPlugins.Length, pluginList);
+                            "{0} 个插件报告与新版本不兼容：{1}。已保留原有启用选择，请到插件页检查兼容性。",
+                            "{0} plugins report incompatibility with the new version: {1}. Your enablement choices were retained; review compatibility on the Plugins page."),
+                        incompatiblePlugins.Length, pluginList);
                 }
                 MessageBox.Show(this,
                     completionMessage,

@@ -71,7 +71,8 @@ namespace DshPortable
                 await WaitForWebViewDataFolderReleaseAsync(attempt * 2000);
             }
 
-            webView.CoreWebView2.Settings.AreDefaultContextMenusEnabled = false;
+            // Disabling default menus also removes text editing and selection commands.
+            webView.CoreWebView2.Settings.AreDefaultContextMenusEnabled = true;
             webView.CoreWebView2.Settings.IsStatusBarEnabled = false;
             webView.CoreWebView2.Settings.AreDevToolsEnabled = false;
             // WebView input belongs to another process and does not reach the
