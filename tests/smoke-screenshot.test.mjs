@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict'
-import { mkdir, mkdtemp, readFile, readdir, rm, symlink, writeFile } from 'node:fs/promises'
+import { mkdir, mkdtemp, readFile, readdir, realpath, rm, symlink, writeFile } from 'node:fs/promises'
 import os from 'node:os'
 import path from 'node:path'
 import test from 'node:test'
@@ -8,7 +8,9 @@ import { screenshotTarget, writeSmokeScreenshot } from '../scripts/lib/smoke-scr
 async function fixture(t) {
   const root = await mkdtemp(path.join(os.tmpdir(), 'dsh-screenshot-'))
   t.after(() => rm(root, { recursive: true, force: true }))
-  return root
+  // macOS exposes its temporary directory through /var -> /private/var.
+  // The normal-write fixture must use its actual directory; link rejection is tested separately.
+  return realpath(root)
 }
 
 test('screenshot file names reject traversal, absolute paths, streams and device names', async t => {
