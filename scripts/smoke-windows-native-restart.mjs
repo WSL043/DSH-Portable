@@ -14,6 +14,17 @@ if (!process.argv[2] || process.platform !== 'win32') {
   throw new Error('usage: node smoke-windows-native-restart.mjs <DSH-Portable root> (Windows only)')
 }
 
+const acceptanceEnv = {
+  ...process.env,
+  DSH_PORTABLE_ROOT: root,
+  DSH_PORTABLE_STATE_ROOT: root,
+  DSH_PORTABLE_BASE_STATE_ROOT: root,
+  DSH_PORTABLE_ENVIRONMENT: 'default',
+  DSH_HOME: path.join(root, 'data', 'dsh-home'),
+  DSH_PORTABLE_RUNTIME_CACHE: path.join(root, 'acceptance-runtime-cache'),
+  DSH_PORTABLE_WEBVIEW_CACHE: path.join(root, 'acceptance-webview-cache'),
+}
+
 const executable = path.join(root, 'DeepSeek-Herness.exe')
 const portableNode = path.join(root, 'runtime', 'node', 'node.exe')
 const runtimeEntry = path.join(root, 'launcher', 'runtime-entry.mjs')
@@ -105,6 +116,7 @@ async function waitForValue(client, expression, predicate, label, timeoutMs = 60
 async function stopProduct() {
   await execFileAsync(portableNode, [runtimeEntry, 'portable-cli.mjs', 'stop', '--no-browser', '--json'], {
     cwd: root,
+    env: acceptanceEnv,
     windowsHide: true,
     timeout: 120000,
   }).catch(() => {})
@@ -112,7 +124,7 @@ async function stopProduct() {
   await execFileAsync('powershell.exe', ['-NoProfile', '-NonInteractive', '-Command', script], {
     windowsHide: true,
     timeout: 30000,
-    env: { ...process.env, DSH_PORTABLE_SMOKE_EXECUTABLE: executable },
+    env: { ...acceptanceEnv, DSH_PORTABLE_SMOKE_EXECUTABLE: executable },
   }).catch(() => {})
 }
 
@@ -125,7 +137,7 @@ try {
   launcher = spawn(executable, [], {
     cwd: root,
     env: {
-      ...process.env,
+      ...acceptanceEnv,
       DSH_PORTABLE_SKIP_UPDATE_CHECK: '1',
       DSH_PORTABLE_TEST_AUTOMATION: '1',
       DSH_PORTABLE_TEST_HIDDEN: '1',
@@ -153,7 +165,7 @@ try {
   }).then(r => r.status)`)
   assert.equal(errorCapture, 200, 'packaged market must accept authenticated render diagnostics')
   const supportPath = path.join(root, 'data', 'native-restart-support.json')
-  await execFileAsync(portableNode, [runtimeEntry, 'portable-cli.mjs', 'support-report', '--output', supportPath, '--json'], { windowsHide: true, timeout: 60000 })
+  await execFileAsync(portableNode, [runtimeEntry, 'portable-cli.mjs', 'support-report', '--output', supportPath, '--json'], { env: acceptanceEnv, windowsHide: true, timeout: 60000 })
   const support = JSON.parse(await readFile(supportPath, 'utf8'))
   assert.match(support.logs['dsh.stdout.log'], /portable-render-smoke/)
   assert.doesNotMatch(JSON.stringify(support), /fixture-secret-value/)
