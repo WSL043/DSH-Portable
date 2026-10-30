@@ -30,6 +30,7 @@ const desktopBridgePackage = '@wsl043/dsh-portable-desktop-bridge'
 const settingsPackage = '@deepseek-ai/dsh-settings'
 assert.deepEqual(root?.dependencies, {
   [upstream.dsh.package]: upstream.dsh.version,
+  '@deepseek-ai/dsh-atomic-write': upstream.dsh.version,
   '@deepseek-ai/dsh-brand': upstream.dsh.version,
   '@deepseek-ai/dsh-session': upstream.dsh.version,
   [settingsPackage]: upstream.dsh.version,
@@ -46,6 +47,10 @@ assert.equal(installed?.version, upstream.dsh.version, 'pinned DSH version')
 assert.equal(installed?.integrity, upstream.dsh.integrity, 'pinned DSH integrity')
 assert.equal(installed?.license, 'MIT', 'DSH npm license')
 assert.equal(lockfile.packages?.[`node_modules/${settingsPackage}`]?.version, upstream.dsh.version, 'plugin market settings runtime')
+const atomicWriter = lockfile.packages?.['node_modules/@deepseek-ai/dsh-atomic-write']
+assert.equal(atomicWriter?.version, upstream.dsh.version, 'Portable storage uses the selected core atomic writer')
+assert.equal(atomicWriter?.license, 'MIT', 'atomic writer npm license')
+assert.match(atomicWriter?.integrity ?? '', /^sha512-[A-Za-z0-9+/]+={0,2}$/, 'atomic writer artifact integrity')
 const packageManager = lockfile.packages?.[`node_modules/${upstream.pnpm.package}`]
 assert.equal(packageManager?.version, upstream.pnpm.version, 'pinned pnpm version')
 assert.equal(packageManager?.integrity, upstream.pnpm.integrity, 'pinned pnpm integrity')
