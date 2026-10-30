@@ -320,21 +320,30 @@ try {
     const closeDialog = click(['Close', '关闭', 'Cancel', '取消'], '[role="dialog"]')
     await until(closeDialog, Boolean, 'close settings before official plugin management')
     await until(click(['Plugins', '插件']), Boolean, 'official Plugins')
-    await until('Boolean(document.querySelector(\'[data-plugin-package="dsh-chat-manager"]\'))', Boolean, 'official Installed list')
+    const components = JSON.parse(await readFile(path.join(root, 'licenses/COMPONENTS.json'), 'utf8'))
+    assert.ok(Array.isArray(components.defaultPlugins), 'explicit community-default metadata')
     assert.equal(await pageValue(() => Boolean(document.querySelector('[role="tab"][id$="-dsh-portable-plugin-advanced"]'))), false, 'no Advanced tab')
-    await until(expression(() => {
-      const card = document.querySelector('[data-plugin-package="dsh-chat-manager"]')
-      const button = card && [...card.querySelectorAll('button')].find(item => item.getAttribute('role') !== 'switch')
-      button?.click(); return Boolean(button)
-    }), Boolean, 'official installed plugin details')
-    await until(expression(() => [...document.querySelectorAll('[data-plugin-panel] button')].some(item =>
-      /^(?:Uninstall|卸载)(?:\s+.+)?$/.test((item.getAttribute('aria-label') || item.textContent || '').trim())
-      && !item.disabled && item.getBoundingClientRect().width > 0)), Boolean, 'official plugin management controls remain available')
-    await until(expression(() => {
-      const button = document.querySelector('[data-plugin-panel] button[aria-label="Back to plugins"],[data-plugin-panel] button[aria-label="返回插件"],[data-plugin-panel] button[aria-label="返回插件列表"]')
-      if (!button || button.disabled || button.getBoundingClientRect().width === 0) return false
-      button.click(); return true
-    }), Boolean, 'return to official Installed')
+    if (components.defaultPlugins.length > 0) {
+      await until('Boolean(document.querySelector(\'[data-plugin-package="dsh-chat-manager"]\'))', Boolean, 'official Installed list')
+      await until(expression(() => {
+        const card = document.querySelector('[data-plugin-package="dsh-chat-manager"]')
+        const button = card && [...card.querySelectorAll('button')].find(item => item.getAttribute('role') !== 'switch')
+        button?.click(); return Boolean(button)
+      }), Boolean, 'official installed plugin details')
+      await until(expression(() => [...document.querySelectorAll('[data-plugin-panel] button')].some(item =>
+        /^(?:Uninstall|卸载)(?:\s+.+)?$/.test((item.getAttribute('aria-label') || item.textContent || '').trim())
+        && !item.disabled && item.getBoundingClientRect().width > 0)), Boolean, 'official plugin management controls remain available')
+      await until(expression(() => {
+        const button = document.querySelector('[data-plugin-panel] button[aria-label="Back to plugins"],[data-plugin-panel] button[aria-label="返回插件"],[data-plugin-panel] button[aria-label="返回插件列表"]')
+        if (!button || button.disabled || button.getBoundingClientRect().width === 0) return false
+        button.click(); return true
+      }), Boolean, 'return to official Installed')
+    } else {
+      await until(expression(() => Boolean(document.querySelector('[data-plugin-panel]'))
+        && [...document.querySelectorAll('button')].some(item => /^(?:Add plugin|添加插件)$/.test(item.textContent.trim()))
+        && !/Reading plugins…|正在读取插件…|Could not read all plugins|无法读取全部插件/.test(document.body.innerText)), Boolean, 'official empty Installed list loaded')
+      assert.equal(await pageValue(() => document.querySelectorAll('[data-plugin-package="dsh-chat-manager"],[data-plugin-package="dsh-image-viewer"]').length), 0, 'community plugins are not installed by default')
+    }
 
     // This is a disposable package root, never a connection to a developer service.
     // Opening the maintenance overlay and cancelling restore must be read-only.

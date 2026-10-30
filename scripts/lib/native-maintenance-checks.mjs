@@ -156,7 +156,11 @@ export async function verifyMaintenance({ root, evaluate, until, click, send, ou
   if (verifyPluginCache) {
     const profile = path.join(root, 'data/dsh-home/profiles/web')
     const protectedFiles = ['package.json', 'pnpm-lock.yaml', 'node_modules/.modules.yaml']
-    const before = await Promise.all(protectedFiles.map(async name => digest(await readFile(path.join(profile, name)))))
+    const snapshot = () => Promise.all(protectedFiles.map(async name => {
+      try { return digest(await readFile(path.join(profile, name))) }
+      catch (error) { if (error.code !== 'ENOENT') throw error; return null }
+    }))
+    const before = await snapshot()
     await evaluate(`(() => {
       const original = window.fetch; window.__portableStoreResult = null;
       window.fetch = async (...args) => {
@@ -172,10 +176,11 @@ export async function verifyMaintenance({ root, evaluate, until, click, send, ou
     const response = await until('window.__portableStoreResult', Boolean, 'dependency cleanup response')
     assert.equal(response.status, 200, JSON.stringify(response))
     assert.equal(response.body.complete, true)
-    assert.ok(response.body.references > 0)
-    assert.deepEqual(await Promise.all(protectedFiles.map(async name => digest(await readFile(path.join(profile, name))))), before)
+    assert.ok(Number.isInteger(response.body.references) && response.body.references >= 0)
+    if (before[protectedFiles.indexOf('pnpm-lock.yaml')] !== null) assert.ok(response.body.references > 0)
+    assert.deepEqual(await snapshot(), before)
     await until(`document.body.innerText.includes('离线重建检查') || document.body.innerText.includes('offline rebuild checks')`, Boolean, 'dependency completion feedback')
-    await writeFile(path.join(output, 'dependency-cleanup.json'), JSON.stringify({ passed: true, ...response, unchanged: protectedFiles }))
+    await writeFile(path.join(output, 'dependency-cleanup.json'), JSON.stringify({ passed: true, ...response, scope: response.body.references > 0 ? 'retained-reference-offline-rebuild' : 'no-dependency-references-safe-noop', unchanged: protectedFiles }))
     await writeFile(path.join(output, 'dependency-cleanup.png'), Buffer.from((await send('Page.captureScreenshot', { format: 'png', fromSurface: true })).data, 'base64'))
   }
   await scan()

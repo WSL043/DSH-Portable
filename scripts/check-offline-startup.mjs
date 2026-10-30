@@ -1,6 +1,7 @@
 // Backend-only acceptance. Network scope is the accompanying Node TCP fixture,
 // not the operating system, native processes, or local-model inference.
 import { ensureRuntimeCapsule } from '../launcher/runtime-capsule.mjs';
+import { defaultsForProduct } from '../launcher/default-plugins.mjs';
 import { spawn } from 'node:child_process';
 import { mkdir, readFile, writeFile } from 'node:fs/promises';
 import path from 'node:path';
@@ -48,7 +49,11 @@ try {
   // The protected root may require the browser cookie exchange, even though
   // Portable has already verified backend readiness. Do not claim UI acceptance.
   if (![200,401].includes(response.status)) throw Error(`Local HTTP readiness failed: ${response.status}`);
-  if(started.defaultPlugins?.status !== 'seeded') throw Error('Default plugins did not seed successfully.');
+  const defaults = defaultsForProduct({ root });
+  const seeded = defaults.length > 0
+    ? started.defaultPlugins?.status === 'seeded'
+    : started.defaultPlugins?.status === 'skipped' && started.defaultPlugins.reason === 'no-compatible-defaults';
+  if (!seeded) throw Error('Default plugin startup state does not match the packaged component list.');
   const blocked = (await readFile(env.DSH_OFFLINE_EVIDENCE, 'utf8')).trim().split('\n').map(line => JSON.parse(line));
   const unexpected = blocked.filter(event => event.pid !== process.pid || event.blockedHost !== '192.0.2.1');
   if (unexpected.length) throw Error(`Startup attempted ${unexpected.length} external connections. See blocked-connections.jsonl.`);

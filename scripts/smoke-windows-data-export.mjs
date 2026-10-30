@@ -37,7 +37,7 @@ async function readProductDefaultPlugins() {
   const componentsFile = path.join(root, 'licenses', 'COMPONENTS.json')
   const productComponents = JSON.parse(await readFile(componentsFile, 'utf8'))
   const defaultPlugins = productComponents.defaultPlugins
-  assert.ok(Array.isArray(defaultPlugins) && defaultPlugins.length > 0, 'finished product has no default plugin metadata')
+  assert.ok(Array.isArray(defaultPlugins), 'finished product has no explicit default plugin metadata')
   assert.equal(new Set(defaultPlugins.map(plugin => plugin?.package)).size, defaultPlugins.length, 'default plugin metadata contains duplicate packages')
   for (const plugin of defaultPlugins) {
     assert.match(String(plugin?.package || ''), /^(?:@[^/]+\/)?[^/]+$/, 'default plugin metadata has an invalid package name')
