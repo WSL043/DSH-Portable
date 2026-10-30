@@ -1156,10 +1156,10 @@ test('macOS qualification reuses one runner per architecture without omitting pr
 
 test('main CI pins reviewed stable and preview source independently of mutable lock data', async () => {
   const workflow = await read('.github/workflows/ci.yml')
-  const stable = '504a01a9578abc2c6f1fb896b1dc322c9fe24f66'
+  const stable = 'b830ec950faba0a46dda564be3e2d854afed94f1'
   const preview = 'f3803c96974ad4a94195fb97e5c637e9c2a3afe3'
   const pnpm = '8e1e4c0aaece387dfda16377b2ba31f7a1a2602c'
-  assert.equal(workflow.split(stable).length - 1, 2, 'both immutable guard and default-branch checkout pin RC4')
+  assert.equal(workflow.split(stable).length - 1, 2, 'both immutable guard and default-branch checkout pin RC5')
   assert.equal(workflow.split(preview).length - 1, 2, 'preview pin remains independent')
   assert.doesNotMatch(workflow, /1f81c047fc48fa190a683e469daa699857e9afe8/)
   assert.ok(workflow.includes("github.ref == 'refs/heads/main' && (steps.preview.outputs.lockFile == 'upstream.preview.lock.json' && '" + preview + "' || '" + stable + "') || steps.preview.outputs.commit"))

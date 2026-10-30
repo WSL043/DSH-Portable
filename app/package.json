@@ -12,7 +12,8 @@
     "@wsl043/dsh-portable-desktop-bridge": "file:../desktop-bridge",
     "@wsl043/dsh-portable-plugin-market": "file:vendor/dsh-portable-plugin-market",
     "pnpm": "11.11.0",
-    "semver": "7.8.5"
+    "semver": "7.8.5",
+    "@deepseek-ai/dsh-atomic-write": "0.2.1-rc.5"
   },
   "overrides": {
     "@deepseek-ai/libreoffice-kit@0.0.1": {
