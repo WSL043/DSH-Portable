@@ -2,7 +2,7 @@ import assert from 'node:assert/strict'
 import { spawn, execFile } from 'node:child_process'
 import { isDeepStrictEqual, promisify } from 'node:util'
 import { createServer } from 'node:net'
-import { readFile, readdir, realpath, rm, stat, writeFile } from 'node:fs/promises'
+import { readFile, realpath, rm, writeFile } from 'node:fs/promises'
 import { createHash } from 'node:crypto'
 import { tmpdir } from 'node:os'
 import path from 'node:path'
@@ -45,20 +45,20 @@ export async function prepareMarketEvidenceOutput(value) {
   return output
 }
 
-export function assertMaintenanceReadOnly(requests, backupDownload) {
-  assert.deepEqual(requests.filter(item => !['GET', 'HEAD', 'OPTIONS'].includes(item.method)), [], 'opening diagnostics and cancelling restore must not mutate the profile')
-  assert.ok(requests.some(item => item.path === '/dsh-market/check' && item.method === 'GET' && item.status === 200), 'the real diagnostic GET must complete')
-  assert.ok(backupDownload?.controlClicked === true && backupDownload.originMatched === true
-    && backupDownload.path === '/dsh-market/backup' && typeof backupDownload.guid === 'string' && backupDownload.guid.length > 0
-    && backupDownload.completed === true && Number.isSafeInteger(backupDownload.bytes)
-    && backupDownload.bytes > 0 && backupDownload.bytes <= 2 * 1024 * 1024
-    && backupDownload.receivedBytes === backupDownload.bytes
-    && (backupDownload.totalBytes === 0 || backupDownload.totalBytes === backupDownload.bytes)
-    && /^[a-f0-9]{64}$/.test(backupDownload.sha256)
-    && backupDownload.format === 'dsh-profile-backup' && backupDownload.version === 0.2
-    && backupDownload.packageJson === true && backupDownload.manifestMatches === true,
-    'the backup control must complete a valid owned profile backup matching the actual manifest')
-  return { diagnosticGet: true, backupDownloaded: true, restorePosts: 0, mutationRequests: 0 }
+/** Legacy JSON API compatibility plus the default select/cancel flow; no export UI is implied. */
+export function assertMaintenanceReadOnly(requests, legacyExportApiCompatibility) {
+  assert.deepEqual(requests.filter(item => !['GET', 'HEAD', 'OPTIONS'].includes(item.method)), [], 'opening legacy recovery and cancelling import must not mutate the profile')
+  assert.deepEqual(requests.filter(item => item.path === '/dsh-market/check'), [], 'legacy recovery must not query a second compatibility assessment')
+  const fixture = legacyExportApiCompatibility
+  assert.ok(fixture?.originMatched === true && fixture.path === '/dsh-market/backup' && fixture.httpStatus === 200
+    && Number.isSafeInteger(fixture.bytes) && fixture.bytes > 0 && fixture.bytes <= 2 * 1024 * 1024
+    && /^[a-f0-9]{64}$/.test(fixture.sha256)
+    && fixture.format === 'dsh-profile-backup' && fixture.version === 0.2
+    && fixture.packageJson === true && fixture.manifestMatches === true,
+    'the retained legacy export API must supply a valid owned profile fixture matching the actual manifest')
+  assert.ok(requests.some(item => item.path === '/dsh-market/backup' && item.method === 'GET' && item.status === 200), 'the actual legacy export API GET must complete')
+  // Existing official toolbar version refreshes can read installed inventory while this overlay is open.
+  return { legacyExportApiCompatibility: true, diagnosticGets: 0, installedReads: requests.filter(item => item.path === '/dsh-market/installed' && item.method === 'GET').length, restorePosts: 0, mutationRequests: 0 }
 }
 
 if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
@@ -66,8 +66,6 @@ const root = process.argv[2] && path.resolve(process.argv[2])
 assert.ok(process.argv.includes('--disposable'), 'use an isolated test installation with --disposable')
 assert.ok(root && process.argv[3])
 const output = await prepareMarketEvidenceOutput(process.argv[3])
-// The native WebView download handler uses this existing directory before opening any Save dialog.
-const downloadDirectory = path.dirname(await safeDataTarget(output, `maintenance-downloads-${Date.now()}-${process.pid}/receipt.json`))
 const exec = promisify(execFile)
 // Never inherit the developer's selected profile/data environment into a
 // disposable test that can now explicitly reclaim managed logs and caches.
@@ -75,7 +73,6 @@ const env = { ...process.env, DSH_PORTABLE_ROOT: root, DSH_PORTABLE_STATE_ROOT: 
   DSH_PORTABLE_BASE_STATE_ROOT: root, DSH_PORTABLE_ENVIRONMENT: 'default',
   DSH_PORTABLE_RUNTIME_CACHE: path.join(root, 'acceptance-runtime-cache'),
   DSH_PORTABLE_WEBVIEW_CACHE: path.join(root, 'acceptance-webview-cache'),
-  DSH_PORTABLE_DOWNLOAD_DIRECTORY: downloadDirectory,
   DSH_PORTABLE_TEST_HIDDEN: '1', DSH_PORTABLE_TEST_AUTOMATION: '1', DSH_PORTABLE_SKIP_UPDATE_CHECK: '1',
   // Exercise the product's actual official Installed and Discover surfaces.
   DSH_PORTABLE_OFFICIAL_MARKET: '1' }
@@ -85,6 +82,8 @@ const sourceOverlay = process.argv.includes('--source-overlay')
 if (sourceOverlay) env.DSH_PORTABLE_STARTUP_SOURCE_CACHE = '0'
 const soak = process.argv.includes('--soak')
 const maintenanceOnly = process.argv.includes('--maintenance-only')
+const verifyLegacyRestore = process.argv.includes('--verify-legacy-restore')
+assert.ok(!verifyLegacyRestore || !maintenanceOnly, '--verify-legacy-restore requires the plugin navigation checks')
 const verifyWebView = process.argv.includes('--verify-webview-cache')
 if (verifyWebView) env.DSH_PORTABLE_TEST_WEBVIEW2_MISSING = '1'
 // Live npm availability is a separate integration check, not a layout prerequisite.
@@ -108,8 +107,7 @@ const delay = ms => new Promise(resolve => setTimeout(resolve, ms))
 let socket, evaluate, passed = false
 const exceptions = []
 const networkRequests = [], requestById = new Map()
-const downloadEvents = [], downloadGuids = new Map()
-let downloadEventsTruncated = false, downloadMode = 'native-owned-directory', backupGesture = null, backupDownload = null
+let legacyExportApiCompatibility = null, confirmedLegacyRestore = null
 let publicMarket = false
 try {
   let page
@@ -126,10 +124,6 @@ try {
   const ownedOrigin = new URL(page.url).origin
   const attachment = headers => Object.entries(headers || {}).some(([name, value]) =>
     name.toLowerCase() === 'content-disposition' && /^attachment\b/i.test(String(value)))
-  const recordDownload = event => {
-    if (downloadEvents.length < 64) downloadEvents.push(event)
-    else downloadEventsTruncated = true
-  }
   socket.onmessage = ({ data }) => {
     const message = JSON.parse(data), params = message.params
     if (message.method === 'Network.requestWillBeSent') {
@@ -147,16 +141,9 @@ try {
       const item = requestById.get(params.requestId)
       if (item) { item.loadingError = /^net::ERR_[A-Z0-9_]+$/.test(params.errorText) ? params.errorText : 'other'; item.canceled = params.canceled === true }
     }
-    if (['Browser.downloadWillBegin', 'Page.downloadWillBegin'].includes(message.method)) {
-      const url = new URL(params.url)
-      if (url.origin === ownedOrigin && url.pathname === '/dsh-market/backup') {
-        if (!downloadGuids.has(params.guid)) downloadGuids.set(params.guid, { guid: params.guid, path: url.pathname, name: path.basename(params.suggestedFilename) })
-        recordDownload({ event: message.method, guid: params.guid, path: url.pathname, name: path.basename(params.suggestedFilename) })
-      }
-    }
-    if (['Browser.downloadProgress', 'Page.downloadProgress'].includes(message.method) && downloadGuids.has(params.guid)) {
-      Object.assign(downloadGuids.get(params.guid), { state: params.state, receivedBytes: params.receivedBytes, totalBytes: params.totalBytes })
-      recordDownload({ event: message.method, guid: params.guid, state: params.state, receivedBytes: params.receivedBytes, totalBytes: params.totalBytes })
+    if (message.method === 'Network.loadingFinished') {
+      const item = requestById.get(params.requestId)
+      if (item) item.finished = true
     }
     if (message.method === 'Runtime.exceptionThrown') exceptions.push(params?.exceptionDetails?.exception?.description || params?.exceptionDetails?.text)
     const entry = pending.get(message.id)
@@ -345,10 +332,10 @@ try {
       assert.equal(await pageValue(() => document.querySelectorAll('[data-plugin-package="dsh-chat-manager"],[data-plugin-package="dsh-image-viewer"]').length), 0, 'community plugins are not installed by default')
     }
 
-    // This is a disposable package root, never a connection to a developer service.
-    // Opening the maintenance overlay and cancelling restore must be read-only.
+    // Legacy JSON import is compatibility only. Daily backups remain on the existing Data settings page.
+    // This disposable Native flow uses the retained, authenticated export API only to create its fixture.
     const markerRelative = 'workspace/maintenance-cancel-' + Date.now() + '.txt'
-    await writeFile(await safeDataTarget(root, markerRelative), 'owned maintenance cancellation sentinel\n', { flag: 'wx' })
+    await writeFile(await safeDataTarget(root, markerRelative), 'owned legacy recovery cancellation sentinel\n', { flag: 'wx' })
     const protectedNames = ['data/dsh-home/profiles/web/package.json', 'data/dsh-home/profiles/web/cordis.patch.yml',
       'data/dsh-home/profiles/web/pnpm-lock.yaml', 'data/dsh-home/settings.yaml', markerRelative]
     const snapshot = async () => {
@@ -362,98 +349,115 @@ try {
     const beforeMaintenance = await snapshot()
     const requestStart = networkRequests.length
     const maintenanceSelector = '[role="dialog"]'
-    const maintenanceReady = () => [...document.querySelectorAll('[role="dialog"]')].some(dialog => {
+    const legacyTitles = ['Legacy plugin configuration recovery', '旧版插件配置恢复', 'Legacy plugin recovery', '旧插件配置恢复']
+    const maintenanceReady = titles => [...document.querySelectorAll('[role="dialog"]')].some(dialog => {
       const label = dialog.getAttribute('aria-label') || document.getElementById(dialog.getAttribute('aria-labelledby'))?.textContent
-      return ['Diagnostics and recovery', '诊断与恢复'].includes((label || '').trim())
+      return titles.includes((label || '').trim())
     })
-    await until(expression(() => {
-      const button = [...document.querySelectorAll('button[aria-haspopup="menu"]')].find(item =>
-        ['More', '更多'].includes(item.getAttribute('aria-label')) && !item.closest('[role="dialog"]') && item.getBoundingClientRect().width > 0)
-      button?.click(); return Boolean(button)
-    }), Boolean, 'official sidebar More menu')
-    await until(click(['Diagnostics and recovery', '诊断与恢复'], '[role="menu"]'), Boolean, 'public diagnostics and recovery action')
-    await until(expression(maintenanceReady), Boolean, 'persistent maintenance overlay after menu dismissal')
-    assert.equal(await pageValue(() => Boolean(document.querySelector('[role="menu"]'))), false, 'More menu closes before maintenance is used')
+    const openLegacyRecovery = async () => {
+      await until(expression(() => {
+        const button = [...document.querySelectorAll('button[aria-haspopup="menu"]')].find(item =>
+          ['More', '更多'].includes(item.getAttribute('aria-label')) && !item.closest('[role="dialog"]') && item.getBoundingClientRect().width > 0)
+        button?.click(); return Boolean(button)
+      }), Boolean, 'official sidebar More menu')
+      await until(click(legacyTitles, '[role="menu"]'), Boolean, 'legacy plugin configuration recovery action')
+      await until(expression(maintenanceReady, legacyTitles), Boolean, 'legacy recovery overlay survives menu dismissal')
+      assert.equal(await pageValue(() => Boolean(document.querySelector('[role="menu"]'))), false, 'More menu closes before legacy recovery is used')
+      assert.equal(await pageValue(() => [...document.querySelectorAll('[role="dialog"] button')].some(item =>
+        ['Export backup', '导出备份', 'Diagnostic details', '诊断详情'].includes(item.textContent.trim()))), false,
+        'legacy recovery must not expose a second backup exporter or plugin diagnostic surface')
+    }
     const waitNetwork = async (predicate, label) => {
       const deadline = Date.now() + 30000
       while (Date.now() < deadline) { if (predicate(networkRequests.slice(requestStart))) return; await delay(100) }
       throw new Error(label)
     }
-    await waitNetwork(requests => requests.some(item => item.path === '/dsh-market/check' && item.method === 'GET' && item.status === 200), 'real read-only diagnostic GET did not finish')
-    await writeFile(path.join(output, 'maintenance-read-only.png'), Buffer.from((await send('Page.captureScreenshot', { format: 'png', fromSurface: true })).data, 'base64'))
-    const backupInput = await safeDataTarget(output, 'maintenance-cancel-input.json')
-    try { await send('Browser.setDownloadBehavior', { behavior: 'allow', downloadPath: downloadDirectory, eventsEnabled: true }); downloadMode += '+Browser' }
-    catch { /* The existing native download-directory handler remains responsible for saving. */ }
-    let backupMetadata, downloadMetadata = []
+    await openLegacyRecovery()
+    await writeFile(path.join(output, 'legacy-recovery.png'), Buffer.from((await send('Page.captureScreenshot', { format: 'png', fromSurface: true })).data, 'base64'))
+    const backupInput = await safeDataTarget(output, 'legacy-configuration-input.json')
     try {
-      const beforeBackup = networkRequests.length, previousDownloads = new Set(downloadGuids.keys())
-      const backupControl = await until(expression(() => {
-        const link = [...document.querySelectorAll('[role="dialog"] a[download][href="/dsh-market/backup"]')]
-          .find(item => ['Export configuration backup', '导出配置备份'].includes(item.textContent.trim()))
-        if (!link) return null
-        link.scrollIntoView({ block: 'center' })
-        const rect = link.getBoundingClientRect(), x = rect.x + rect.width / 2, y = rect.y + rect.height / 2
-        return { x, y, visible: rect.width > 0 && rect.height > 0, hit: link.contains(document.elementFromPoint(x, y)) }
-      }), value => value?.visible && value.hit, 'actual configuration backup download control')
-      backupGesture = { method: 'Input.dispatchMouseEvent', visible: backupControl.visible, hit: backupControl.hit }
-      for (const type of ['mousePressed', 'mouseReleased']) {
-        await send('Input.dispatchMouseEvent', { type, x: backupControl.x, y: backupControl.y, button: 'left', clickCount: 1 })
-      }
-      backupGesture.activation = await evaluate('({ isActive: navigator.userActivation?.isActive === true, hasBeenActive: navigator.userActivation?.hasBeenActive === true })')
-      const deadline = Date.now() + 30000
-      let completed
-      while (Date.now() < deadline) {
-        const current = [...downloadGuids.values()].filter(item => !previousDownloads.has(item.guid))
-        assert.ok(!current.some(item => item.state === 'canceled'), 'the owned backup download was canceled')
-        completed = current.find(item => item.state === 'completed' && item.receivedBytes > 0)
-        if (completed) break
-        await delay(100)
-      }
-      assert.ok(completed, 'the actual backup control must produce an owned completed download with positive bytes')
-      const file = await verifiedPackageFile(downloadDirectory, completed.name)
-      const info = await stat(file)
-      assert.ok(info.size > 0 && info.size <= 2 * 1024 * 1024, 'disposable backup must remain a small valid restore input')
-      const backupBytes = await readFile(file)
-      let backup
-      try { backup = JSON.parse(backupBytes.toString('utf8')) } catch { throw new Error('downloaded backup is not valid JSON') }
+      const response = await pageValue(async () => {
+        const response = await fetch('/dsh-market/backup', { cache: 'no-store' })
+        return { status: response.status, originMatched: new URL(response.url).origin === location.origin, text: await response.text() }
+      })
+      const backupBytes = Buffer.from(response.text, 'utf8')
+      assert.ok(backupBytes.length > 0 && backupBytes.length <= 2 * 1024 * 1024, 'legacy API fixture must remain within its format limit')
+      const backup = JSON.parse(response.text)
       const manifest = JSON.parse(await readFile(await verifiedPackageFile(root, 'data/dsh-home/profiles/web/package.json'), 'utf8'))
       const packageFile = Array.isArray(backup?.files) ? backup.files.find(item => item?.path === 'package.json') : undefined
-      const response = networkRequests.slice(beforeBackup).find(item => item.path === '/dsh-market/backup' && item.method === 'GET' && item.status != null)
-      backupDownload = { controlClicked: true, originMatched: true, path: completed.path, guid: completed.guid,
-        completed: true, file: completed.name, bytes: backupBytes.length, receivedBytes: completed.receivedBytes, totalBytes: completed.totalBytes,
-        sha256: createHash('sha256').update(backupBytes).digest('hex'), format: backup?.format, version: backup?.version,
+      legacyExportApiCompatibility = { originMatched: response.originMatched, path: '/dsh-market/backup', httpStatus: response.status,
+        bytes: backupBytes.length, sha256: createHash('sha256').update(backupBytes).digest('hex'), format: backup?.format, version: backup?.version,
         packageJson: packageFile?.json !== null && typeof packageFile?.json === 'object' && !Array.isArray(packageFile.json),
-        manifestMatches: isDeepStrictEqual(packageFile?.json, manifest), httpStatus: response?.status ?? null, httpAttachment: response?.attachment ?? null }
-      assertMaintenanceReadOnly(networkRequests.slice(requestStart), backupDownload)
-      downloadMetadata.push({ name: completed.name, bytes: backupDownload.bytes, sha256: backupDownload.sha256 })
-      backupMetadata = { bytes: backupDownload.bytes, sha256: backupDownload.sha256 }
-      // Select exactly the validated bytes saved by the real control, never a substitute fetch response.
+        manifestMatches: isDeepStrictEqual(packageFile?.json, manifest) }
+      await waitNetwork(requests => requests.some(item => item.path === '/dsh-market/backup' && item.status === 200), 'retained legacy backup API GET did not finish')
+      assertMaintenanceReadOnly(networkRequests.slice(requestStart), legacyExportApiCompatibility)
+      assert.deepEqual(await snapshot(), beforeMaintenance, 'opening legacy recovery and reading its fixture must preserve the original protected bytes')
+      // Protect every configuration file represented by the legacy fixture, in addition to the original guards.
+      for (const file of backup.files) {
+        const name = 'data/dsh-home/profiles/web/' + file.path
+        if (!protectedNames.includes(name)) protectedNames.push(name)
+      }
+      Object.assign(beforeMaintenance, await snapshot())
       await writeFile(backupInput, backupBytes, { flag: 'wx' })
-      const input = await send('Runtime.evaluate', { expression: expression(() => {
-        const labels = [...document.querySelectorAll('[role="dialog"] label')]
-        const label = labels.find(item => ['Choose backup file', '选择备份文件'].includes(item.querySelector('span')?.textContent.trim()))
-        return label?.querySelector('input[type="file"]')
-      }), returnByValue: false })
-      assert.ok(input.result?.objectId, 'the labelled file input must belong to the current maintenance dialog')
-      await send('DOM.setFileInputFiles', { objectId: input.result.objectId, files: [backupInput] })
-      await until(click(['Restore backup…', '恢复备份…'], maintenanceSelector), Boolean, 'prepare explicit restore confirmation')
-      await until(expression(() => Boolean(document.querySelector('[role="group"][aria-label="Confirm configuration restore"],[role="group"][aria-label="确认恢复配置"]'))), Boolean, 'restore requires an explicit confirmation group')
-      assert.equal(networkRequests.slice(requestStart).filter(item => item.path === '/dsh-market/restore' && item.method === 'POST').length, 0, 'selecting a backup must not restore it')
-      await until(click(['Cancel', '取消'], '[role="group"][aria-label="Confirm configuration restore"],[role="group"][aria-label="确认恢复配置"]'), Boolean, 'cancel restore through its confirmation controls')
-      await until(expression(() => !document.querySelector('[role="group"][aria-label="Confirm configuration restore"],[role="group"][aria-label="确认恢复配置"]')), Boolean, 'confirmation closes without applying the backup')
-      assert.deepEqual(await snapshot(), beforeMaintenance, 'diagnostics and cancelling restore must preserve the actual profile, theme and marker bytes')
-      await until(click(['Close', '关闭'], maintenanceSelector), Boolean, 'close maintenance and return to the official Plugins page')
-      await until(expression(() => Boolean(document.querySelector('[data-plugin-panel]')) && !document.querySelector('[role="dialog"]')), Boolean, 'official management survives maintenance close')
+      const confirmationSelector = '[role="group"][aria-label="Confirm legacy configuration import"],[role="group"][aria-label="确认导入旧配置"]'
+      const selectLegacyFixture = async () => {
+        const input = await send('Runtime.evaluate', { expression: expression(() => {
+          return [...document.querySelectorAll('[role="dialog"] input[type="file"]')]
+            .find(item => ['Choose legacy configuration…', '选择旧配置文件…'].includes(item.getAttribute('aria-label')))
+        }), returnByValue: false })
+        assert.ok(input.result?.objectId, 'the labelled legacy file input must belong to the current recovery dialog')
+        await send('DOM.setFileInputFiles', { objectId: input.result.objectId, files: [backupInput] })
+        await until(expression(selector => Boolean(document.querySelector(selector)), confirmationSelector), Boolean, 'legacy import requires explicit confirmation')
+      }
+      await selectLegacyFixture()
+      assert.equal(networkRequests.slice(requestStart).filter(item => item.path === '/dsh-market/restore' && item.method === 'POST').length, 0, 'choosing a legacy file must not import it')
+      await until(click(['Cancel', '取消'], confirmationSelector), Boolean, 'cancel legacy import through its confirmation controls')
+      await until(expression(selector => !document.querySelector(selector), confirmationSelector), Boolean, 'cancellation closes the confirmation')
+      assert.equal(await pageValue(() => document.querySelector('[role="dialog"] input[type="file"]')?.files?.length), 0, 'cancel clears the selected legacy file')
+      assert.deepEqual(await snapshot(), beforeMaintenance, 'choosing and cancelling legacy import preserves profile, settings and workspace bytes')
+      await until(click(['Close', '关闭'], maintenanceSelector), Boolean, 'close legacy recovery and return to official Plugins')
+      await until(expression(() => Boolean(document.querySelector('[data-plugin-panel]')) && !document.querySelector('[role="dialog"]')), Boolean, 'official management survives recovery close')
       await delay(250)
-      assert.deepEqual(await snapshot(), beforeMaintenance, 'closing maintenance must not write profile or theme state')
-      const audit = assertMaintenanceReadOnly(networkRequests.slice(requestStart), backupDownload)
+      assert.deepEqual(await snapshot(), beforeMaintenance, 'closing legacy recovery must not write profile or settings state')
+      const audit = assertMaintenanceReadOnly(networkRequests.slice(requestStart), legacyExportApiCompatibility)
       await writeFile(path.join(output, 'maintenance-navigation.json'), JSON.stringify({ passed: true, ...audit, profileBytesUnchanged: true,
-        backupMetadata, backupDownload, downloadMode, downloads: downloadMetadata, actualRestoreNotRun: true, noAdvanced: true }, null, 2))
+        legacyExportApiCompatibility, actualRestoreNotRun: true, noAdvanced: true, scope: 'legacy JSON API fixture and real Native select/cancel only' }, null, 2))
+      if (verifyLegacyRestore) {
+        await openLegacyRecovery()
+        await selectLegacyFixture()
+        assertMaintenanceReadOnly(networkRequests.slice(requestStart), legacyExportApiCompatibility)
+        const beforeConfirm = networkRequests.length
+        await until(click(['Confirm import', '确认导入'], confirmationSelector), Boolean, 'confirm actual legacy import in disposable Native')
+        await waitNetwork(() => networkRequests.slice(beforeConfirm).some(item => item.path === '/dsh-market/restore' && item.method === 'POST' && item.finished), 'actual legacy restore response did not finish')
+        const restoreRequests = networkRequests.slice(beforeConfirm).filter(item => item.path === '/dsh-market/restore' && item.method === 'POST')
+        assert.equal(restoreRequests.length, 1, 'explicit confirmation issues exactly one restore POST')
+        const request = restoreRequests[0]
+        assert.equal(request.status, 200)
+        const requestId = [...requestById].find(([, item]) => item === request)?.[0]
+        assert.ok(requestId, 'the actual restore response must have an owned CDP request')
+        const responseBody = await send('Network.getResponseBody', { requestId })
+        const result = JSON.parse(responseBody.base64Encoded ? Buffer.from(responseBody.body, 'base64').toString('utf8') : responseBody.body)
+        assert.equal(result.ok, true)
+        assert.ok(Number.isSafeInteger(result.files) && result.files > 0)
+        assert.deepEqual(result.errors ?? [], [])
+        assert.deepEqual(result.unportable ?? [], [], 'disposable restore fixture must not depend on machine-local plugin sources')
+        for (const file of backup.files) {
+          const actual = await readFile(await verifiedPackageFile(root, 'data/dsh-home/profiles/web/' + file.path), 'utf8')
+          if (file.path === 'package.json') assert.ok(isDeepStrictEqual(JSON.parse(actual), file.json), 'confirmed import restores the backed-up profile manifest')
+          else assert.ok(actual === file.lines.join('\n'), 'confirmed import restores the actual legacy configuration bytes')
+        }
+        const afterRestore = await snapshot()
+        for (const name of ['data/dsh-home/settings.yaml', markerRelative]) assert.equal(afterRestore[name], beforeMaintenance[name], 'legacy import preserves unrelated settings and workspace')
+        assert.deepEqual(networkRequests.slice(beforeConfirm).filter(item => !['GET', 'HEAD', 'OPTIONS'].includes(item.method) && item !== request), [], 'confirmed legacy import must not trigger other mutation requests')
+        confirmedLegacyRestore = { passed: true, status: request.status, files: result.files, errors: 0,
+          profileMatchesBackup: true, workspaceAndSettingsUnchanged: true, restorePosts: 1, scope: 'disposable real Native confirmed legacy import' }
+        await writeFile(path.join(output, 'confirmed-legacy-restore.json'), JSON.stringify(confirmedLegacyRestore, null, 2))
+        await until(expression(selector => !document.querySelector(selector), confirmationSelector), Boolean, 'successful legacy import closes confirmation')
+        await until(click(['Close', '关闭'], maintenanceSelector), Boolean, 'close after actual legacy import')
+        await until(expression(() => Boolean(document.querySelector('[data-plugin-panel]')) && !document.querySelector('[role="dialog"]')), Boolean, 'official Plugins remains available after actual legacy import')
+      }
     } finally {
       await rm(backupInput, { force: true })
-      for (const name of await readdir(downloadDirectory)) {
-        if (name.endsWith('.json')) await rm(await verifiedPackageFile(downloadDirectory, name))
-      }
     }
 
     await openMarket()
@@ -577,8 +581,8 @@ try {
 } finally {
   try {
     const requests = networkRequests.filter(item => item.path === '/dsh-market/backup')
-    await writeFile(path.join(output, 'backup-transport.json'), JSON.stringify({ downloadMode, directory: path.basename(downloadDirectory), backupGesture, backupDownload,
-      requests: requests.slice(0, 32), requestsTruncated: requests.length > 32, downloadEvents, downloadEventsTruncated }, null, 2))
+    await writeFile(path.join(output, 'legacy-api-transport.json'), JSON.stringify({ legacyExportApiCompatibility, confirmedLegacyRestore,
+      requests: requests.slice(0, 32), requestsTruncated: requests.length > 32 }, null, 2))
     if (evaluate) {
       await writeFile(path.join(output, 'dialog-events.json'), JSON.stringify(await evaluate('window.__portableAcceptanceDialogs').catch(String) ?? [], null, 2))
       await writeFile(path.join(output, 'page.txt'), await evaluate('document.body.innerText').catch(String))
@@ -604,7 +608,7 @@ try {
           assert.equal(samples.at(-1).processes.length, 0, 'isolated Portable processes remain after exit')
         }
       } catch (error) { passed = false; throw error }
-      finally { await writeFile(path.join(output, 'result.json'), JSON.stringify({ passed, exceptions, sourceOverlay, maintenanceOnly, publicMarket, verifiedLiveTotal: verifyTotal && !maintenanceOnly && passed }, null, 2)) }
+      finally { await writeFile(path.join(output, 'result.json'), JSON.stringify({ passed, exceptions, sourceOverlay, maintenanceOnly, publicMarket, verifyLegacyRestore, confirmedLegacyRestore, verifiedLiveTotal: verifyTotal && !maintenanceOnly && passed }, null, 2)) }
     }
   }
 }

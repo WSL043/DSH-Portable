@@ -23,12 +23,11 @@ test('the shipped server bundle serves the official-market route', async () => {
   assert.ok(!client.includes('/dsh-market/official-market'), 'current manager availability must not be inferred from official market activation')
 })
 
-test('official management has no Advanced tab and diagnostics use the public More overlay', async () => {
-  const [entry, action, maintenance, diagnostics, locales] = await Promise.all([
+test('official management has no Advanced tab and More only imports legacy plugin configuration', async () => {
+  const [entry, action, maintenance, locales] = await Promise.all([
     readFile(vendor('src/client/index.ts'), 'utf8'),
     readFile(vendor('src/client/MarketAction.tsx'), 'utf8'),
     readFile(vendor('src/client/Maintenance.tsx'), 'utf8'),
-    readFile(vendor('src/client/Diagnostics.tsx'), 'utf8'),
     readFile(vendor('src/client/locales.ts'), 'utf8'),
   ])
   assert.doesNotMatch(entry, /dsh-portable-plugin-advanced|navAdvanced/)
@@ -40,17 +39,16 @@ test('official management has no Advanced tab and diagnostics use the public Mor
   assert.match(entry, /inject\('shell\.overlay',[\s\S]+inject\('sidebar\.panellist\.actions'/)
   assert.match(entry, /id: 'dsh-portable-plugin-maintenance-overlay'/)
   assert.match(maintenance, /<MenuItemButton onSelect=\{\(\) => \{ props\.onDismiss\(\); props\.controller\.show\(\) \}\}>/)
-  assert.match(maintenance, /<Diagnostics key=\{revision\} t=\{t\} readOnly \/>/)
-  assert.match(diagnostics, /fetch\('\/dsh-market\/check', \{ cache: 'no-store' \}\)/)
-  assert.match(diagnostics, /if \(readOnly \|\| orderBusy\) return/)
-  assert.match(diagnostics, /const startAgentFix = \(\) => \{\s+if \(readOnly\) return/)
-  assert.match(maintenance, /href="\/dsh-market\/backup" download/)
+  assert.doesNotMatch(maintenance, /Diagnostics|ActivationSnapshot|DisclosureRow|StateDot|\/dsh-market\/(?:backup|installed|check)/)
   assert.match(maintenance, /if \(!file \|\| !confirming \|\| running\.current\) return/)
   assert.match(maintenance, /file\.size > 2 \* 1024 \* 1024/)
   assert.match(maintenance, /JSON\.parse\(await file\.text\(\)\)[\s\S]+fetch\('\/dsh-market\/restore', \{\s+method: 'POST'/)
-  assert.match(maintenance, /onClick=\{\(\) => setConfirming\(false\)\}/)
-  assert.match(locales, /maintenanceTitle:\s*(['"])诊断与恢复\1/)
-  assert.match(locales, /maintenanceTitle:\s*(['"])Diagnostics and recovery\1/)
+  assert.match(maintenance, /if \(running\.current\) return\s+setConfirming\(false\)\s+setFile\(null\)\s+if \(fileInput\.current\) fileInput\.current\.value = ''/)
+  assert.match(locales, /maintenanceTitle:\s*(['"])旧插件配置恢复\1/)
+  assert.match(locales, /maintenanceTitle:\s*(['"])Legacy plugin recovery\1/)
+  assert.match(locales, /新备份请使用 设置 → 桌面与数据 → 迁移与备份/)
+  assert.match(locales, /For new backups, use Settings → Desktop & data → Migration & backup/)
+
 })
 
 test('every chunk the shipped server bundle imports exists, and no stale chunk is left behind', async () => {
@@ -126,20 +124,18 @@ test('official-owned fallback skips Portable updates while the legacy installed 
   assert.ok(memberRow.includes('props.onOfficialManage!(member)'))
 })
 
-test('maintenance cancellation evidence requires real read-only responses and rejects every mutation', () => {
-  const reads = [{ method: 'GET', path: '/dsh-market/check', status: 200 },
-    { method: 'GET', path: '/dsh-market/installed', status: 200 }]
-  const backupDownload = { controlClicked: true, originMatched: true, path: '/dsh-market/backup', guid: 'owned-download', completed: true,
-    bytes: 100, receivedBytes: 100, totalBytes: 100, sha256: 'a'.repeat(64), format: 'dsh-profile-backup', version: 0.2,
-    packageJson: true, manifestMatches: true, httpStatus: null, httpAttachment: null }
-  assert.deepEqual(assertMaintenanceReadOnly(reads, backupDownload), { diagnosticGet: true, backupDownloaded: true, restorePosts: 0, mutationRequests: 0 })
-  for (const path of ['/dsh-market/restore', '/dsh-market/groups', '/dsh-market/use-skin', '/dsh-market/install', '/dsh-market/uninstall', '/dsh-market/bundle-order']) {
-    assert.throws(() => assertMaintenanceReadOnly([...reads, { method: 'POST', path }], backupDownload), /must not mutate the profile/)
-  }
-  assert.throws(() => assertMaintenanceReadOnly(reads.slice(1), backupDownload), /real diagnostic GET/)
-  for (const invalid of [undefined, { ...backupDownload, completed: false }, { ...backupDownload, format: 'other' },
-    { ...backupDownload, packageJson: false }, { ...backupDownload, manifestMatches: false }, { ...backupDownload, originMatched: false },
-    { ...backupDownload, bytes: 0 }, { ...backupDownload, receivedBytes: 99 }]) {
-    assert.throws(() => assertMaintenanceReadOnly(reads, invalid), /complete a valid owned profile backup/)
-  }
+test('legacy recovery cancellation requires a valid API fixture and rejects writes or compatibility reassessment', () => {
+  const reads = [{method:'GET',path:'/dsh-market/backup',status:200},
+    {method:'GET',path:'/dsh-market/installed',status:200}]
+  const fixture = {originMatched:true,path:'/dsh-market/backup',httpStatus:200,bytes:100,sha256:'a'.repeat(64),
+    format:'dsh-profile-backup',version:0.2,packageJson:true,manifestMatches:true}
+  assert.deepEqual(assertMaintenanceReadOnly(reads,fixture),{legacyExportApiCompatibility:true,diagnosticGets:0,installedReads:1,restorePosts:0,mutationRequests:0})
+  for(const path of ['/dsh-market/restore','/dsh-market/groups','/dsh-market/use-skin','/dsh-market/install','/dsh-market/uninstall','/dsh-market/bundle-order'])
+    assert.throws(()=>assertMaintenanceReadOnly([...reads,{method:'POST',path}],fixture),/must not mutate the profile/)
+  assert.throws(()=>assertMaintenanceReadOnly([...reads,{method:'GET',path:'/dsh-market/check',status:200}],fixture),/second compatibility assessment/)
+  assert.throws(()=>assertMaintenanceReadOnly(reads.slice(1),fixture),/actual legacy export API GET/)
+  for(const invalid of [undefined,{...fixture,httpStatus:500},{...fixture,format:'other'},{...fixture,version:0.1},
+    {...fixture,packageJson:false},{...fixture,manifestMatches:false},{...fixture,originMatched:false},
+    {...fixture,bytes:0},{...fixture,bytes:2*1024*1024+1},{...fixture,sha256:'invalid'}])
+    assert.throws(()=>assertMaintenanceReadOnly(reads,invalid),/valid owned profile fixture/)
 })

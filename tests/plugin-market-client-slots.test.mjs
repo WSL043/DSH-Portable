@@ -215,22 +215,32 @@ test('RC3 public slots retain Portable updates until the actual native renderer 
   assert.deepEqual(surfaces(), [], 'queued public declarations cannot revive an unloaded plugin')
 })
 
-test('shipped client keeps official management primary and diagnostics in the public More menu', async () => {
+test('shipped client keeps official management primary and legacy configuration import in the public More menu', async () => {
   const { readFile } = await import('node:fs/promises')
   const { createRequire } = await import('node:module')
   const { runInNewContext } = await import('node:vm')
   const require = createRequire(new URL('../app/package.json', import.meta.url))
   const React = require('react')
-  let hookEffects = [], seededStates = []
+  let hookEffects = [], stateFrame = null
   const hookReact = { ...React,
-    useState: initial => [seededStates.length ? seededStates.shift() : typeof initial === 'function' ? initial() : initial, () => {}],
+    useState: initial => {
+      const readInitial = () => typeof initial === 'function' ? initial() : initial
+      if (!stateFrame) return [readInitial(), () => {}]
+      const frame = stateFrame, index = frame.index++
+      if (index === frame.values.length) frame.values.push(readInitial())
+      return [frame.values[index], next => {
+        frame.values[index] = typeof next === 'function' ? next(frame.values[index]) : next
+      }]
+    },
     useMemo: read => read(), useRef: initial => ({ current: initial }),
     useSyncExternalStore: (_subscribe, get) => get(), useCallback: callback => callback,
     useEffect: callback => hookEffects.push(callback),
   }
   const externals = {
     react: hookReact, 'react/jsx-runtime': require('react/jsx-runtime'), 'react-dom': require('react-dom'),
-    '@deepseek-ai/dsh-client-ui-primitives': Object.fromEntries(['Menu', 'DisclosureRow', 'Tooltip', 'Toast', 'MenuItemButton', 'Modal'].map(name => [name, () => null])),
+    '@deepseek-ai/dsh-client-ui-primitives': Object.fromEntries(['Menu', 'DisclosureRow', 'Tooltip', 'Toast', 'MenuItemButton', 'Modal', 'Button', 'StateDot',
+      'IconCordisPluginOutlineRegular', 'IconChevronDownOutlineRegular', 'IconChevronRightOutlineRegular',
+      'IconLoadingOutlineRegular', 'IconRefreshOutlineRegular'].map(name => [name, () => null])),
   }
   const bundle = await readFile(new URL('../app/vendor/dsh-portable-plugin-market/client/client.js', import.meta.url), 'utf8')
   for (const state of ['active', 'inactive', 'failed']) {
@@ -263,7 +273,7 @@ test('shipped client keeps official management primary and diagnostics in the pu
     const managerEntries = () => slots.activeEntries().filter(entry => !['shell.overlay', 'sidebar.panellist.actions'].includes(entry.meta.name))
     const names = () => managerEntries().map(entry => entry.meta.name).sort()
     const maintenance = slots.activeEntries().filter(entry => entry.meta.name === 'sidebar.panellist.actions')
-    assert.equal(maintenance.length, state !== 'failed' ? 1 : 0, 'More diagnostics remain available with an inactive market, but not without the public More slot')
+    assert.equal(maintenance.length, state !== 'failed' ? 1 : 0, 'Legacy import remains available with an inactive market, but not without the public More slot')
     if (maintenance.length) {
       const more = maintenance[0]
       assert.equal(more.meta.id, 'dsh-portable-plugin-maintenance')
@@ -283,29 +293,30 @@ test('shipped client keeps official management primary and diagnostics in the pu
       if (state === 'active') {
         const nodes = children => React.Children.toArray(children).flatMap(child =>
           React.isValidElement(child) ? [child, ...nodes(child.props.children)] : [child])
-        const maintenanceDialog = dialog.type(dialog.props)
-        const diagnostics = nodes(maintenanceDialog).find(child => child?.props?.readOnly === true && typeof child.props.t === 'function')
-        assert.ok(diagnostics, 'the actual maintenance dialog renders read-only diagnostics')
-        for (const warnings of [[], ['real contract warning']]) {
-          seededStates = [{ profile: 'synthetic', scannedAt: '2026-01-01T00:00:00Z', bundles: [], duplicates: [], multiVersion: [], orphans: [], orderConflicts: [],
-            summary: { ok: true, errors: [], warnings },
-            peerMismatches: Array.from({ length: 15 }, (_, i) => ({ name: 'peer-' + i, plugin: 'test', range: '*', resolved: '1.0.0', satisfied: i % 2 ? null : true })),
-            overrides: Array.from({ length: 29 }, (_, i) => ({ id: 'normal-' + i, layer: 'test', overriddenLayers: ['base'] })),
-          }]
-          const rendered = nodes(diagnostics.type(diagnostics.props))
-          assert.equal(seededStates.length, 0, 'the fixture is the actual Diagnostics report state')
-          assert.equal(rendered.includes('checkIssues'), warnings.length > 0, 'informational peers/normal overrides are not issues, while a real summary warning stays visible')
-          assert.equal(rendered.includes('diagOkAll'), warnings.length === 0)
-          const summary = rendered.find(child => child?.type === 'span' && React.Children.toArray(child.props.children).includes(warnings.length ? 'checkIssues' : 'diagOkAll'))
-          assert.ok(nodes(summary).some(child => child?.props?.state === (warnings.length ? 'warning' : 'done')), 'summary label and severity remain consistent')
-          const dependencies = rendered.find(child => child?.type === 'span' && child.props.title === 'checkPeerMismatches')
-          assert.equal(React.Children.toArray(dependencies.props.children).at(-1), 0, '15 satisfied/unknown peers do not inflate Dependencies')
-          assert.ok(nodes(dependencies).some(child => child?.props?.state === 'done'), 'zero dependencies stay in the normal state')
-          const overrides = rendered.find(child => child?.props?.title === 'checkOverrides')
-          assert.equal(overrides.props.count, 29)
-          assert.equal(overrides.props.problem, false, 'normal layered overrides remain informational')
-          assert.ok(rendered.some(child => typeof child?.props?.title === 'string' && child.props.title.startsWith('checkPeerInfo') && child.props.open === false), 'informational peer detail remains available and collapsed')
+        const maintenanceStates = []
+        const renderMaintenance = () => {
+          stateFrame = { values: maintenanceStates, index: 0 }
+          try { return nodes(dialog.type(dialog.props)) }
+          finally { stateFrame = null }
         }
+        const initial = renderMaintenance()
+        assert.equal(initial.some(child => child?.props?.readOnly === true || child?.type === externals['@deepseek-ai/dsh-client-ui-primitives'].DisclosureRow), false, 'More does not expose generic diagnostics or compatibility categories')
+        assert.equal(initial.some(child => child?.type === 'a' || child?.props?.children === 'maintenanceExport'), false, 'More does not export a new configuration backup')
+        const initialButtons = initial.filter(child => child?.type === externals['@deepseek-ai/dsh-client-ui-primitives'].Button)
+        assert.equal(initialButtons.length, 1, 'legacy import starts with one official file chooser button')
+        assert.equal(initialButtons[0].props.children, 'maintenanceChoose')
+        const fileInput = initial.find(child => child?.type === 'input' && child.props.type === 'file')
+        assert.equal(fileInput.props.hidden, true)
+        fileInput.props.onChange({ currentTarget: { files: [{ name: 'trusted-backup.json' }] } })
+        const confirmation = renderMaintenance().find(child => child?.props?.role === 'group' && child.props['aria-label'] === 'maintenanceConfirmTitle')
+        assert.ok(confirmation, 'selecting a file shows explicit confirmation before any restore')
+        assert.ok(nodes(confirmation).some(child => child?.type === externals['@deepseek-ai/dsh-client-ui-primitives'].Button && child.props.children === 'maintenanceConfirm'))
+        const cancel = nodes(confirmation).find(child => child?.type === externals['@deepseek-ai/dsh-client-ui-primitives'].Button && child.props.children === 'cancel')
+        assert.ok(cancel)
+        cancel.props.onClick()
+        assert.equal(renderMaintenance().some(child => child?.props?.role === 'group' && child.props['aria-label'] === 'maintenanceConfirmTitle'), false, 'cancelling clears the pending confirmation')
+        assert.deepEqual(requests, [], 'choosing and cancelling legacy configuration never sends a restore request')
+        assert.deepEqual(updateChecks, [], 'opening legacy import does not assess plugin loading state')
       }
       dialog.props.onClose()
       assert.equal(overlay.type(overlay.props), null)
