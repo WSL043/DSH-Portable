@@ -267,6 +267,9 @@ export async function verifyOfficialCoreUi(page, evidence, theme) {
     await dismissOnboarding(page)
     const input = page.locator('[contenteditable="true"][role="textbox"]').first()
     const draft = `Official core ${theme} qualification draft`
+    await clickAfterOnboarding(page, input)
+    assert.equal(await input.evaluate(element => element === document.activeElement || element.contains(document.activeElement)), true, 'official composer receives focus after onboarding')
+    assert.equal(await visibleOnboarding(page), null, 'official onboarding is closed before entering a draft')
     await input.fill(draft)
     assert.equal(await input.isEditable(), true, 'official composer is editable without community plugins')
     assert.equal(await input.innerText(), draft, 'official composer retains user input')
