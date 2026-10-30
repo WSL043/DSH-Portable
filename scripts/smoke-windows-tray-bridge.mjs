@@ -1,11 +1,12 @@
 import assert from 'node:assert/strict'
 import { execFile, spawn } from 'node:child_process'
 import { existsSync } from 'node:fs'
-import { mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises'
+import { mkdtemp, rm, writeFile } from 'node:fs/promises'
 import { createServer } from 'node:net'
 import os from 'node:os'
 import path from 'node:path'
 import { promisify } from 'node:util'
+import { writeSmokeScreenshot } from './lib/smoke-screenshot.mjs'
 import { dismissOfficialOnboardingExpression } from './lib/official-onboarding.mjs'
 import { clickButton, builtInPluginCard, officialPowerShellDetailsReady } from './lib/native-smoke-interaction.mjs'
 
@@ -14,18 +15,18 @@ const root = path.resolve(process.argv[2] || '')
 if (!process.argv[2]) throw new Error('usage: node smoke-windows-tray-bridge.mjs <DSH-Portable root>')
 if (process.platform !== 'win32') throw new Error('the native tray bridge smoke is Windows-only')
 const targetLocale = process.env.DSH_SMOKE_LOCALE === 'en' ? 'en' : 'zh'
-const screenshotPath = process.env.DSH_SMOKE_SCREENSHOT ? path.resolve(process.env.DSH_SMOKE_SCREENSHOT) : ''
+const screenshotPath = process.env.DSH_SMOKE_SCREENSHOT ? process.env.DSH_SMOKE_SCREENSHOT : ''
 const generalScreenshotPath = process.env.DSH_SMOKE_GENERAL_SCREENSHOT
-  ? path.resolve(process.env.DSH_SMOKE_GENERAL_SCREENSHOT)
+  ? process.env.DSH_SMOKE_GENERAL_SCREENSHOT
   : ''
 const generalBottomScreenshotPath = process.env.DSH_SMOKE_GENERAL_BOTTOM_SCREENSHOT
-  ? path.resolve(process.env.DSH_SMOKE_GENERAL_BOTTOM_SCREENSHOT)
+  ? process.env.DSH_SMOKE_GENERAL_BOTTOM_SCREENSHOT
   : ''
 const installedScreenshotPath = process.env.DSH_SMOKE_INSTALLED_SCREENSHOT
-  ? path.resolve(process.env.DSH_SMOKE_INSTALLED_SCREENSHOT)
+  ? process.env.DSH_SMOKE_INSTALLED_SCREENSHOT
   : ''
 const diagnosticsScreenshotPath = process.env.DSH_SMOKE_DIAGNOSTICS_SCREENSHOT
-  ? path.resolve(process.env.DSH_SMOKE_DIAGNOSTICS_SCREENSHOT)
+  ? process.env.DSH_SMOKE_DIAGNOSTICS_SCREENSHOT
   : ''
 const retiredPluginOptions = ['DSH_SMOKE_PLUGIN_ACTIVATION', 'DSH_SMOKE_PLUGIN_UPDATE',
   'DSH_SMOKE_PLUGIN_REMOVE_AFTER', 'DSH_SMOKE_PLUGIN_ACTIVATION_SCREENSHOT'].filter(name => String(process.env[name] || '').trim())
@@ -469,8 +470,7 @@ try {
   }
   if (generalScreenshotPath) {
     const screenshot = await client.send('Page.captureScreenshot', { format: 'png', fromSurface: true })
-    await mkdir(path.dirname(generalScreenshotPath), { recursive: true })
-    await writeFile(generalScreenshotPath, Buffer.from(screenshot.data, 'base64'))
+    await writeSmokeScreenshot(generalScreenshotPath, Buffer.from(screenshot.data, 'base64'))
   }
   await waitForValue(client, clickButton(['Desktop & data', '桌面与数据', 'Portable']), value => value?.clicked, 'Portable settings navigation after updates')
   if (generalBottomScreenshotPath) {
@@ -484,8 +484,7 @@ try {
     })()`)
     await new Promise(resolve => setTimeout(resolve, 120))
     const screenshot = await client.send('Page.captureScreenshot', { format: 'png', fromSurface: true })
-    await mkdir(path.dirname(generalBottomScreenshotPath), { recursive: true })
-    await writeFile(generalBottomScreenshotPath, Buffer.from(screenshot.data, 'base64'))
+    await writeSmokeScreenshot(generalBottomScreenshotPath, Buffer.from(screenshot.data, 'base64'))
   }
 
   const closeOverlay = async label => {
@@ -559,8 +558,7 @@ try {
   assert.ok(picturedUi.cardShot)
   if (screenshotPath) {
     const screenshot = await client.send('Page.captureScreenshot', { format: 'png', fromSurface: true })
-    await mkdir(path.dirname(screenshotPath), { recursive: true })
-    await writeFile(screenshotPath, Buffer.from(screenshot.data, 'base64'))
+    await writeSmokeScreenshot(screenshotPath, Buffer.from(screenshot.data, 'base64'))
   }
   await waitForValue(client, `(() => {
     const card = [...document.querySelectorAll('[data-plugin-tab="discover"] [data-market-entry]')].find(item => item.getAttribute('data-market-entry') === ${JSON.stringify(picturedUi.name)})
@@ -597,8 +595,7 @@ try {
     await selectPluginTab(['Installed', '已安装'], 'official Installed tab')
     await waitForValue(client, 'document.querySelectorAll(\'[data-plugin-panel] [data-plugin-package]\').length', value => value > 0, 'official Installed screenshot inventory')
     const screenshot = await client.send('Page.captureScreenshot', { format: 'png', fromSurface: true })
-    await mkdir(path.dirname(installedScreenshotPath), { recursive: true })
-    await writeFile(installedScreenshotPath, Buffer.from(screenshot.data, 'base64'))
+    await writeSmokeScreenshot(installedScreenshotPath, Buffer.from(screenshot.data, 'base64'))
   }
   await openSettings('Settings before theme and diagnostic verification')
 
@@ -656,8 +653,7 @@ try {
     assert.deepEqual(marketRequests.slice(from).filter(item => !['GET', 'HEAD', 'OPTIONS'].includes(item.method)), [], 'public maintenance diagnostics must remain read-only')
     if (diagnosticsScreenshotPath && themeLabel === 'dark') {
       const screenshot = await client.send('Page.captureScreenshot', { format: 'png', fromSurface: true })
-      await mkdir(path.dirname(diagnosticsScreenshotPath), { recursive: true })
-      await writeFile(diagnosticsScreenshotPath, Buffer.from(screenshot.data, 'base64'))
+      await writeSmokeScreenshot(diagnosticsScreenshotPath, Buffer.from(screenshot.data, 'base64'))
     }
     await closeOverlay(themeLabel + ' close maintenance and return to the official shell')
   }

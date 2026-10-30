@@ -6,7 +6,7 @@
 
 import { existsSync, readdirSync, readFileSync, realpathSync, renameSync, statSync, writeFileSync } from 'node:fs'
 import { homedir } from 'node:os'
-import { dirname, isAbsolute, join, relative, resolve } from 'node:path'
+import { dirname, isAbsolute, join, relative, resolve, sep, win32 } from 'node:path'
 import { isDeepStrictEqual } from 'node:util'
 import { resolvePackageRelativePath, resolveBundlePatchPaths } from './package-path.ts'
 import { githubRemoteIdentities, githubRepoIdentities } from './sources.ts'
@@ -18,8 +18,16 @@ import { githubRemoteIdentities, githubRepoIdentities } from './sources.ts'
  */
 export function profileDir(profile: string, explicitDir?: string): string {
   if (explicitDir !== undefined) return explicitDir
+  if (!profile || profile === '.' || profile === '..' || /[\\/<>:"|?*\x00-\x1f]/.test(profile)
+    || /[. ]$/.test(profile) || isAbsolute(profile) || win32.isAbsolute(profile)) {
+    throw new Error('unsafe profile name')
+  }
   const home = process.env.DSH_HOME ?? join(homedir(), '.dsh')
-  return join(home, 'profiles', profile)
+  const base = resolve(home, 'profiles')
+  const directory = resolve(base, profile)
+  const suffix = relative(base, directory)
+  if (!suffix || isAbsolute(suffix) || suffix === '..' || suffix.startsWith(`..${sep}`)) throw new Error('unsafe profile name')
+  return directory
 }
 
 /**

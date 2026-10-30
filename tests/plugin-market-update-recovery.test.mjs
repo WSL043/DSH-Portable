@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict'
 import { once } from 'node:events'
-import { mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises'
+import { mkdir, mkdtemp, readFile, rename, rm, symlink, writeFile } from 'node:fs/promises'
 import { createServer } from 'node:http'
 import os from 'node:os'
 import path from 'node:path'
@@ -330,6 +330,30 @@ test('configuration recovery retains layer order on fallback and reports an all-
       assert.deepEqual(body.unportable, [{ name: 'fixture-plugin', spec: restoredSpec }])
     }
   })
+})
+
+test('restore fallback rejects a profile directory swapped to a link while pnpm runs', async t => {
+  const outside = await mkdtemp(path.join(os.tmpdir(), 'dsh-restore-outside-'))
+  t.after(() => rm(outside, { recursive: true, force: true }))
+  const externalManifest = JSON.stringify({ dependencies: { sentinel: 'untouched' } })
+  await writeFile(path.join(outside, 'package.json'), externalManifest)
+  const bed = await updateTestbed(t, {
+    async onInstall({ profile }) {
+      await rename(profile, profile + '-original')
+      t.after(() => rm(profile + '-original', { recursive: true, force: true }))
+      await symlink(outside, profile, process.platform === 'win32' ? 'junction' : 'dir')
+      return { ...ok(), exitCode: 1, stderr: 'fixture failure after redirect' }
+    },
+    onAdd: async () => { throw new Error('redirected profile must not start fallback installs') },
+  })
+  const backup = { format: 'dsh-profile-backup', version: 0.2, profile: 'web', files: [
+    { path: 'package.json', json: { dependencies: { 'fixture-plugin': '1.0.0' } } },
+  ] }
+  const { response, body } = await bed.restore(backup)
+  assert.equal(response.status, 400, JSON.stringify(body))
+  assert.match(body.error, /unsafe backup root/)
+  assert.equal(await readFile(path.join(outside, 'package.json'), 'utf8'), externalManifest)
+  assert.equal(bed.calls.some(args => args[0] === 'add'), false)
 })
 
 const ok = (stdout = '') => ({
