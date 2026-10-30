@@ -365,7 +365,12 @@ export async function verifyNativeDefaultPlugins(root, playwrightManifest) {
         try { browser = await chromium.connectOverCDP(`http://127.0.0.1:${port}`, { timeout: 2000 }) } catch { await delay(250) }
       }
       assert.ok(browser, 'native WebView2 remote debugging is available')
-      const page = browser.contexts()[0].pages()[0]
+      let page
+      while (!page && Date.now() < deadline) {
+        page = browser.contexts().flatMap(context => context.pages())[0]
+        if (!page) await delay(100)
+      }
+      assert.ok(page, 'native WebView2 page target is available before the connection deadline')
       page.setDefaultTimeout(20000)
       await page.waitForURL(/^http:\/\/127\.0\.0\.1:/, { timeout: 90000 })
       assert.equal(await page.evaluate(() => Boolean(window.chrome?.webview)), true, 'this is the native WebView, not a substitute browser')

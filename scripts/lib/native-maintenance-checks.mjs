@@ -3,7 +3,7 @@ import { access, mkdir, mkdtemp, readFile, readdir, rm, utimes, writeFile } from
 import path from 'node:path'
 import { createRequire } from 'node:module'
 import { createHash, randomBytes } from 'node:crypto'
-import { acquireRuntimeLease } from '../../launcher/runtime-capsule.mjs'
+import { acquireRuntimeLease, ensureRuntimeCapsule } from '../../launcher/runtime-capsule.mjs'
 import { cleanWebViewCaches } from '../../launcher/webview-cache.mjs'
 import { isEmptyStoreLock } from '../../launcher/store-reference-inventory.mjs'
 const digest = value => createHash('sha256').update(value).digest('hex')
@@ -180,7 +180,10 @@ export async function verifyMaintenance({ root, evaluate, until, click, send, ou
     assert.equal(response.body.complete, true)
     assert.ok(Number.isInteger(response.body.references) && response.body.references >= 0)
     const manifest = JSON.parse(await readFile(path.join(profile, 'package.json'), 'utf8'))
-    const parseYaml = createRequire(new URL('../../app/package.json', import.meta.url))('yaml').parse
+    const { runtimeRoot } = await ensureRuntimeCapsule(root, {
+      env: { ...process.env, DSH_PORTABLE_RUNTIME_CACHE: path.join(root, 'acceptance-runtime-cache') },
+    })
+    const parseYaml = createRequire(path.join(runtimeRoot, 'app/package.json'))('yaml').parse
     const lock = before[protectedFiles.indexOf('pnpm-lock.yaml')] === null ? null
       : parseYaml(await readFile(path.join(profile, 'pnpm-lock.yaml'), 'utf8'))
     if (['dependencies', 'devDependencies', 'optionalDependencies'].some(field => Object.keys(manifest[field] || {}).length)

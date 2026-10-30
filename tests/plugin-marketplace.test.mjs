@@ -233,7 +233,7 @@ test('the legacy fallback has one navigation layer and public maintenance adds n
   assert.doesNotMatch(section, /tab === 'backup'/)
 })
 
-test('diagnostic override labels remain readable in both DSH themes', async () => {
+test('legacy diagnostic styles remain readable and current recovery text is checked in both DSH themes', async () => {
   const [styles, browserSmoke] = await Promise.all([
     read('app/vendor/dsh-portable-plugin-market/src/client/Market.module.css'),
     read('scripts/smoke-windows-tray-bridge.mjs'),
@@ -244,9 +244,10 @@ test('diagnostic override labels remain readable in both DSH themes', async () =
   assert.match(overrideStyle, /color:\s*var\(--dsw-alias-label-primary/)
   assert.doesNotMatch(overrideStyle, /background:\s*var\(--dsw-alias-brand-primary/)
   assert.match(browserSmoke, /for\s*\(const theme of \[['"]light['"],\s*['"]dark['"]\]\)/)
-  assert.match(browserSmoke, /await\s+verifyDiagnosticContrast\(theme\)/)
+  assert.match(browserSmoke, /await\s+verifyLegacyRecoveryContrast\(theme\)/)
   assert.match(browserSmoke, /openMaintenance\(themeLabel\)/)
-  assert.match(browserSmoke, /public maintenance diagnostics must remain read-only/)
+  assert.match(browserSmoke, /opening legacy recovery must not write configuration/)
+  assert.match(browserSmoke, /legacy recovery must not query a second compatibility assessment/)
   assert.match(browserSmoke, /contrastRatio >= 4\.5/)
 })
 

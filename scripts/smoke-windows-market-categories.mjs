@@ -327,138 +327,13 @@ try {
       }), Boolean, 'return to official Installed')
     } else {
       await until(expression(() => Boolean(document.querySelector('[data-plugin-panel]'))
+        && [['Installed', '已安装'], ['Discover', '发现']].every(names => [...document.querySelectorAll('[role="tab"]')].some(item =>
+          names.includes(item.textContent.trim()) && item.getBoundingClientRect().width > 0))
         && [...document.querySelectorAll('button')].some(item => /^(?:Add plugin|添加插件)$/.test(item.textContent.trim()))
         && !/Reading plugins…|正在读取插件…|Could not read all plugins|无法读取全部插件/.test(document.body.innerText)), Boolean, 'official empty Installed list loaded')
       assert.equal(await pageValue(() => document.querySelectorAll('[data-plugin-package="dsh-chat-manager"],[data-plugin-package="dsh-image-viewer"]').length), 0, 'community plugins are not installed by default')
     }
 
-    // Legacy JSON import is compatibility only. Daily backups remain on the existing Data settings page.
-    // This disposable Native flow uses the retained, authenticated export API only to create its fixture.
-    const markerRelative = 'workspace/maintenance-cancel-' + Date.now() + '.txt'
-    await writeFile(await safeDataTarget(root, markerRelative), 'owned legacy recovery cancellation sentinel\n', { flag: 'wx' })
-    const protectedNames = ['data/dsh-home/profiles/web/package.json', 'data/dsh-home/profiles/web/cordis.patch.yml',
-      'data/dsh-home/profiles/web/pnpm-lock.yaml', 'data/dsh-home/settings.yaml', markerRelative]
-    const snapshot = async () => {
-      const result = {}
-      for (const name of protectedNames) {
-        try { result[name] = createHash('sha256').update(await readFile(await verifiedPackageFile(root, name))).digest('hex') }
-        catch (error) { if (error.code !== 'ENOENT') throw error; result[name] = null }
-      }
-      return result
-    }
-    const beforeMaintenance = await snapshot()
-    const requestStart = networkRequests.length
-    const maintenanceSelector = '[role="dialog"]'
-    const legacyTitles = ['Legacy plugin configuration recovery', '旧版插件配置恢复', 'Legacy plugin recovery', '旧插件配置恢复']
-    const maintenanceReady = titles => [...document.querySelectorAll('[role="dialog"]')].some(dialog => {
-      const label = dialog.getAttribute('aria-label') || document.getElementById(dialog.getAttribute('aria-labelledby'))?.textContent
-      return titles.includes((label || '').trim())
-    })
-    const openLegacyRecovery = async () => {
-      await until(expression(() => {
-        const button = [...document.querySelectorAll('button[aria-haspopup="menu"]')].find(item =>
-          ['More', '更多'].includes(item.getAttribute('aria-label')) && !item.closest('[role="dialog"]') && item.getBoundingClientRect().width > 0)
-        button?.click(); return Boolean(button)
-      }), Boolean, 'official sidebar More menu')
-      await until(click(legacyTitles, '[role="menu"]'), Boolean, 'legacy plugin configuration recovery action')
-      await until(expression(maintenanceReady, legacyTitles), Boolean, 'legacy recovery overlay survives menu dismissal')
-      assert.equal(await pageValue(() => Boolean(document.querySelector('[role="menu"]'))), false, 'More menu closes before legacy recovery is used')
-      assert.equal(await pageValue(() => [...document.querySelectorAll('[role="dialog"] button')].some(item =>
-        ['Export backup', '导出备份', 'Diagnostic details', '诊断详情'].includes(item.textContent.trim()))), false,
-        'legacy recovery must not expose a second backup exporter or plugin diagnostic surface')
-    }
-    const waitNetwork = async (predicate, label) => {
-      const deadline = Date.now() + 30000
-      while (Date.now() < deadline) { if (predicate(networkRequests.slice(requestStart))) return; await delay(100) }
-      throw new Error(label)
-    }
-    await openLegacyRecovery()
-    await writeFile(path.join(output, 'legacy-recovery.png'), Buffer.from((await send('Page.captureScreenshot', { format: 'png', fromSurface: true })).data, 'base64'))
-    const backupInput = await safeDataTarget(output, 'legacy-configuration-input.json')
-    try {
-      const response = await pageValue(async () => {
-        const response = await fetch('/dsh-market/backup', { cache: 'no-store' })
-        return { status: response.status, originMatched: new URL(response.url).origin === location.origin, text: await response.text() }
-      })
-      const backupBytes = Buffer.from(response.text, 'utf8')
-      assert.ok(backupBytes.length > 0 && backupBytes.length <= 2 * 1024 * 1024, 'legacy API fixture must remain within its format limit')
-      const backup = JSON.parse(response.text)
-      const manifest = JSON.parse(await readFile(await verifiedPackageFile(root, 'data/dsh-home/profiles/web/package.json'), 'utf8'))
-      const packageFile = Array.isArray(backup?.files) ? backup.files.find(item => item?.path === 'package.json') : undefined
-      legacyExportApiCompatibility = { originMatched: response.originMatched, path: '/dsh-market/backup', httpStatus: response.status,
-        bytes: backupBytes.length, sha256: createHash('sha256').update(backupBytes).digest('hex'), format: backup?.format, version: backup?.version,
-        packageJson: packageFile?.json !== null && typeof packageFile?.json === 'object' && !Array.isArray(packageFile.json),
-        manifestMatches: isDeepStrictEqual(packageFile?.json, manifest) }
-      await waitNetwork(requests => requests.some(item => item.path === '/dsh-market/backup' && item.status === 200), 'retained legacy backup API GET did not finish')
-      assertMaintenanceReadOnly(networkRequests.slice(requestStart), legacyExportApiCompatibility)
-      assert.deepEqual(await snapshot(), beforeMaintenance, 'opening legacy recovery and reading its fixture must preserve the original protected bytes')
-      // Protect every configuration file represented by the legacy fixture, in addition to the original guards.
-      for (const file of backup.files) {
-        const name = 'data/dsh-home/profiles/web/' + file.path
-        if (!protectedNames.includes(name)) protectedNames.push(name)
-      }
-      Object.assign(beforeMaintenance, await snapshot())
-      await writeFile(backupInput, backupBytes, { flag: 'wx' })
-      const confirmationSelector = '[role="group"][aria-label="Confirm legacy configuration import"],[role="group"][aria-label="确认导入旧配置"]'
-      const selectLegacyFixture = async () => {
-        const input = await send('Runtime.evaluate', { expression: expression(() => {
-          return [...document.querySelectorAll('[role="dialog"] input[type="file"]')]
-            .find(item => ['Choose legacy configuration…', '选择旧配置文件…'].includes(item.getAttribute('aria-label')))
-        }), returnByValue: false })
-        assert.ok(input.result?.objectId, 'the labelled legacy file input must belong to the current recovery dialog')
-        await send('DOM.setFileInputFiles', { objectId: input.result.objectId, files: [backupInput] })
-        await until(expression(selector => Boolean(document.querySelector(selector)), confirmationSelector), Boolean, 'legacy import requires explicit confirmation')
-      }
-      await selectLegacyFixture()
-      assert.equal(networkRequests.slice(requestStart).filter(item => item.path === '/dsh-market/restore' && item.method === 'POST').length, 0, 'choosing a legacy file must not import it')
-      await until(click(['Cancel', '取消'], confirmationSelector), Boolean, 'cancel legacy import through its confirmation controls')
-      await until(expression(selector => !document.querySelector(selector), confirmationSelector), Boolean, 'cancellation closes the confirmation')
-      assert.equal(await pageValue(() => document.querySelector('[role="dialog"] input[type="file"]')?.files?.length), 0, 'cancel clears the selected legacy file')
-      assert.deepEqual(await snapshot(), beforeMaintenance, 'choosing and cancelling legacy import preserves profile, settings and workspace bytes')
-      await until(click(['Close', '关闭'], maintenanceSelector), Boolean, 'close legacy recovery and return to official Plugins')
-      await until(expression(() => Boolean(document.querySelector('[data-plugin-panel]')) && !document.querySelector('[role="dialog"]')), Boolean, 'official management survives recovery close')
-      await delay(250)
-      assert.deepEqual(await snapshot(), beforeMaintenance, 'closing legacy recovery must not write profile or settings state')
-      const audit = assertMaintenanceReadOnly(networkRequests.slice(requestStart), legacyExportApiCompatibility)
-      await writeFile(path.join(output, 'maintenance-navigation.json'), JSON.stringify({ passed: true, ...audit, profileBytesUnchanged: true,
-        legacyExportApiCompatibility, actualRestoreNotRun: true, noAdvanced: true, scope: 'legacy JSON API fixture and real Native select/cancel only' }, null, 2))
-      if (verifyLegacyRestore) {
-        await openLegacyRecovery()
-        await selectLegacyFixture()
-        assertMaintenanceReadOnly(networkRequests.slice(requestStart), legacyExportApiCompatibility)
-        const beforeConfirm = networkRequests.length
-        await until(click(['Confirm import', '确认导入'], confirmationSelector), Boolean, 'confirm actual legacy import in disposable Native')
-        await waitNetwork(() => networkRequests.slice(beforeConfirm).some(item => item.path === '/dsh-market/restore' && item.method === 'POST' && item.finished), 'actual legacy restore response did not finish')
-        const restoreRequests = networkRequests.slice(beforeConfirm).filter(item => item.path === '/dsh-market/restore' && item.method === 'POST')
-        assert.equal(restoreRequests.length, 1, 'explicit confirmation issues exactly one restore POST')
-        const request = restoreRequests[0]
-        assert.equal(request.status, 200)
-        const requestId = [...requestById].find(([, item]) => item === request)?.[0]
-        assert.ok(requestId, 'the actual restore response must have an owned CDP request')
-        const responseBody = await send('Network.getResponseBody', { requestId })
-        const result = JSON.parse(responseBody.base64Encoded ? Buffer.from(responseBody.body, 'base64').toString('utf8') : responseBody.body)
-        assert.equal(result.ok, true)
-        assert.ok(Number.isSafeInteger(result.files) && result.files > 0)
-        assert.deepEqual(result.errors ?? [], [])
-        assert.deepEqual(result.unportable ?? [], [], 'disposable restore fixture must not depend on machine-local plugin sources')
-        for (const file of backup.files) {
-          const actual = await readFile(await verifiedPackageFile(root, 'data/dsh-home/profiles/web/' + file.path), 'utf8')
-          if (file.path === 'package.json') assert.ok(isDeepStrictEqual(JSON.parse(actual), file.json), 'confirmed import restores the backed-up profile manifest')
-          else assert.ok(actual === file.lines.join('\n'), 'confirmed import restores the actual legacy configuration bytes')
-        }
-        const afterRestore = await snapshot()
-        for (const name of ['data/dsh-home/settings.yaml', markerRelative]) assert.equal(afterRestore[name], beforeMaintenance[name], 'legacy import preserves unrelated settings and workspace')
-        assert.deepEqual(networkRequests.slice(beforeConfirm).filter(item => !['GET', 'HEAD', 'OPTIONS'].includes(item.method) && item !== request), [], 'confirmed legacy import must not trigger other mutation requests')
-        confirmedLegacyRestore = { passed: true, status: request.status, files: result.files, errors: 0,
-          profileMatchesBackup: true, workspaceAndSettingsUnchanged: true, restorePosts: 1, scope: 'disposable real Native confirmed legacy import' }
-        await writeFile(path.join(output, 'confirmed-legacy-restore.json'), JSON.stringify(confirmedLegacyRestore, null, 2))
-        await until(expression(selector => !document.querySelector(selector), confirmationSelector), Boolean, 'successful legacy import closes confirmation')
-        await until(click(['Close', '关闭'], maintenanceSelector), Boolean, 'close after actual legacy import')
-        await until(expression(() => Boolean(document.querySelector('[data-plugin-panel]')) && !document.querySelector('[role="dialog"]')), Boolean, 'official Plugins remains available after actual legacy import')
-      }
-    } finally {
-      await rm(backupInput, { force: true })
-    }
 
     await openMarket()
     await until(expression(() => document.querySelectorAll('[data-plugin-tab="discover"] [data-market-entry]').length > 0), Boolean, 'real official Discover catalog')
@@ -575,6 +450,142 @@ try {
     }
     assert.deepEqual(exceptions, [])
     await writeFile(path.join(output, 'checks.json'), JSON.stringify(checks, null, 2))
+    // Exercise browsing before an import, which explicitly requires restart.
+    if (await pageValue(() => [...document.querySelectorAll('[role="dialog"]')].some(item => item.getBoundingClientRect().width > 0))) {
+      await until(closeDialog, Boolean, 'close Settings before legacy recovery')
+      await until(expression(() => ![...document.querySelectorAll('[role="dialog"]')].some(item => item.getBoundingClientRect().width > 0)), Boolean, 'Settings closes before recovery')
+    }
+    // Legacy JSON import is compatibility only. Daily backups remain on the existing Data settings page.
+    // This disposable Native flow uses the retained, authenticated export API only to create its fixture.
+    const markerRelative = 'workspace/maintenance-cancel-' + Date.now() + '.txt'
+    await writeFile(await safeDataTarget(root, markerRelative), 'owned legacy recovery cancellation sentinel\n', { flag: 'wx' })
+    const protectedNames = ['data/dsh-home/profiles/web/package.json', 'data/dsh-home/profiles/web/cordis.patch.yml',
+      'data/dsh-home/profiles/web/pnpm-lock.yaml', 'data/dsh-home/settings.yaml', markerRelative]
+    const snapshot = async () => {
+      const result = {}
+      for (const name of protectedNames) {
+        try { result[name] = createHash('sha256').update(await readFile(await verifiedPackageFile(root, name))).digest('hex') }
+        catch (error) { if (error.code !== 'ENOENT') throw error; result[name] = null }
+      }
+      return result
+    }
+    const beforeMaintenance = await snapshot()
+    const requestStart = networkRequests.length
+    const maintenanceSelector = '[role="dialog"]'
+    const legacyTitles = ['Legacy plugin configuration recovery', '旧版插件配置恢复', 'Legacy plugin recovery', '旧插件配置恢复']
+    const maintenanceReady = titles => [...document.querySelectorAll('[role="dialog"]')].some(dialog => {
+      const label = dialog.getAttribute('aria-label') || document.getElementById(dialog.getAttribute('aria-labelledby'))?.textContent
+      return titles.includes((label || '').trim())
+    })
+    const openLegacyRecovery = async () => {
+      await until(expression(() => {
+        const button = [...document.querySelectorAll('button[aria-haspopup="menu"]')].find(item =>
+          ['More', '更多'].includes(item.getAttribute('aria-label')) && !item.closest('[role="dialog"]') && item.getBoundingClientRect().width > 0)
+        button?.click(); return Boolean(button)
+      }), Boolean, 'official sidebar More menu')
+      await until(click(legacyTitles, '[role="menu"]'), Boolean, 'legacy plugin configuration recovery action')
+      await until(expression(maintenanceReady, legacyTitles), Boolean, 'legacy recovery overlay survives menu dismissal')
+      assert.equal(await pageValue(() => Boolean(document.querySelector('[role="menu"]'))), false, 'More menu closes before legacy recovery is used')
+      assert.equal(await pageValue(() => [...document.querySelectorAll('[role="dialog"] button')].some(item =>
+        ['Export backup', '导出备份', 'Diagnostic details', '诊断详情'].includes(item.textContent.trim()))), false,
+        'legacy recovery must not expose a second backup exporter or plugin diagnostic surface')
+    }
+    const waitNetwork = async (predicate, label) => {
+      const deadline = Date.now() + 30000
+      while (Date.now() < deadline) { if (predicate(networkRequests.slice(requestStart))) return; await delay(100) }
+      throw new Error(label)
+    }
+    await openLegacyRecovery()
+    await writeFile(path.join(output, 'legacy-recovery.png'), Buffer.from((await send('Page.captureScreenshot', { format: 'png', fromSurface: true })).data, 'base64'))
+    const backupInput = await safeDataTarget(output, 'legacy-configuration-input.json')
+    try {
+      const response = await pageValue(async () => {
+        const response = await fetch('/dsh-market/backup', { cache: 'no-store' })
+        return { status: response.status, originMatched: new URL(response.url).origin === location.origin, text: await response.text() }
+      })
+      const backupBytes = Buffer.from(response.text, 'utf8')
+      assert.ok(backupBytes.length > 0 && backupBytes.length <= 2 * 1024 * 1024, 'legacy API fixture must remain within its format limit')
+      const backup = JSON.parse(response.text)
+      const manifest = JSON.parse(await readFile(await verifiedPackageFile(root, 'data/dsh-home/profiles/web/package.json'), 'utf8'))
+      const packageFile = Array.isArray(backup?.files) ? backup.files.find(item => item?.path === 'package.json') : undefined
+      legacyExportApiCompatibility = { originMatched: response.originMatched, path: '/dsh-market/backup', httpStatus: response.status,
+        bytes: backupBytes.length, sha256: createHash('sha256').update(backupBytes).digest('hex'), format: backup?.format, version: backup?.version,
+        packageJson: packageFile?.json !== null && typeof packageFile?.json === 'object' && !Array.isArray(packageFile.json),
+        manifestMatches: isDeepStrictEqual(packageFile?.json, manifest) }
+      await waitNetwork(requests => requests.some(item => item.path === '/dsh-market/backup' && item.status === 200), 'retained legacy backup API GET did not finish')
+      assertMaintenanceReadOnly(networkRequests.slice(requestStart), legacyExportApiCompatibility)
+      assert.deepEqual(await snapshot(), beforeMaintenance, 'opening legacy recovery and reading its fixture must preserve the original protected bytes')
+      // Protect every configuration file represented by the legacy fixture, in addition to the original guards.
+      for (const file of backup.files) {
+        const name = 'data/dsh-home/profiles/web/' + file.path
+        if (!protectedNames.includes(name)) protectedNames.push(name)
+      }
+      Object.assign(beforeMaintenance, await snapshot())
+      await writeFile(backupInput, backupBytes, { flag: 'wx' })
+      const confirmationSelector = '[role="group"][aria-label="Confirm legacy configuration import"],[role="group"][aria-label="确认导入旧配置"]'
+      const selectLegacyFixture = async () => {
+        const input = await send('Runtime.evaluate', { expression: expression(() => {
+          return [...document.querySelectorAll('[role="dialog"] input[type="file"]')]
+            .find(item => ['Choose legacy configuration…', '选择旧配置文件…'].includes(item.getAttribute('aria-label')))
+        }), returnByValue: false })
+        assert.ok(input.result?.objectId, 'the labelled legacy file input must belong to the current recovery dialog')
+        await send('DOM.setFileInputFiles', { objectId: input.result.objectId, files: [backupInput] })
+        await until(expression(selector => Boolean(document.querySelector(selector)), confirmationSelector), Boolean, 'legacy import requires explicit confirmation')
+      }
+      await selectLegacyFixture()
+      assert.equal(networkRequests.slice(requestStart).filter(item => item.path === '/dsh-market/restore' && item.method === 'POST').length, 0, 'choosing a legacy file must not import it')
+      await until(click(['Cancel', '取消'], confirmationSelector), Boolean, 'cancel legacy import through its confirmation controls')
+      await until(expression(selector => !document.querySelector(selector), confirmationSelector), Boolean, 'cancellation closes the confirmation')
+      assert.equal(await pageValue(() => document.querySelector('[role="dialog"] input[type="file"]')?.files?.length), 0, 'cancel clears the selected legacy file')
+      assert.deepEqual(await snapshot(), beforeMaintenance, 'choosing and cancelling legacy import preserves profile, settings and workspace bytes')
+      await until(click(['Close', '关闭'], maintenanceSelector), Boolean, 'close legacy recovery and return to official Plugins')
+      await until(expression(() => Boolean(document.querySelector('[data-plugin-panel]')) && !document.querySelector('[role="dialog"]')), Boolean, 'official management survives recovery close')
+      await delay(250)
+      assert.deepEqual(await snapshot(), beforeMaintenance, 'closing legacy recovery must not write profile or settings state')
+      const audit = assertMaintenanceReadOnly(networkRequests.slice(requestStart), legacyExportApiCompatibility)
+      await writeFile(path.join(output, 'maintenance-navigation.json'), JSON.stringify({ passed: true, ...audit, profileBytesUnchanged: true,
+        legacyExportApiCompatibility, actualRestoreNotRun: true, noAdvanced: true, scope: 'legacy JSON API fixture and real Native select/cancel only' }, null, 2))
+      if (verifyLegacyRestore) {
+        await openLegacyRecovery()
+        await selectLegacyFixture()
+        assertMaintenanceReadOnly(networkRequests.slice(requestStart), legacyExportApiCompatibility)
+        const beforeConfirm = networkRequests.length
+        await until(click(['Confirm import', '确认导入'], confirmationSelector), Boolean, 'confirm actual legacy import in disposable Native')
+        await waitNetwork(() => networkRequests.slice(beforeConfirm).some(item => item.path === '/dsh-market/restore' && item.method === 'POST' && item.finished), 'actual legacy restore response did not finish')
+        const restoreRequests = networkRequests.slice(beforeConfirm).filter(item => item.path === '/dsh-market/restore' && item.method === 'POST')
+        assert.equal(restoreRequests.length, 1, 'explicit confirmation issues exactly one restore POST')
+        const request = restoreRequests[0]
+        assert.equal(request.status, 200)
+        const requestId = [...requestById].find(([, item]) => item === request)?.[0]
+        assert.ok(requestId, 'the actual restore response must have an owned CDP request')
+        const responseBody = await send('Network.getResponseBody', { requestId })
+        const result = JSON.parse(responseBody.base64Encoded ? Buffer.from(responseBody.body, 'base64').toString('utf8') : responseBody.body)
+        assert.equal(result.ok, true)
+        assert.ok(Number.isSafeInteger(result.files) && result.files > 0)
+        assert.deepEqual(result.errors ?? [], [])
+        assert.deepEqual(result.unportable ?? [], [], 'disposable restore fixture must not depend on machine-local plugin sources')
+        const restoredFileHashes = {}
+        for (const file of backup.files) {
+          const actual = await readFile(await verifiedPackageFile(root, 'data/dsh-home/profiles/web/' + file.path), 'utf8')
+          restoredFileHashes[file.path] = createHash('sha256').update(actual).digest('hex')
+          if (file.path === 'package.json') assert.ok(isDeepStrictEqual(JSON.parse(actual), file.json), 'confirmed import restores the backed-up profile manifest')
+          else assert.ok(actual === file.lines.join('\n'), 'confirmed import restores the actual legacy configuration bytes')
+        }
+        const afterRestore = await snapshot()
+        for (const name of ['data/dsh-home/settings.yaml', markerRelative]) assert.equal(afterRestore[name], beforeMaintenance[name], 'legacy import preserves unrelated settings and workspace')
+        assert.deepEqual(networkRequests.slice(beforeConfirm).filter(item => !['GET', 'HEAD', 'OPTIONS'].includes(item.method) && item !== request), [], 'confirmed legacy import must not trigger other mutation requests')
+        confirmedLegacyRestore = { passed: true, status: request.status, files: result.files, errors: 0,
+          profileMatchesBackup: true, workspaceAndSettingsUnchanged: true, restartRequired: true, restoredFileHashes, restorePosts: 1, scope: 'disposable real Native confirmed legacy import' }
+        await writeFile(path.join(output, 'confirmed-legacy-restore.json'), JSON.stringify(confirmedLegacyRestore, null, 2))
+        await until(expression(selector => !document.querySelector(selector), confirmationSelector), Boolean, 'successful legacy import closes confirmation')
+        await until(expression(selector => /Restart|重启/.test(document.querySelector(selector)?.textContent || ''), maintenanceSelector), Boolean, 'legacy recovery reports its restart requirement')
+        await until(click(['Close', '关闭'], maintenanceSelector), Boolean, 'close after actual legacy import')
+        await until(expression(() => Boolean(document.querySelector('[data-plugin-panel]')) && !document.querySelector('[role="dialog"]')), Boolean, 'official Plugins remains available after actual legacy import')
+      }
+    } finally {
+      await rm(backupInput, { force: true })
+    }
+
   }
   assert.deepEqual(exceptions, [])
   passed=true;
@@ -591,7 +602,10 @@ try {
   } finally {
     socket?.close()
     try {
-      await cli('stop')
+      await exec(path.join(root, 'DeepSeek-Herness.exe'), ['stop'], { cwd: root, env, windowsHide: true, timeout: 60000 })
+      const exitDeadline = Date.now() + 5000
+      while (child.exitCode === null && child.signalCode === null && Date.now() < exitDeadline) await delay(50)
+      assert.equal(child.exitCode, 0, 'the actual Native host exits normally after its public stop command')
     } catch (error) {
       passed = false
       throw error

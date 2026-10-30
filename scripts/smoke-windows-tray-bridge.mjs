@@ -504,8 +504,11 @@ try {
   const selectPluginTab = async (names, label) => {
     await waitForValue(client, `(() => {
       const names = ${JSON.stringify(names)}
-      const button = [...document.querySelectorAll('[data-plugin-panel] [role="tablist"] [role="tab"]')]
-        .find(item => names.includes((item.textContent || '').trim()) && !item.disabled && item.getBoundingClientRect().width > 0)
+      const button = [...document.querySelectorAll('[role="tab"]')]
+        .find(item => names.includes((item.textContent || '').trim()) && !item.disabled
+          && item.getAttribute('aria-disabled') !== 'true' && !item.closest('[inert],[aria-hidden="true"]')
+          && getComputedStyle(item).visibility !== 'hidden'
+          && item.getBoundingClientRect().width > 0 && item.getBoundingClientRect().height > 0)
       button?.click(); return Boolean(button)
     })()`, Boolean, label)
   }
@@ -518,15 +521,14 @@ try {
     })()`, Boolean, label + ' sidebar More')
     await waitForValue(client, `(() => {
       const button = [...document.querySelectorAll('[role="menu"] button,[role="menu"] [role="menuitem"]')].find(item =>
-        ['Diagnostics and recovery', '诊断与恢复'].includes((item.getAttribute('aria-label') || item.textContent || '').trim()) && item.getBoundingClientRect().width > 0)
+        ['Legacy plugin recovery', '旧插件配置恢复'].includes((item.getAttribute('aria-label') || item.textContent || '').trim()) && item.getBoundingClientRect().width > 0)
       button?.click(); return Boolean(button)
-    })()`, Boolean, label + ' public diagnostics action')
+    })()`, Boolean, label + ' legacy configuration recovery action')
     await waitForValue(client, `Boolean([...document.querySelectorAll('[role="dialog"]')].find(item => {
       const title = item.getAttribute('aria-label') || document.getElementById(item.getAttribute('aria-labelledby'))?.textContent
-      return ['Diagnostics and recovery', '诊断与恢复'].includes((title || '').trim()) && item.getBoundingClientRect().width > 0
+      return ['Legacy plugin recovery', '旧插件配置恢复'].includes((title || '').trim()) && item.getBoundingClientRect().width > 0
     }))`, Boolean, label + ' persistent maintenance overlay')
     await waitForValue(client, 'document.querySelectorAll(\'[role="menu"]\').length', value => value === 0, label + ' More menu dismissed')
-    await waitForValue(client, 'true', () => marketRequests.slice(from).some(item => item.method === 'GET' && item.path === '/dsh-market/check' && item.status === 200), label + ' real read-only diagnostic GET')
     return from
   }
   await closeOverlay('close Settings before official plugin management')
@@ -597,65 +599,65 @@ try {
     const screenshot = await client.send('Page.captureScreenshot', { format: 'png', fromSurface: true })
     await writeSmokeScreenshot(installedScreenshotPath, Buffer.from(screenshot.data, 'base64'))
   }
-  await openSettings('Settings before theme and diagnostic verification')
+  await openSettings('Settings before theme and legacy recovery verification')
 
-  const diagnosticContrastExpression = `(() => {
-    const tag = [...document.querySelectorAll('[class*="_ovByTag"]')].find(item => {
-      const rect = item.getBoundingClientRect()
-      return rect.width > 0 && rect.height > 0
+  const legacyRecoveryContrastExpression = `(() => {
+    const dialog = [...document.querySelectorAll('[role="dialog"]')].find(item => {
+      const title = item.getAttribute('aria-label') || document.getElementById(item.getAttribute('aria-labelledby'))?.textContent
+      return ['Legacy plugin recovery', '旧插件配置恢复'].includes((title || '').trim()) && item.getBoundingClientRect().width > 0
     })
-    if (!tag) return null
-    const parse = value => {
-      const values = (value.match(/[\\d.]+/g) || []).map(Number)
-      return { r: values[0] || 0, g: values[1] || 0, b: values[2] || 0, a: values.length > 3 ? values[3] : 1 }
-    }
-    const blend = (front, back) => ({
-      r: front.r * front.a + back.r * (1 - front.a),
-      g: front.g * front.a + back.g * (1 - front.a),
-      b: front.b * front.a + back.b * (1 - front.a),
-      a: front.a + back.a * (1 - front.a),
-    })
-    let background = { r: 0, g: 0, b: 0, a: 0 }
-    let current = tag
-    while (current && background.a < 0.999) {
-      background = blend(background, parse(getComputedStyle(current).backgroundColor))
-      current = current.parentElement
-    }
-    if (background.a < 0.999) background = blend(background, { r: 255, g: 255, b: 255, a: 1 })
-    const foreground = parse(getComputedStyle(tag).color)
-    const luminance = color => {
-      const channel = value => {
-        const normalized = value / 255
-        return normalized <= 0.04045 ? normalized / 12.92 : ((normalized + 0.055) / 1.055) ** 2.4
+    const paragraphs = [...(dialog?.querySelectorAll('p') || [])]
+    const targets = [{ id: 'guidance', tag: paragraphs.find(item => /用于导入旧版插件配置 JSON|Import a legacy plugin configuration JSON file/.test(item.textContent || '')) },
+      { id: 'credentials', tag: paragraphs.find(item => /配置文件可能含凭据|Configuration files may contain credentials/.test(item.textContent || '')) }]
+    if (targets.some(({ tag }) => !tag || tag.getBoundingClientRect().width <= 0 || tag.getBoundingClientRect().height <= 0)) return null
+    const measure = tag => {
+      const parse = value => {
+        const values = (value.match(/[\\d.]+/g) || []).map(Number)
+        return { r: values[0] || 0, g: values[1] || 0, b: values[2] || 0, a: values.length > 3 ? values[3] : 1 }
       }
-      return 0.2126 * channel(color.r) + 0.7152 * channel(color.g) + 0.0722 * channel(color.b)
+      const blend = (front, back) => ({
+        r: front.r * front.a + back.r * (1 - front.a),
+        g: front.g * front.a + back.g * (1 - front.a),
+        b: front.b * front.a + back.b * (1 - front.a),
+        a: front.a + back.a * (1 - front.a),
+      })
+      let background = { r: 0, g: 0, b: 0, a: 0 }
+      let current = tag
+      while (current && background.a < 0.999) {
+        background = blend(background, parse(getComputedStyle(current).backgroundColor))
+        current = current.parentElement
+      }
+      if (background.a < 0.999) background = blend(background, { r: 255, g: 255, b: 255, a: 1 })
+      const foreground = parse(getComputedStyle(tag).color)
+      const luminance = color => {
+        const channel = value => {
+          const normalized = value / 255
+          return normalized <= 0.04045 ? normalized / 12.92 : ((normalized + 0.055) / 1.055) ** 2.4
+        }
+        return 0.2126 * channel(color.r) + 0.7152 * channel(color.g) + 0.0722 * channel(color.b)
+      }
+      const light = Math.max(luminance(foreground), luminance(background))
+      const dark = Math.min(luminance(foreground), luminance(background))
+      return {
+        text: (tag.textContent || '').trim(),
+        foreground: getComputedStyle(tag).color,
+        background: getComputedStyle(tag).backgroundColor,
+        contrastRatio: (light + 0.05) / (dark + 0.05),
+      }
     }
-    const light = Math.max(luminance(foreground), luminance(background))
-    const dark = Math.min(luminance(foreground), luminance(background))
-    return {
-      text: (tag.textContent || '').trim(),
-      foreground: getComputedStyle(tag).color,
-      background: getComputedStyle(tag).backgroundColor,
-      contrastRatio: (light + 0.05) / (dark + 0.05),
-    }
+    return targets.map(({ id, tag }) => ({ id, ...measure(tag) }))
   })()`
-  const verifyDiagnosticContrast = async (themeLabel) => {
+  const verifyLegacyRecoveryContrast = async (themeLabel) => {
     const from = await openMaintenance(themeLabel)
-    await waitForValue(client, `(() => {
-      if ([...document.querySelectorAll('[role="dialog"] [class*="_ovByTag"]')].some(item => item.getBoundingClientRect().width > 0)) return { clicked: true }
-      const button = [...document.querySelectorAll('[role="dialog"] button[aria-expanded]')].find(item =>
-        [...item.querySelectorAll('span')].some(title => ['Overrides', '覆盖关系'].includes((title.textContent || '').trim())))
-      if (!button) return { clicked: false }
-      button.click(); return { clicked: true }
-    })()`, value => value?.clicked, themeLabel + ' override relationship section')
-    const result = await waitForValue(client, diagnosticContrastExpression, value => value?.text && value.contrastRatio >= 4.5, 'diagnostic override contrast in ' + themeLabel + ' theme')
-    assert.ok(result.contrastRatio >= 4.5, themeLabel + ' diagnostic override contrast was ' + result.contrastRatio)
-    assert.deepEqual(marketRequests.slice(from).filter(item => !['GET', 'HEAD', 'OPTIONS'].includes(item.method)), [], 'public maintenance diagnostics must remain read-only')
+    const result = await waitForValue(client, legacyRecoveryContrastExpression, value => value?.length === 2 && value.every(item => item.text && item.contrastRatio >= 4.5), 'legacy recovery text contrast in ' + themeLabel + ' theme')
+    for (const item of result) assert.ok(item.contrastRatio >= 4.5, themeLabel + ' ' + item.id + ' contrast was ' + item.contrastRatio)
+    assert.deepEqual(marketRequests.slice(from).filter(item => item.path === '/dsh-market/check'), [], 'legacy recovery must not query a second compatibility assessment')
+    assert.deepEqual(marketRequests.slice(from).filter(item => !['GET', 'HEAD', 'OPTIONS'].includes(item.method)), [], 'opening legacy recovery must not write configuration')
     if (diagnosticsScreenshotPath && themeLabel === 'dark') {
       const screenshot = await client.send('Page.captureScreenshot', { format: 'png', fromSurface: true })
       await writeSmokeScreenshot(diagnosticsScreenshotPath, Buffer.from(screenshot.data, 'base64'))
     }
-    await closeOverlay(themeLabel + ' close maintenance and return to the official shell')
+    await closeOverlay(themeLabel + ' close legacy recovery and return to the official shell')
   }
   const modernBuiltIns = await evaluate(client, `(() => [...document.querySelectorAll('button')].some(item =>
     ['Built-in plugins', '内置插件'].includes((item.textContent || '').trim()) && item.getBoundingClientRect().width > 0))()`)
@@ -675,10 +677,10 @@ try {
       await waitForValue(client, builtInPluginCard('tool-pwsh'), value => value?.ready && !value.expanded && !value.detailsPresent, theme + ' official PowerShell details removed')
     }
     await closeOverlay(theme + ' close Settings before public maintenance')
-    await verifyDiagnosticContrast(theme)
+    await verifyLegacyRecoveryContrast(theme)
     await openSettings(theme + ' reopen Settings after public maintenance')
   }
-  await waitForValue(client, clickButton(['General', 'General settings', '通用设置']), value => value?.clicked, 'General settings after dark diagnostics')
+  await waitForValue(client, clickButton(['General', 'General settings', '通用设置']), value => value?.clicked, 'General settings after dark legacy recovery')
   await waitForValue(client, clickButton(['Light', '浅色', '亮色']), value => value?.clicked, 'restore light theme button')
   state = await waitForValue(client, stateExpression, value => value?.theme === 'light', 'restored light theme')
 
