@@ -367,10 +367,12 @@ test('Windows workspace readiness survives the official Alpha token redirect wit
   assert.doesNotMatch(traySmoke, /assert\.match\(launch\.url/)
 })
 
-test('Windows owns browser chrome and file downloads instead of exposing Edge UI', async () => {
+test('Windows keeps native context menus while owning browser chrome and file downloads', async () => {
   const host = await readLauncherSource()
 
-  assert.match(host, /AreDefaultContextMenusEnabled\s*=\s*false/)
+  assert.match(host, /AreDefaultContextMenusEnabled\s*=\s*true/)
+  assert.doesNotMatch(host, /AreDefaultContextMenusEnabled\s*=\s*false/)
+  assert.match(host, /AreDevToolsEnabled\s*=\s*false/)
   assert.match(host, /IsStatusBarEnabled\s*=\s*false/)
   assert.match(host, /DownloadStarting\s*\+=\s*OnDownloadStarting/)
   assert.match(host, /CoreWebView2DownloadStartingEventArgs/)
