@@ -9,5 +9,5 @@
     "light": "#000000",
     "dark": "#FFFFFF"
   },
-  "derivation": "The official application favicon geometry and adaptive theme are used: black in light mode and white in dark mode. Static desktop icon containers render the black whale on a white surface so it stays visible in both operating-system themes, without the website's blue fallback mark."
+  "derivation": "The official application favicon geometry and adaptive theme are used: black in light mode and white in dark mode. The Windows ICO uses the white whale on a transparent background for dark taskbars. The macOS and shared PNG assets use the black whale on a transparent background."
 }

@@ -2,6 +2,10 @@
 
 ## 未发布维护 / Unreleased maintenance
 
+- Windows 任务栏和通知区域使用无底色的白色鲸鱼图标，改善深色背景下的辨识度。感谢 [crazyrainman 的反馈](https://github.com/WSL043/DSH-Portable/discussions/39#discussioncomment-19370243)。
+
+- The Windows taskbar and notification area use a white whale on a transparent background for better visibility on dark backgrounds. Thanks to [crazyrainman for the report](https://github.com/WSL043/DSH-Portable/discussions/39#discussioncomment-19370243).
+
 - 新版本不再默认安装 Image Viewer 和 Chat Manager；已有安装、配置与启停状态保持不变，可按需通过官方插件管理安装。
 
 - New packages no longer install Image Viewer or Chat Manager by default. Existing installations, configuration and enablement states are preserved; both remain available through the official plugin manager.

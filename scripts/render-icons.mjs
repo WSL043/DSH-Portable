@@ -10,10 +10,11 @@ if (!appDir || !sourceSvg || !outputDir) {
 const sharpModule = path.join(path.resolve(appDir), 'node_modules', 'sharp', 'dist', 'index.mjs')
 const { default: sharp } = await import(pathToFileURL(sharpModule).href)
 const svg = await readFile(path.resolve(sourceSvg))
+const windowsSvg = await readFile(new URL('../assets/DSH-Portable-white.svg', import.meta.url))
 await mkdir(path.resolve(outputDir), { recursive: true })
 
-async function png(size) {
-  return sharp(svg, { density: 512 })
+async function png(size, source = svg) {
+  return sharp(source, { density: 512 })
     .resize(size, size, { fit: 'contain' })
     .ensureAlpha()
     .png({ compressionLevel: 9, adaptiveFiltering: true })
@@ -55,7 +56,7 @@ function icns(chunks) {
 }
 
 const icoSizes = [16, 20, 24, 32, 40, 48, 64, 128, 256]
-const icoImages = await Promise.all(icoSizes.map(async (size) => ({ size, bytes: await png(size) })))
+const icoImages = await Promise.all(icoSizes.map(async (size) => ({ size, bytes: await png(size, windowsSvg) })))
 await writeFile(path.join(outputDir, 'DSH-Portable.ico'), ico(icoImages))
 
 const icnsSpecs = [
