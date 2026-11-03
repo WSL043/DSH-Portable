@@ -15,7 +15,7 @@ const read = (name) => readFile(path.join(root, name), 'utf8')
 const exists = async (name) => access(path.join(root, name)).then(() => true, () => false)
 const regexEscape = (value) => String(value).replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
 
-function pngCornerAlphas(png) {
+function decodeIconPng(png) {
   assert.equal(png.subarray(0, 8).toString('hex'), '89504e470d0a1a0a')
   let width = 0
   let height = 0
@@ -66,7 +66,7 @@ function pngCornerAlphas(png) {
     inputOffset += stride
   }
   const alphaAt = (x, y) => rows[y * stride + x * bytesPerPixel + 3]
-  return [alphaAt(0, 0), alphaAt(width - 1, 0), alphaAt(0, height - 1), alphaAt(width - 1, height - 1)]
+  return { width, rows, cornerAlphas: [alphaAt(0, 0), alphaAt(width - 1, 0), alphaAt(0, height - 1), alphaAt(width - 1, height - 1)] }
 }
 
 function icoPngFrames(ico) {
@@ -543,10 +543,19 @@ test('desktop icons are derived from the pinned official DSH mark', async () => 
   assert.equal(await exists('assets/DSH-Portable.icns'), true)
 
   const png = await readFile(path.join(root, 'assets/DSH-Portable-512.png'))
-  assert.deepEqual(pngCornerAlphas(png), [0, 0, 0, 0], 'the user-visible PNG must have transparent corners')
+  assert.deepEqual(decodeIconPng(png).cornerAlphas, [0, 0, 0, 0], 'the user-visible PNG must have transparent corners')
   const ico = await readFile(path.join(root, 'assets/DSH-Portable.ico'))
-  for (const frame of icoPngFrames(ico)) {
-    assert.deepEqual(pngCornerAlphas(frame), [0, 0, 0, 0], 'every Windows icon size must have transparent corners')
+  const frames = icoPngFrames(ico).map(decodeIconPng)
+  assert.deepEqual(frames.map(({ width }) => width), [16, 20, 24, 32, 40, 48, 64, 128, 256])
+  for (const { rows, cornerAlphas } of frames) {
+    assert.deepEqual(cornerAlphas, [0, 0, 0, 0], 'every Windows icon size must have transparent corners')
+    let hasOpaqueWhite = false
+    for (let pixel = 0; pixel < rows.length; pixel += 4) {
+      if (rows[pixel + 3] !== 255) continue
+      assert.equal(rows.readUIntBE(pixel, 3), 0xffffff, 'the Windows mark must be white')
+      hasOpaqueWhite = true
+    }
+    assert.ok(hasOpaqueWhite, 'the Windows mark must be visible')
   }
 })
 
