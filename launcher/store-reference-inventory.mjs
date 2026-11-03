@@ -1,4 +1,4 @@
-import { lstat, opendir, readFile } from 'node:fs/promises'
+import { lstat, opendir, readFile, realpath } from 'node:fs/promises'
 import path from 'node:path'
 import { createHash } from 'node:crypto'
 import { normalizeEnvironmentId } from './portable-core.mjs'
@@ -76,6 +76,7 @@ export async function inspectStoreReferences(baseStateRoot, {
   for (const environment of roots) {
     const data = path.join(environment.root, 'data')
     const state = { id: environment.id, store: path.join(data, 'pnpm-store'), profiles: [], references: [], installations: [], archives: [] }
+    const possibleAliases = []
     result.environments.push(state)
     const dataInfo = await stat(data)
     if (!dataInfo) continue
@@ -160,12 +161,15 @@ export async function inspectStoreReferences(baseStateRoot, {
       if (!info) return
       if (!info.isDirectory()) { block('invalid-modules-directory', filename); return }
       const metadata = path.join(filename, '.modules.yaml')
-      const countBeforeMetadata = state.references.length
       const metadataSource = await record(metadata, 'modules-state')
-      if (state.references.length === countBeforeMetadata) block('missing-modules-state', filename)
       // Installed package symlinks are normal. Do not walk them or package code.
       const virtual = path.join(filename, '.pnpm')
       const virtualInfo = await stat(virtual)
+      if (profile && !metadataSource && !virtualInfo) {
+        possibleAliases.push(filename)
+        return
+      }
+      if (!metadataSource) block('missing-modules-state', filename)
       if (!virtualInfo?.isDirectory()) {
         if (!virtualInfo && await emptyHoisted(filename, profile, metadataSource)) {
           state.installations.push({ modules: filename, virtualStore: virtual, metadata, lock: null, empty: true })
@@ -227,6 +231,33 @@ export async function inspectStoreReferences(baseStateRoot, {
     // Startup pause backups carry manifests; active transaction journals need a
     // separate validation gate, never infer that a journal is inactive by age.
     await walk(path.join(data, 'runtime'), 'profile')
+    // A companion profile may expose a package already installed in another
+    // profile. Only direct aliases of packages in an inventoried installation
+    // are safe to omit from the pnpm graph. Keep their targets in each snapshot.
+    for (const modules of possibleAliases) {
+      const aliases = []
+      let safe = true
+      try {
+        for await (const entry of await opendir(modules)) {
+          const filename = path.join(modules, entry.name)
+          if (!withinBudget(filename) || !entry.isSymbolicLink() || entry.name.startsWith('.')) { safe = false; break }
+          const target = await realpath(filename)
+          const installation = state.installations.find(item => item.lock
+            && canonical(path.join(item.modules, entry.name)) === canonical(target))
+          if (!installation) { safe = false; break }
+          const importer = parseYaml(await readFile(installation.lock, 'utf8'))?.importers?.['.']
+          if (!dependencyFields.some(field => Object.hasOwn(importer?.[field] ?? {}, entry.name))) { safe = false; break }
+          aliases.push({ path: filename, target })
+        }
+      } catch { safe = false }
+      if (safe && aliases.length) {
+        state.aliases ??= []
+        state.aliases.push(...aliases)
+      } else {
+        block('missing-modules-state', modules)
+        block('missing-installed-lock', modules)
+      }
+    }
   }
   return result
 }

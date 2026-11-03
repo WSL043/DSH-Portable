@@ -64,6 +64,26 @@ test('linked environments are blockers, not silently skipped references', async 
   assert.equal(result.environments.length, 1)
 })
 
+test('companion profile aliases require a recorded installation in the same environment', async t => {
+  const { root, file } = await fixture(t)
+  const profiles = 'data/dsh-home/profiles'
+  const target = path.dirname(await file(`${profiles}/web/node_modules/plugin/package.json`))
+  const alias = path.join(root, profiles, 'muse-acp/node_modules/plugin')
+  await file(`${profiles}/web/node_modules/.modules.yaml`)
+  await file(`${profiles}/web/node_modules/.pnpm/lock.yaml`, JSON.stringify({
+    importers: { '.': { dependencies: { plugin: { specifier: '1.0.0' } } } },
+  }))
+  await mkdir(path.dirname(alias), { recursive: true })
+  await symlink(target, alias, process.platform === 'win32' ? 'junction' : 'dir')
+  const result = await inspectStoreReferences(root, { parseYaml: JSON.parse })
+  assert.equal(result.complete, true, JSON.stringify(result.blockers))
+  assert.deepEqual(result.environments[0].aliases, [{ path: alias, target }])
+  await file(`${profiles}/web/node_modules/.pnpm/lock.yaml`, '{}')
+  const untracked = await inspectStoreReferences(root, { parseYaml: JSON.parse })
+  assert.equal(untracked.complete, false)
+  assert.ok(untracked.blockers.some(item => item.code === 'missing-installed-lock'))
+})
+
 test('linked data roots are never followed and unknown environment names block GC', async t => {
   const { root, file } = await fixture(t)
   await file('external/dsh-home/profiles/web/package.json')

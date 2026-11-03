@@ -40,7 +40,7 @@ export function scheduleHostMaintenance({ root, runtimeRoot, stateRoot, trace },
       if (stopped) return
       try {
         const result = await cleanLogs({ signal: controller.signal })
-        if (result.removed || result.deferred || result.limited) record('plugin-logs', 'maintenance-complete', result)
+        if (result.removed || result.deferred || result.limited || result.failures?.length) record('plugin-logs', 'maintenance-complete', result)
       } catch (error) { record('plugin-logs', 'maintenance-deferred', { code: error?.code || 'unsupported' }) }
     } finally { running = false }
   }

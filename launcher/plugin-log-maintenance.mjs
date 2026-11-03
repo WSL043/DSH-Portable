@@ -96,10 +96,18 @@ export async function maintainPluginLogs(dshHome, withFileLock, {
             retainedBytes += run.bytes; continue
           }
           if (!await directory(logs) || !await directory(run.dir)) { result.protected++; continue }
-          const info = await lstat(run.file)
-          if (!info.isFile() || info.isSymbolicLink() || info.mtimeMs !== run.mtime || info.size !== run.bytes) { result.protected++; continue }
-          if (signal?.aborted) { result.cancelled = true; break }
-          await unlink(run.file)
+          try {
+            const info = await lstat(run.file)
+            if (!info.isFile() || info.isSymbolicLink() || info.mtimeMs !== run.mtime || info.size !== run.bytes) { result.protected++; continue }
+            if (signal?.aborted) { result.cancelled = true; break }
+            await unlink(run.file)
+          } catch (error) {
+            if (error.code !== 'ENOENT') {
+              result.failures ??= []
+              if (result.failures.length < 8 && !result.failures.includes(error.code)) result.failures.push(error.code)
+            }
+            continue
+          }
           // Never recursively remove a directory: unknown concurrently added content survives.
           await rmdir(run.dir).catch(() => {})
           result.removed++; result.bytes += run.bytes
