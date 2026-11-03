@@ -179,7 +179,12 @@ namespace DshPortable
                 ? L("DeepSeek Harness 停止失败。", "DeepSeek Harness could not stop.")
                 : L("DeepSeek Harness 启动失败。", "DeepSeek Harness could not start.");
             statusLabel.ForeColor = Color.FromArgb(178, 38, 38);
-            detailsBox.Text = message ?? string.Empty;
+            bool sharedFilesBusy = desktopStart && (message ?? String.Empty).Split('\n').Any(line =>
+                JsonString(line, "type") == "portable-error" && JsonString(line, "code") == "SHARED_COMPONENTS_BUSY");
+            detailsBox.Text = sharedFilesBusy
+                ? L("另一个 Portable 环境正在使用共享文件。请等待该操作完成，然后关闭此窗口并重新启动 Portable。",
+                    "Another Portable environment is using shared files. Wait for it to finish, then close this window and reopen Portable.")
+                : message ?? string.Empty;
             detailsBox.Visible = true;
             copyButton.Visible = true;
             closeButton.Location = new Point(468, 252);

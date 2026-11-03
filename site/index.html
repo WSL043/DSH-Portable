@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <meta name="theme-color" content="#050607">
   <meta name="dsh-page-language" content="zh">
-  <meta name="description" content="DSH-Portable 是 DeepSeek Harness 的便携版：一个文件夹带走会话、设置、插件和工作区；支持同平台整夹迁移与保留数据的更新恢复。">
+  <meta name="description" content="DSH-Portable 是 DeepSeek Harness 的便携版：一个文件夹带走会话、设置、插件和工作区；支持 Windows、macOS 和 Linux，可下载标准 ZIP 与 Windows 完整离线包。">
   <meta property="og:title" content="DSH-Portable｜DeepSeek Harness 便携版">
   <meta property="og:description" content="一个文件夹带走会话、设置、插件和工作区；Portable 与内核分开更新，并提供保留数据的回滚与恢复工具。独立社区项目，非 DeepSeek 官方应用。">
   <meta property="og:type" content="website">
@@ -38,7 +38,7 @@
     "inLanguage": ["zh-CN", "en"]
   }
   </script>
-  <title>DSH-Portable｜DeepSeek Harness 的便携版</title>
+  <title>DSH-Portable｜DeepSeek Harness 便携版下载</title>
   <link rel="icon" href="assets/DSH-Portable.svg" type="image/svg+xml">
   <link rel="stylesheet" href="styles.css">
   <script src="app.js" defer></script>
@@ -115,8 +115,8 @@
       <div class="download-shell">
         <div class="platform-tabs" role="tablist" aria-label="Operating system"><button id="tab-windows" type="button" role="tab" aria-selected="true" aria-controls="panel-windows" data-platform-tab="windows">Windows</button><button id="tab-macos" type="button" role="tab" aria-selected="false" aria-controls="panel-macos" data-platform-tab="macos">macOS</button><button id="tab-linux" type="button" role="tab" aria-selected="false" aria-controls="panel-linux" data-platform-tab="linux">Linux</button></div>
         <div id="panel-windows" class="download-panel" role="tabpanel" aria-labelledby="tab-windows" data-platform-panel="windows">
-          <div class="recommended-download"><div><span data-i18n="recommended">推荐</span><h3 data-i18n="windowsPortable">Windows 便携版</h3><p data-i18n="windowsPortableText">把小体积启动器放到希望保存的位置，它会在旁边准备完整目录。</p></div><a class="panel-download" href="https://github.com/WSL043/DSH-Portable/releases/latest/download/DSH-Portable-windows-x64.exe" data-i18n="downloadNow">下载</a></div>
-          <div class="download-options"><a href="https://github.com/WSL043/DSH-Portable/releases/latest/download/DSH-Portable-windows-x64-offline.zip"><strong data-i18n="offlineEdition">标准 ZIP</strong><span data-i18n="offlineText">自行下载并解压</span></a><a href="https://github.com/WSL043/DSH-Portable/releases/latest/download/DSH-Portable-windows-x64-complete-offline.zip"><strong data-i18n="completeOfflineArchive">完整离线 ZIP</strong><span data-i18n="completeOfflineText">目标电脑缺少 WebView2 且无法联网补装</span></a><a href="https://github.com/WSL043/DSH-Portable/releases/latest"><strong data-i18n="completeArchive">全部文件</strong><span data-i18n="archiveText">版本说明与其他构建</span></a></div>
+          <div class="recommended-download"><div><span data-i18n="recommended">推荐</span><h3 data-i18n="windowsPortable">Windows 便携版</h3><p data-i18n="windowsPortableText">适合联网首次使用。运行启动器，在旁边生成便携目录。</p></div><a class="panel-download" href="https://github.com/WSL043/DSH-Portable/releases/latest/download/DSH-Portable-windows-x64.exe" data-i18n="downloadNow">下载</a></div>
+          <div class="download-options"><a href="https://github.com/WSL043/DSH-Portable/releases/latest/download/DSH-Portable-windows-x64-offline.zip"><strong data-i18n="offlineEdition">标准 ZIP</strong><span data-i18n="offlineText">已有 WebView2：完整解压后运行 DeepSeek-Herness.exe</span></a><a href="https://github.com/WSL043/DSH-Portable/releases/latest/download/DSH-Portable-windows-x64-complete-offline.zip"><strong data-i18n="completeOfflineArchive">完整离线 ZIP</strong><span data-i18n="completeOfflineText">无法联网且缺少 WebView2：此包自带 WebView2</span></a><a href="https://github.com/WSL043/DSH-Portable/releases/latest"><strong data-i18n="completeArchive">全部文件</strong><span data-i18n="archiveText">版本说明与其他构建</span></a></div>
         </div>
         <div id="panel-macos" class="download-panel" role="tabpanel" aria-labelledby="tab-macos" data-platform-panel="macos" hidden>
           <div class="architecture-switch" role="group" aria-label="Mac architecture"><button type="button" class="is-active" data-arch="arm64">Apple Silicon</button><button type="button" data-arch="x64">Intel</button></div>

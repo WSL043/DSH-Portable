@@ -24,7 +24,7 @@ let english = await readFile(path.join(output, "index.html"), "utf8");
 for (const [from, to] of [
   ['<html lang="zh-CN">', '<html lang="en">'],
   ['<meta name="dsh-page-language" content="zh">', '<meta name="dsh-page-language" content="en">'],
-  ['<meta name="description" content="DSH-Portable 是 DeepSeek Harness 的便携版：一个文件夹带走会话、设置、插件和工作区；支持同平台整夹迁移与保留数据的更新恢复。">', '<meta name="description" content="DSH-Portable is the portable edition of DeepSeek Harness: take sessions, settings, plugins, and your workspace in one folder. Stable 0.x supports Windows, macOS, and Linux; the 1.0 development line is Windows-only, and its builds and drafts are not public downloads.">'],
+  ['<meta name="description" content="DSH-Portable 是 DeepSeek Harness 的便携版：一个文件夹带走会话、设置、插件和工作区；支持 Windows、macOS 和 Linux，可下载标准 ZIP 与 Windows 完整离线包。">', '<meta name="description" content="DSH-Portable is the portable edition of DeepSeek Harness: take sessions, settings, plugins, and your workspace in one folder. Download for Windows, macOS, or Linux. Choose a Windows launcher, standard ZIP, or complete offline package.">'],
   ['<meta property="og:title" content="DSH-Portable｜DeepSeek Harness 便携版">', '<meta property="og:title" content="DSH-Portable | Portable DeepSeek Harness">'],
   ['<meta property="og:description" content="一个文件夹带走会话、设置、插件和工作区；Portable 与内核分开更新，并提供保留数据的回滚与恢复工具。独立社区项目，非 DeepSeek 官方应用。">', '<meta property="og:description" content="One folder for sessions, settings, plugins, and your workspace. Portable and core update separately, with data-preserving rollback and recovery tools. An independent community project, not an official DeepSeek app.">'],
   ['<meta property="og:url" content="https://wsl043.github.io/DSH-Portable/">', '<meta property="og:url" content="https://wsl043.github.io/DSH-Portable/en/">'],
@@ -38,7 +38,7 @@ for (const [from, to] of [
   ['"url": "https://wsl043.github.io/DSH-Portable/"', '"url": "https://wsl043.github.io/DSH-Portable/en/"'],
   ['"screenshot": "https://wsl043.github.io/DSH-Portable/assets/dsh-interface-zh.png"', '"screenshot": "https://wsl043.github.io/DSH-Portable/assets/dsh-interface-en.png"'],
   ['"softwareRequirements": "稳定版 0.x：Windows、macOS 和 Linux；1.0 线：仅 Windows alpha 预览版。"', '"softwareRequirements": "Stable 0.x: Windows, macOS, and Linux; 1.0 line: Windows-only alpha preview."'],
-  ['<title>DSH-Portable｜DeepSeek Harness 的便携版</title>', '<title>DSH-Portable | Portable DeepSeek Harness in a folder</title>'],
+  ['<title>DSH-Portable｜DeepSeek Harness 便携版下载</title>', '<title>DSH-Portable | Portable DeepSeek Harness Download</title>'],
   ['<a class="language-switch" href="en/" hreflang="en" lang="en" aria-label="Switch to English" data-language-switch>EN</a>', '<a class="language-switch" href="../" hreflang="zh-CN" lang="zh-CN" aria-label="切换到中文" data-language-switch>中</a>'],
   ['src="assets/dsh-interface-zh.png"', 'src="../assets/dsh-interface-en.png"'],
   ['src="assets/dsh-interface-zh-light.png"', 'src="../assets/dsh-workspace-0.6.4.png"']

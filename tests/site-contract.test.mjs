@@ -99,7 +99,7 @@ test("website defaults to Chinese and builds an indexable English route", async 
   assert.match(english, /<html lang="en">/);
   assert.match(english, /<meta name="dsh-page-language" content="en">/);
   assert.match(english, /<link rel="canonical" href="https:\/\/wsl043\.github\.io\/DSH-Portable\/en\/">/);
-  assert.match(english, /<title>DSH-Portable \| Portable DeepSeek Harness in a folder[^<]*<\/title>/);
+  assert.match(english, /<title>DSH-Portable \| Portable DeepSeek Harness Download[^<]*<\/title>/);
   assert.match(english, /<meta name="description" content="DSH-Portable is the portable edition of DeepSeek Harness: take sessions, settings, plugins, and your workspace in one folder\./);
   assert.match(english, /<meta property="og:title" content="DSH-Portable \| Portable DeepSeek Harness">/);
   assert.match(english, /<meta property="og:description" content="One folder for sessions, settings, plugins, and your workspace\./);
@@ -168,7 +168,7 @@ test("website publishes only through the currently verified Pages domain", async
 });
 
 test("website exposes search-engine metadata without duplicating release files", () => {
-  assert.match(html, /<title>DSH-Portable｜DeepSeek Harness 的便携版<\/title>/);
+  assert.match(html, /<title>DSH-Portable｜DeepSeek Harness 便携版下载<\/title>/);
   assert.match(html, /<meta name="description" content="DSH-Portable 是 DeepSeek Harness 的便携版：一个文件夹带走会话、设置、插件和工作区/);
   assert.match(html, /<meta property="og:title" content="DSH-Portable｜DeepSeek Harness 便携版">/);
   assert.match(html, /<meta property="og:description" content="一个文件夹带走会话、设置、插件和工作区/);

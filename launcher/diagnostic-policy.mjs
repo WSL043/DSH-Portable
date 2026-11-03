@@ -49,7 +49,7 @@ export function classifyPortableError(error) {
   }
   if (error?.code === 'DSH_PROFILE_PREFLIGHT_FAILED') return 'DSH_PROFILE_COMPATIBILITY_FAILED'
   if (/Another portable launcher is already starting or stopping DSH/i.test(source)) return 'LAUNCH_IN_PROGRESS'
-  if (/Close the other Portable environment/i.test(source)) return 'SHARED_COMPONENTS_BUSY'
+  if (/Close the other Portable environment|The shared Portable components are being changed by another environment/i.test(source)) return 'SHARED_COMPONENTS_BUSY'
   if (/EADDRINUSE|address already in use/i.test(source)) return 'PORT_IN_USE'
   if (/DeepSeek Harness failed to start|DSH runtime did not pass|workspace did not become ready/i.test(source)) return 'DSH_START_FAILED'
   if (/\bupdate\b/i.test(source)) return 'UPDATE_FAILED'
@@ -73,7 +73,7 @@ export function portablePublicError(error) {
     DSH_START_FAILED: 'DeepSeek Harness did not become ready. Reopen DSH-Portable and export a support report.',
     DSH_HISTORICAL_SESSION_UNSUPPORTED: 'This DeepSeek Harness version cannot read a historical subagent session format. Reinstalling plugins or clearing caches will not fix this format mismatch. Keep the original session files and export a support report.',
     LAUNCH_IN_PROGRESS: 'DSH-Portable is already starting or stopping. Try again in a moment.',
-    SHARED_COMPONENTS_BUSY: 'Close the other running DSH-Portable environments before changing shared components.',
+    SHARED_COMPONENTS_BUSY: 'Another Portable environment is using shared files. Wait for its operation to finish, then retry.',
     DSH_PROFILE_COMPATIBILITY_FAILED: 'The new DeepSeek Harness version is incompatible with an existing plugin profile. The installed version was not changed; export a support report for details.',
     DATA_IMPORT_ROLLED_BACK: 'The data package was not applied because an imported plugin profile could not start. The previous data was restored; export a support report for details.',
     UPDATE_FAILED: 'The update could not be completed. The installation was left in a recoverable state; export a support report for details.',
