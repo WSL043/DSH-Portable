@@ -1,6 +1,6 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
-import { mkdtemp, mkdir, writeFile, rm, symlink } from 'node:fs/promises'
+import { mkdtemp, mkdir, writeFile, rm, symlink, realpath, unlink, rmdir } from 'node:fs/promises'
 import path from 'node:path'
 import os from 'node:os'
 import { inspectStoreReferences } from '../launcher/store-reference-inventory.mjs'
@@ -77,7 +77,15 @@ test('companion profile aliases require a recorded installation in the same envi
   await symlink(target, alias, process.platform === 'win32' ? 'junction' : 'dir')
   const result = await inspectStoreReferences(root, { parseYaml: JSON.parse })
   assert.equal(result.complete, true, JSON.stringify(result.blockers))
-  assert.deepEqual(result.environments[0].aliases, [{ path: alias, target }])
+  assert.deepEqual(result.environments[0].aliases, [{ path: alias, target: await realpath(target) }])
+  const linkedRoot = path.join(root, 'linked-root')
+  await symlink(root, linkedRoot, process.platform === 'win32' ? 'junction' : 'dir')
+  try {
+    const linked = await inspectStoreReferences(linkedRoot, { parseYaml: JSON.parse })
+    assert.equal(linked.complete, true, JSON.stringify(linked.blockers))
+  } finally {
+    await (process.platform === 'win32' ? rmdir(linkedRoot) : unlink(linkedRoot))
+  }
   await file(`${profiles}/web/node_modules/.pnpm/lock.yaml`, '{}')
   const untracked = await inspectStoreReferences(root, { parseYaml: JSON.parse })
   assert.equal(untracked.complete, false)

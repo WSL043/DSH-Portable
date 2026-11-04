@@ -242,8 +242,13 @@ export async function inspectStoreReferences(baseStateRoot, {
           const filename = path.join(modules, entry.name)
           if (!withinBudget(filename) || !entry.isSymbolicLink() || entry.name.startsWith('.')) { safe = false; break }
           const target = await realpath(filename)
-          const installation = state.installations.find(item => item.lock
-            && canonical(path.join(item.modules, entry.name)) === canonical(target))
+          let installation
+          for (const item of state.installations) {
+            if (item.lock && canonical(path.join(await realpath(item.modules), entry.name)) === canonical(target)) {
+              installation = item
+              break
+            }
+          }
           if (!installation) { safe = false; break }
           const importer = parseYaml(await readFile(installation.lock, 'utf8'))?.importers?.['.']
           if (!dependencyFields.some(field => Object.hasOwn(importer?.[field] ?? {}, entry.name))) { safe = false; break }
