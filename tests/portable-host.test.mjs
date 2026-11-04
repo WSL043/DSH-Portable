@@ -17,7 +17,7 @@ test('a failed official import retains a failed startup profile', { skip: proces
   await writeFile(entry, 'throw new Error("injected import failure")\n')
   const child = spawn(process.execPath, [host, entry], {
     env: { ...process.env, DSH_PORTABLE_CONTROL_PIPE: `\\\\.\\pipe\\dsh-failed-${randomUUID()}`,
-      DSH_PORTABLE_CONTROL_TOKEN: randomUUID(), DSH_PORTABLE_STATE_ROOT: temp,
+      DSH_PORTABLE_CONTROL_TOKEN: randomUUID(), DSH_PORTABLE_STATE_ROOT: temp, DSH_PORTABLE_STARTUP_PROFILE: '1',
       DSH_PORTABLE_STARTUP_ID: 'd'.repeat(32), DSH_PORTABLE_STARTUP_STARTED_AT: String(Date.now()) },
     stdio: 'ignore', windowsHide: true,
   })
