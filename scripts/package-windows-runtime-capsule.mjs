@@ -5,13 +5,16 @@ import { cp, mkdir, readdir, readFile, rm, stat, writeFile } from 'node:fs/promi
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
 
+import { ensureRuntimeCapsule } from '../launcher/runtime-capsule.mjs'
+
 import { createRuntimeCapsule, reuseRuntimeCapsule } from './create-runtime-capsule.mjs'
 
 export async function copyCapsuleShell(source, target) {
   await mkdir(target, { recursive: true })
   for (const entry of await readdir(source, { withFileTypes: true })) {
     if (['app', 'data', 'workspace', 'runtime-capsule.json'].includes(entry.name)) continue
-    await cp(path.join(source, entry.name), path.join(target, entry.name), { recursive: true, force: true })
+    await cp(path.join(source, entry.name), path.join(target, entry.name), { recursive: true, force: true,
+      filter: filename => filename !== path.join(source, 'runtime', 'prepared') })
   }
   // Mutable state never belongs in a distributable package. Recreate only the
   // empty portable roots even when the source stage has already been smoked.
@@ -68,6 +71,9 @@ export async function packageWindowsRuntimeCapsule(sourceStage, outputZip, optio
         manifestFile,
         { platform: 'win32', arch: 'x64', level: options.level },
       )
+    // Expand during packaging, while the capsule is already available and verified.
+    // ZIP extraction then installs the tree before the user opens the app.
+    await ensureRuntimeCapsule(stage, { env: { DSH_PORTABLE_RUNTIME_CACHE: path.join(stage, 'runtime', 'prepared') } })
     await mkdir(path.dirname(output), { recursive: true })
     const tar = spawnSync('tar.exe', ['-a', '-c', '-f', output, '-C', temporaryParent, 'DSH-Portable'], {
       stdio: 'inherit',

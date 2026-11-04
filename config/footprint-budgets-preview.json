@@ -2,7 +2,7 @@
   "schemaVersion": 1,
   "platforms": {
     "windows-x64": {
-      "archiveBytes": 160000000,
+      "archiveBytes": 270000000,
       "extractedBytes": 600000000,
       "files": 11000,
       "directories": 2950,

@@ -56,7 +56,7 @@ export function startSourceCache(portableRoot, runtimeRoot, env = process.env, o
       payload = pack.payload
       fromPack = true
       for (const entry of pack.entries) {
-        sources.set(path.resolve(canonicalRoot, ...entry.path.split('/')), { offset: entry.offset, end: entry.end })
+        sources.set(path.resolve(canonicalRoot, ...entry.path.split('/')), { offset: entry.offset, end: entry.end, format: entry.format })
         result.files++
         result.bytes += entry.end - entry.offset
       }
@@ -68,10 +68,14 @@ export function startSourceCache(portableRoot, runtimeRoot, env = process.env, o
       if (payload.subarray(0, 8).toString('ascii') !== 'DSHPACK1') throw new Error('capsule-format')
       const headerLength = payload.readUInt32LE(8)
       const header = JSON.parse(payload.subarray(12, 12 + headerLength).toString('utf8'))
+      const scopes = new Map()
       let offset = 12 + headerLength
       for (const entry of header.files) {
         const end = offset + entry.size
         if (!Number.isSafeInteger(entry.size) || entry.size < 0 || end > payload.length) throw new Error('capsule-entry')
+        if (entry.path.endsWith('/package.json')) {
+          try { scopes.set(path.posix.dirname(entry.path), JSON.parse(payload.toString('utf8', offset, end)).type ?? 'commonjs') } catch { scopes.set(path.posix.dirname(entry.path), null) }
+        }
         if (entry.path.startsWith('app/node_modules/') && /\.(?:mjs|cjs|js|json)$/.test(entry.path)
           && !entry.path.split('/').some(part => part === '..' || part === '.')) {
           const filename = path.resolve(canonicalRoot, ...entry.path.split('/'))
@@ -84,20 +88,35 @@ export function startSourceCache(portableRoot, runtimeRoot, env = process.env, o
         }
         offset = end
       }
+      for (const entry of sourceRanges) {
+        if (!entry.path.endsWith('.js')) continue
+        for (let directory = path.posix.dirname(entry.path); directory.startsWith('app/node_modules/'); directory = path.posix.dirname(directory)) {
+          if (scopes.has(directory)) {
+            const format = scopes.get(directory)
+            if (format === 'commonjs' || format === 'module') {
+              entry.format = format
+              sources.get(entry.filename).format = format
+            }
+            break
+          }
+          if (directory.endsWith('/node_modules')) break
+        }
+      }
     }
     hook = registerHooks({ load(url, context, nextLoad) {
       const attributes = context.importAttributes || {}
       const standardAttributes = context.format === 'json'
         ? attributes.type === 'json' && Object.keys(attributes).length === 1
         : Object.keys(attributes).length === 0
-      if (standardAttributes && url.startsWith('file:') && ['module', 'commonjs', 'json'].includes(context.format)) {
+      if (standardAttributes && url.startsWith('file:')) {
         const filename = fileURLToPath(url)
         const range = sources.get(filename)
-        if (range !== undefined) {
+        const format = context.format ?? range?.format
+        if (range !== undefined && ['module', 'commonjs', 'json'].includes(format)) {
           result.hits++
           result.servedBytes += range.end - range.offset
           if (!fromPack) loaded.add(filename)
-          return { format: context.format, source: payload.toString('utf8', range.offset, range.end), shortCircuit: true }
+          return { format, source: payload.toString('utf8', range.offset, range.end), shortCircuit: true }
         }
       }
       return nextLoad(url, context)
@@ -108,7 +127,7 @@ export function startSourceCache(portableRoot, runtimeRoot, env = process.env, o
         if (loaded.size < 50) return
         const chosen = sourceRanges.filter(item => loaded.has(item.filename))
         const copies = chosen.map(item => Buffer.from(payload.subarray(item.offset, item.end)))
-        writePack(packFile, cacheDir, manifest.sha256, chosen.map(item => item.path), copies)
+        writePack(packFile, cacheDir, manifest.sha256, chosen.map(item => ({ path: item.path, format: item.format })), copies)
       }
     }
     result.status = 'ready'
@@ -139,7 +158,8 @@ function readPack(packFile, capsuleSha) {
       if (!Number.isSafeInteger(entry.size) || entry.size < 0 || end > payload.length
         || typeof entry.path !== 'string' || !entry.path.startsWith('app/node_modules/')
         || entry.path.split('/').some(part => part === '..' || part === '.' || part === '')) return null
-      entries.push({ path: entry.path, offset, end })
+      if (entry.format !== undefined && !['module', 'commonjs'].includes(entry.format)) return null
+      entries.push({ path: entry.path, offset, end, format: entry.format })
       offset = end
     }
     return { payload, entries }
@@ -147,7 +167,7 @@ function readPack(packFile, capsuleSha) {
 }
 
 function writePack(packFile, cacheDir, capsuleSha, paths, buffers) {
-  const header = Buffer.from(JSON.stringify({ files: paths.map((p, index) => ({ path: p, size: buffers[index].length })) }))
+  const header = Buffer.from(JSON.stringify({ files: paths.map((entry, index) => ({ ...entry, size: buffers[index].length })) }))
   const length = Buffer.alloc(4)
   length.writeUInt32LE(header.length)
   const raw = Buffer.concat([Buffer.from(PACK_MAGIC), length, header, ...buffers])

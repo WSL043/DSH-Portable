@@ -431,3 +431,22 @@ test('capsule preflight rejects an unowned or redirected cache before leasing, e
     }
   }
 })
+
+test('packaged capsule preflight uses only the staged verified tree', async () => {
+  const fixture = await createPreflightFixture()
+  const runtimeRoot = path.join(fixture.stagedRoot, 'runtime', 'prepared', 'c'.repeat(64))
+  try {
+    await writePreparedCapsule(fixture.stagedRoot, runtimeRoot)
+    await writeJson(path.join(fixture.layout.dshHome, 'profiles', 'web', 'package.json'), {})
+    let leased = false
+    const result = await preflightStagedDshProfiles({
+      layout: fixture.layout, stagedRoot: fixture.stagedRoot,
+      metadata: { kind: 'dsh-runtime-capsule', dshVersion: '0.2.0-rc.1', portableVersion: '0.8.0' },
+      ensureCapsule: async () => ({ mode: 'capsule', runtimeRoot, packaged: true }),
+      acquireLease: async root => { assert.equal(root, runtimeRoot); leased = true; return async () => {} },
+      run: targetNodeRunner(),
+    })
+    assert.equal(result.status, 'passed')
+    assert.equal(leased, true)
+  } finally { await rm(fixture.root, { recursive: true, force: true }) }
+})

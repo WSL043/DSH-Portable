@@ -236,11 +236,11 @@ export async function preflightStagedDshProfiles({
         || !/^[a-f0-9]{64}$/.test(String(manifest.sha256 ?? ''))) {
         throw new Error('The staged compact runtime has no valid cache identity.')
       }
-      const configuredRoot = path.resolve(paths.cacheParent, manifest.sha256)
+      const cacheRoot = prepared.packaged ? path.resolve(stagedRoot, 'runtime', 'prepared') : path.resolve(paths.cacheParent)
+      const configuredRoot = path.join(cacheRoot, manifest.sha256)
       if (typeof prepared.runtimeRoot !== 'string' || path.relative(configuredRoot, path.resolve(prepared.runtimeRoot)) !== '') {
         throw new Error('The prepared compact runtime is outside its expected cache identity.')
       }
-      const cacheRoot = path.resolve(paths.cacheParent)
       const cacheDirectory = path.basename(cacheRoot)
       if (!cacheDirectory) throw new Error('The runtime cache must be a directory below its selected parent.')
       // Include the selected cache directory in the checked descendants, so the

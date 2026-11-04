@@ -524,6 +524,15 @@ test('Windows component and product archives contain the identical prepared caps
     await mkdir(extractedProduct)
     execFileSync('tar.exe', ['-x', '-f', component, '-C', extractedComponent], { windowsHide: true })
     execFileSync('tar.exe', ['-x', '-f', product, '-C', extractedProduct], { windowsHide: true })
+    const productRoot = path.join(extractedProduct, 'DSH-Portable')
+    const opened = await ensureRuntimeCapsule(productRoot, { env: {} })
+    assert.equal(opened.packaged, true)
+    assert.equal(opened.reused, true)
+    assert.equal(opened.runtimeRoot, path.join(productRoot, 'runtime', 'prepared', productResult.runtimeSha256))
+    const moved = path.join(parent, 'moved-product')
+    await rename(productRoot, moved)
+    assert.equal((await ensureRuntimeCapsule(moved, { env: {} })).packaged, true)
+    await rename(moved, productRoot)
     assert.deepEqual(
       await readFile(path.join(extractedComponent, 'runtime', 'DSH-App.dshpack')),
       await readFile(path.join(extractedProduct, 'DSH-Portable', 'runtime', 'DSH-App.dshpack')),
@@ -768,4 +777,33 @@ test('legacy control preserves the configured cache alias used in process comman
   await symlink(cache, alias, process.platform === 'win32' ? 'junction' : 'dir')
   await writeFile(path.join(cache, hash+'.lease.12345.'+token+'.json'), JSON.stringify({schemaVersion:1,pid:12345,token}))
   assert.equal(await resolveControlRuntimeRoot(root,{pid:12345},{DSH_PORTABLE_RUNTIME_CACHE:alias}),path.join(alias,hash))
+})
+
+
+test('packaged runtime keeps an explicit cache override and recovers an unavailable bundled tree', async t => {
+  const { parent, root, app } = await fixture()
+  try {
+    const manifest = await createRuntimeCapsule(app, path.join(root, 'runtime/DSH-App.dshpack'), path.join(root, 'runtime-capsule.json'), {
+      platform: process.platform, arch: process.arch, level: 1,
+    })
+    const bundled = path.join(root, 'runtime/prepared')
+    await ensureRuntimeCapsule(root, { env: { DSH_PORTABLE_RUNTIME_CACHE: bundled } })
+    const opened = await ensureRuntimeCapsule(root, { env: {} })
+    assert.equal(opened.packaged, true)
+    const cache = path.join(parent, 'selected-cache')
+    const overridden = await ensureRuntimeCapsule(root, { env: { DSH_PORTABLE_RUNTIME_CACHE: cache } })
+    assert.equal(overridden.runtimeRoot, path.join(cache, manifest.sha256))
+    assert.equal(overridden.packaged, undefined)
+    const realOpen = fsPromises.open
+    const mocked = t.mock.method(fsPromises, 'open', async (filename, ...args) => {
+      if (String(filename).startsWith(bundled + path.sep)) throw Object.assign(new Error('read-only product'), { code: 'EACCES' })
+      return realOpen(filename, ...args)
+    })
+    syncBuiltinESMExports()
+    t.after(() => { mocked.mock.restore(); syncBuiltinESMExports() })
+    const fallback = await ensureRuntimeCapsule(root, { env: { LOCALAPPDATA: path.join(parent, 'local') } })
+    assert.equal(fallback.packaged, undefined)
+    assert.equal(fallback.reused, false)
+    assert.ok(fallback.runtimeRoot.startsWith(path.join(parent, 'local')))
+  } finally { await rm(parent, { recursive: true, force: true }) }
 })

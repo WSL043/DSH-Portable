@@ -581,6 +581,20 @@ export async function ensureRuntimeCapsule(root, options = {}) {
   if (manifest.arch && manifest.arch !== process.arch) throw new Error('Runtime capsule does not match this CPU architecture.')
   const capsuleFile = path.join(paths.portableRoot, manifest.filename)
   const target = path.join(paths.cacheParent, manifest.sha256)
+  // Full ZIPs can carry the verified tree so their first launch only opens it.
+  // An explicit cache selection keeps its existing isolation semantics.
+  if (!(options.env ?? process.env).DSH_PORTABLE_RUNTIME_CACHE) {
+    const packagedRoot = path.join(paths.portableRoot, 'runtime', 'prepared', manifest.sha256)
+    try {
+      const marker = await safeDataTarget(paths.portableRoot, `runtime/prepared/${manifest.sha256}/${READY_FILE}`, { createParents: false })
+      if (marker && await readyRuntime(packagedRoot, manifest)) {
+        // Read-only distributions use the ordinary writable cache instead.
+        const release = await acquireRuntimeLease(packagedRoot)
+        await release()
+        return { mode: 'capsule', runtimeRoot: packagedRoot, reused: true, manifest, packaged: true }
+      }
+    } catch { /* Missing, redirected or unwritable packaged trees fall back to the cache. */ }
+  }
   if (await readyRuntime(target, manifest)) return { mode: 'capsule', runtimeRoot: target, reused: true, manifest }
 
   if (!await waitForMissing(runtimeGcLock(paths.cacheParent, manifest.sha256), options.waitMs)) {

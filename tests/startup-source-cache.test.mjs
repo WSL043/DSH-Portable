@@ -13,13 +13,13 @@ test('startup cache preserves ESM, CommonJS and JSON, leaves profile files alone
   try {
     const app = path.join(root, 'build')
     await mkdir(path.join(app, 'node_modules', 'fixture'), { recursive: true })
-    const sources = { 'package.json': '{"type":"module"}', 'main.mjs': 'export default 41', 'legacy.cjs': 'module.exports = 7', 'data.json': '{"answer":42}' }
-    for (const [name, source] of Object.entries(sources)) await writeFile(path.join(app, 'node_modules', 'fixture', name), source)
+    const sources = { 'package.json': '{"type":"module"}', 'main.mjs': 'export default 41', 'legacy.cjs': 'module.exports = require("./nested/main.js")', 'nested/package.json': '{}', 'nested/main.js': 'module.exports = require("./child.js")', 'nested/child.js': 'module.exports = 7', 'esm.js': 'export default 43', 'data.json': '{"answer":42}' }
+    for (const [name, source] of Object.entries(sources)) { await mkdir(path.dirname(path.join(app, 'node_modules', 'fixture', name)), {recursive:true}); await writeFile(path.join(app, 'node_modules', 'fixture', name), source) }
     const manifest = await createRuntimeCapsule(app, path.join(root, 'runtime/DSH-App.dshpack'), path.join(root, 'runtime-capsule.json'), { level: 1 })
     const runtime = path.join(root, manifest.sha256)
     const target = path.join(runtime, 'app/node_modules/fixture')
     await mkdir(target, { recursive: true })
-    for (const [name, source] of Object.entries(sources)) await writeFile(path.join(target, name), name === 'package.json' ? source : name === 'data.json' ? '{"answer":0}' : 'throw Error("disk source read")')
+    for (const [name, source] of Object.entries(sources)) { await mkdir(path.dirname(path.join(target, name)), {recursive:true}); await writeFile(path.join(target, name), name.endsWith('package.json') ? source : name === 'data.json' ? '{"answer":0}' : 'throw Error("disk source read")') }
     const mutable = path.join(root, 'profile.mjs')
     await writeFile(mutable, 'export default 99')
     const alias = path.join(root, 'root-alias')
@@ -33,7 +33,8 @@ test('startup cache preserves ESM, CommonJS and JSON, leaves profile files alone
       assert.equal((await import(${JSON.stringify(pathToFileURL(path.join(target, 'data.json')).href)},{with:{type:'json'}})).default.answer,42);
       assert.equal((await import(${JSON.stringify(pathToFileURL(mutable).href)})).default,99);
       await assert.rejects(import(${JSON.stringify(pathToFileURL(path.join(target, 'data.json')).href + '?no-attribute')}),{code:'ERR_IMPORT_ATTRIBUTE_MISSING'});
-      assert.equal(cache.finish().hits,3);
+      assert.equal((await import(${JSON.stringify(pathToFileURL(path.join(target, 'esm.js')).href)})).default,43);
+      assert.equal(cache.finish().hits,6);
       await assert.rejects(import(${JSON.stringify(pathToFileURL(path.join(target, 'main.mjs')).href + '?after')}),/disk source read/);`
     execFileSync(process.execPath, ['--input-type=module', '-e', code], { windowsHide: true })
     await writeFile(path.join(root, 'runtime/DSH-App.dshpack'), 'damaged')
@@ -67,22 +68,22 @@ test('modules loaded by one start are packed for the next, which skips the capsu
     const app = path.join(root, 'build')
     const modules = path.join(app, 'node_modules', 'fixture')
     await mkdir(modules, { recursive: true })
-    await writeFile(path.join(modules, 'package.json'), '{"type":"module"}')
+    await writeFile(path.join(modules, 'package.json'), '{}')
     // 60 small modules: the pack is only worth writing for a real start, which loads hundreds.
-    for (let index = 0; index < 60; index++) await writeFile(path.join(modules, `m${index}.mjs`), `export default ${index}`)
+    for (let index = 0; index < 60; index++) await writeFile(path.join(modules, `m${index}.js`), `module.exports = ${index}`)
     const manifest = await createRuntimeCapsule(app, path.join(root, 'runtime/DSH-App.dshpack'), path.join(root, 'runtime-capsule.json'), { level: 1 })
     const runtime = path.join(root, manifest.sha256)
     const target = path.join(runtime, 'app/node_modules/fixture')
     await mkdir(target, { recursive: true })
-    await writeFile(path.join(target, 'package.json'), '{"type":"module"}')
+    await writeFile(path.join(target, 'package.json'), '{}')
     // The disk copies differ so every served value proves where the bytes came from.
-    for (let index = 0; index < 60; index++) await writeFile(path.join(target, `m${index}.mjs`), `export default -${index}`)
+    for (let index = 0; index < 60; index++) await writeFile(path.join(target, `m${index}.js`), `module.exports = -${index}`)
     const cacheDir = path.join(root, 'data', 'cache')
     const driver = (extra = '', env = {}) => `import assert from 'node:assert/strict';
       import {startSourceCache} from ${JSON.stringify(new URL('../launcher/startup-source-cache.mjs', import.meta.url).href)};
       const cache=startSourceCache(${JSON.stringify(root)},${JSON.stringify(runtime)},${JSON.stringify(env)},{cacheDir:${JSON.stringify(cacheDir)}});
       console.log(JSON.stringify(cache.result));
-      for (let i=0;i<60;i++) assert.equal((await import(${JSON.stringify(pathToFileURL(target).href + '/m')}+i+'.mjs')).default, i);
+      for (let i=0;i<60;i++) assert.equal((await import(${JSON.stringify(pathToFileURL(target).href + '/m')}+i+'.js')).default, i);
       ${extra}
       console.log(JSON.stringify(cache.finish()));
       await new Promise(resolve => setTimeout(resolve, 500));`
