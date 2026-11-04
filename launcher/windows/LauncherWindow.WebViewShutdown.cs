@@ -201,13 +201,7 @@ namespace DshPortable
                 exitEventObserved = exited != null && exited.IsCompleted;
                 if (exitEventObserved || remaining.Count == 0)
                 {
-                    closingEnvironment.BrowserProcessExited -= OnWebViewBrowserProcessExited;
-                    webViewEnvironment = null;
-                    webViewBrowserExited = null;
-                    ownedWebViewBrowserProcessId = 0;
-                    WriteLauncherLog("shutdown-webview", exitEventObserved
-                        ? "browser-process-exited"
-                        : "process-tree-empty-without-event");
+                    CompleteWebViewShutdown(closingEnvironment, exitEventObserved);
                     return;
                 }
 
@@ -222,10 +216,15 @@ namespace DshPortable
 
                     await Task.Delay(Math.Max(0, Math.Min(250, timeoutMs - (int)shutdownClock.ElapsedMilliseconds)));
                     if (exited != null && exited.IsCompleted) { exitEventObserved = true; continue; }
-                    remainingMs = timeoutMs - (int)shutdownClock.ElapsedMilliseconds;
-                    if (remainingMs <= 0) break;
-                    remaining = await InspectWebViewForShutdownAsync(remainingMs, exited);
-                    if (exited != null && exited.IsCompleted) { exitEventObserved = true; continue; }
+                    // A kill request can finish at the original deadline. Still take one
+                    // bounded fresh snapshot: retained PIDs may be stale, or new children may exist.
+                    remaining = await InspectWebViewForShutdownAsync(5000, exited);
+                    exitEventObserved = exited != null && exited.IsCompleted;
+                    if (exitEventObserved || remaining.Count == 0)
+                    {
+                        CompleteWebViewShutdown(closingEnvironment, exitEventObserved);
+                        return;
+                    }
                     if (remaining.Count > 0 && PortableProcessJob.IsActive)
                     {
                         WriteLauncherLog("shutdown-webview", "job-close-requested remaining="
@@ -251,6 +250,16 @@ namespace DshPortable
                 + "\r\n\r\nOwned WebView2 processes still hold the portable folder:\r\n"
                 + String.Join("\r\n", remaining);
             throw new TimeoutException(details);
+        }
+
+        private void CompleteWebViewShutdown(CoreWebView2Environment closingEnvironment, bool exitEventObserved)
+        {
+            closingEnvironment.BrowserProcessExited -= OnWebViewBrowserProcessExited;
+            webViewEnvironment = null;
+            webViewBrowserExited = null;
+            ownedWebViewBrowserProcessId = 0;
+            WriteLauncherLog("shutdown-webview", exitEventObserved
+                ? "browser-process-exited" : "process-tree-empty-without-event");
         }
 
         private void ExitOwnedTreeForShutdown()

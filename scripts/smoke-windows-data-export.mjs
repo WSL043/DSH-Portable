@@ -509,13 +509,20 @@ try {
   await waitForValue(client, clickButton(['确认导入', 'Confirm import']), value => value?.clicked, 'import package inspection')
   await waitForValue(client, `Boolean([...document.querySelectorAll('[role="dialog"]')].find(item => /确认导入|Confirm import/.test(item.textContent || '')))`, Boolean, 'import confirmation dialog')
   await capture(client, '06-import-confirm-modal.png')
+  const importLogFile = path.join(root, 'data', 'logs', 'launcher.log')
+  const importLogStart = (await readFile(importLogFile, 'utf8').catch(() => '')).length
   await waitForValue(client, clickButton(['重启并导入', 'Restart and import']), value => value?.clicked, 'restart and import')
   const initialClientExceptions = client.exceptions
   const previousWebSocketDebuggerUrl = page.webSocketDebuggerUrl
   client.close()
   const importedMarker = path.join(root, 'data', 'dsh-home', '.agent-presets', 'import-smoke', 'agent.cordis.yml')
   const importDeadline = Date.now() + 120000
-  while (!existsSync(importedMarker) && Date.now() < importDeadline) await new Promise(resolve => setTimeout(resolve, 200))
+  while (!existsSync(importedMarker) && Date.now() < importDeadline) {
+    const importLog = (await readFile(importLogFile, 'utf8').catch(() => '')).slice(importLogStart)
+    const failed = importLog.match(/\[data-import\] failed [^\r\n]+/)
+    if (failed) throw new Error('Native import stopped before applying data: ' + failed[0])
+    await new Promise(resolve => setTimeout(resolve, 200))
+  }
   assert.equal(await readFile(importedMarker, 'utf8'), 'name: imported-by-native-ui-smoke\n')
   // Dependency restoration may legitimately consume the bounded 180-second
   // install window before the native host can restart the imported profile.

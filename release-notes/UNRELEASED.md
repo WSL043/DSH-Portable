@@ -2,9 +2,13 @@
 
 ## 未发布维护 / Unreleased maintenance
 
-- Windows 任务栏和通知区域使用无底色的白色鲸鱼图标，改善深色背景下的辨识度。感谢 [crazyrainman 的反馈](https://github.com/WSL043/DSH-Portable/discussions/39#discussioncomment-19370243)。
+- 修复 Windows 自有 WebView2 进程结束后仍使用旧 PID 快照误报超时的问题；安全终止请求后补一次有界检查，继续核对进程归属，不扩大终止范围。数据导入验收在原生阶段失败时直接报告真实阶段。
 
-- The Windows taskbar and notification area use a white whale on a transparent background for better visibility on dark backgrounds. Thanks to [crazyrainman for the report](https://github.com/WSL043/DSH-Portable/discussions/39#discussioncomment-19370243).
+- Recheck the owned WebView2 process tree after a bounded shutdown request instead of reporting a timeout from stale PIDs. Ownership checks and termination scope stay unchanged. Native import checks now report an early native failure at its actual stage.
+
+- Windows 任务栏和通知区域使用无底色的白色鲸鱼图标，增加细深色轮廓，兼顾浅色与深色背景的辨识度。感谢 [crazyrainman 的反馈](https://github.com/WSL043/DSH-Portable/discussions/39#discussioncomment-19370243)。
+
+- The Windows taskbar and notification area use a white whale with a thin dark outline on a transparent background, keeping it visible on light and dark backgrounds. Thanks to [crazyrainman for the report](https://github.com/WSL043/DSH-Portable/discussions/39#discussioncomment-19370243).
 
 - 新版本不再默认安装 Image Viewer 和 Chat Manager；已有安装、配置与启停状态保持不变，可按需通过官方插件管理安装。
 

@@ -629,6 +629,7 @@ namespace DshPortable
             }
             catch (Exception error)
             {
+                WriteLauncherLog("data-import", "failed type=" + error.GetBaseException().GetType().Name);
                 string failure = L("数据导入失败。\r\n", "Data import failed.\r\n") + error.GetBaseException().Message;
                 try
                 {
