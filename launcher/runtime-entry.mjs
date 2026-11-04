@@ -140,6 +140,7 @@ try {
   )
 } catch { /* diagnostics must never prevent the product from starting */ }
 process.env.DSH_PORTABLE_RUNTIME_ROOT = prepared.runtimeRoot
+process.env.DSH_PORTABLE_RUNTIME_FRESH = prepared.mode === 'capsule' && !prepared.reused ? '1' : '0'
 process.argv = [process.execPath, path.join(root, 'launcher', entryName), ...forwarded]
 const release = prepared.mode === 'capsule' ? await acquireRuntimeLease(prepared.runtimeRoot) : async () => {}
 

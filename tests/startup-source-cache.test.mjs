@@ -41,6 +41,16 @@ test('startup cache preserves ESM, CommonJS and JSON, leaves profile files alone
     assert.equal(corrupt.result.status, 'fallback')
     assert.equal(corrupt.result.reason, 'capsule-integrity')
     corrupt.finish()
+    // A fresh runtime was already verified during extraction. Reading the
+    // capsule again is unnecessary; an explicit diagnostic request still reads it.
+    const fresh = startSourceCache(root, runtime, { DSH_PORTABLE_RUNTIME_FRESH: '1' })
+    assert.equal(fresh.result.status, 'skipped')
+    assert.equal(fresh.result.reason, 'fresh-runtime')
+    fresh.finish()
+    const forced = startSourceCache(root, runtime, { DSH_PORTABLE_RUNTIME_FRESH: '1', DSH_PORTABLE_STARTUP_SOURCE_CACHE: '1' })
+    assert.equal(forced.result.status, 'fallback')
+    assert.equal(forced.result.reason, 'capsule-integrity')
+    forced.finish()
   } finally { await rm(root, { recursive: true, force: true }) }
 })
 
@@ -68,9 +78,9 @@ test('modules loaded by one start are packed for the next, which skips the capsu
     // The disk copies differ so every served value proves where the bytes came from.
     for (let index = 0; index < 60; index++) await writeFile(path.join(target, `m${index}.mjs`), `export default -${index}`)
     const cacheDir = path.join(root, 'data', 'cache')
-    const driver = (extra = '') => `import assert from 'node:assert/strict';
+    const driver = (extra = '', env = {}) => `import assert from 'node:assert/strict';
       import {startSourceCache} from ${JSON.stringify(new URL('../launcher/startup-source-cache.mjs', import.meta.url).href)};
-      const cache=startSourceCache(${JSON.stringify(root)},${JSON.stringify(runtime)},{},{cacheDir:${JSON.stringify(cacheDir)}});
+      const cache=startSourceCache(${JSON.stringify(root)},${JSON.stringify(runtime)},${JSON.stringify(env)},{cacheDir:${JSON.stringify(cacheDir)}});
       console.log(JSON.stringify(cache.result));
       for (let i=0;i<60;i++) assert.equal((await import(${JSON.stringify(pathToFileURL(target).href + '/m')}+i+'.mjs')).default, i);
       ${extra}
@@ -89,6 +99,7 @@ test('modules loaded by one start are packed for the next, which skips the capsu
     assert.equal(second[0].status, 'ready')
     assert.equal(second[0].source, 'pack')
     assert.equal(second[1].hits, 60)
+    assert.equal(run(driver('', { DSH_PORTABLE_RUNTIME_FRESH: '1' }))[0].source, 'pack')
     // A modified pack fails its hash check, and with no capsule the cache then steps aside entirely.
     const packFile = path.join(cacheDir, names.find(name => name.endsWith('.pack')))
     const bytes = readFileSync(packFile)

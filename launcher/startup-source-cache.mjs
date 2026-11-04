@@ -46,6 +46,12 @@ export function startSourceCache(portableRoot, runtimeRoot, env = process.env, o
     const sourceRanges = []
 
     const pack = packFile ? readPack(packFile, manifest.sha256) : null
+    // A newly extracted runtime is already hot in the filesystem cache. Avoid
+    // inflating the whole capsule again before the first workspace can open.
+    if (!pack && env.DSH_PORTABLE_RUNTIME_FRESH === '1' && env.DSH_PORTABLE_STARTUP_SOURCE_CACHE !== '1') {
+      result.reason = 'fresh-runtime'
+      return { result, finish }
+    }
     if (pack) {
       payload = pack.payload
       fromPack = true

@@ -98,3 +98,10 @@ back to a plain write where links are unavailable (FAT/exFAT, restricted volumes
 needs 184 MB less disk. Parallel versus single-threaded links made no difference. Not done: linking unchanged files from the previous runtime
 cache on update (alpha.3 -> alpha.4 would link 35,351 files and write 379); it would save about 3 s more but needs a stored index of the old cache.
 Also not done: removing the duplicates at build time by hoisting (junctions change how nested packages resolve their own dependencies).
+
+## 2026-11-04 startup path
+
+Detailed V8 and module profiling is opt-in with `DSH_PORTABLE_STARTUP_PROFILE=1`; basic phase timings and runtime health remain enabled.
+A freshly verified/extracted runtime without a learned source pack uses its already-written files, avoiding a second full-capsule inflation. Existing learned packs remain preferred. The next reused-runtime start can learn a pack through the existing integrity-checked capsule path. `DSH_PORTABLE_STARTUP_SOURCE_CACHE=1` forces that path for diagnostics.
+
+On this Windows PC, an isolated copy of the installed 0.9.9/rc.5 product reproduced an 8,448 ms first start with an empty runtime cache. The controlled duplicate-inflation comparison (same copied plugin profile, detailed profiling disabled in both) was 7,440 ms with source-cache inflation versus 7,032 ms without it. The integrated candidate reached interactive-ready in 6,986 ms for a new runtime, 2,781 ms while learning its source pack on the next start, and 2,335 ms with the learned pack. These are process-start timings with an existing OS filesystem cache, not a reboot/disk-cache-flush benchmark. The copied profile omitted credentials and disabled external phone/control connections. No same-condition official-desktop comparison was performed.

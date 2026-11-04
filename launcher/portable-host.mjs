@@ -119,8 +119,10 @@ const sourceCache = startSourceCache(path.resolve(path.dirname(fileURLToPath(imp
   cacheDir: stateRoot ? path.join(path.resolve(stateRoot), 'data', 'cache') : null,
 })
 appendStartupTrace(startupTrace, 'portable-host', 'startup-source-cache-ready', sourceCache.result)
-const finishStartupProfile = await startStartupProfile(logDirectory, startupTrace?.startupId || '',
-  progress => healthPhase(null, progress))
+// Detailed V8/module profiling is diagnostic work, not part of a normal start.
+const finishStartupProfile = process.env.DSH_PORTABLE_STARTUP_PROFILE === '1'
+  ? await startStartupProfile(logDirectory, startupTrace?.startupId || '', progress => healthPhase(null, progress))
+  : async () => {}
 appendStartupTrace(startupTrace, 'portable-host', 'official-dsh-import-begin')
 healthPhase('official-dsh-import')
 const importStartedAt = performance.now()
