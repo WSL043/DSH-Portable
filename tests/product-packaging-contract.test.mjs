@@ -534,6 +534,9 @@ test('desktop icons are derived from the pinned official DSH mark', async () => 
 
   const svg = await read('assets/DSH-Portable.svg')
   const renderer = await read('scripts/render-icons.mjs')
+  const windowsSvg = await read('assets/DSH-Portable-white.svg')
+  assert.equal(windowsSvg.match(/ d="([^"]+)"/)[1], svg.match(/ d="([^"]+)"/)[1], 'the whale geometry stays unchanged')
+  assert.doesNotMatch(windowsSvg, /<(?:rect|circle|ellipse|polygon)\b/i, 'the Windows whale has no pedestal')
   assert.match(svg, /viewBox="0 0 50 50"/)
   assert.match(svg, /path\s*\{\s*fill:\s*#fff;/)
   assert.match(svg, /fill="#000"/)
@@ -549,13 +552,20 @@ test('desktop icons are derived from the pinned official DSH mark', async () => 
   assert.deepEqual(frames.map(({ width }) => width), [16, 20, 24, 32, 40, 48, 64, 128, 256])
   for (const { rows, cornerAlphas } of frames) {
     assert.deepEqual(cornerAlphas, [0, 0, 0, 0], 'every Windows icon size must have transparent corners')
-    let hasOpaqueWhite = false
+    let opaqueWhite = 0
+    let opaqueOutline = 0
+    let hasContrast = false
     for (let pixel = 0; pixel < rows.length; pixel += 4) {
-      if (rows[pixel + 3] !== 255) continue
-      assert.equal(rows.readUIntBE(pixel, 3), 0xffffff, 'the Windows mark must be white')
-      hasOpaqueWhite = true
+      const [red, green, blue, alpha] = rows.subarray(pixel, pixel + 4)
+      if (alpha >= 64 && Math.max(red, green, blue) <= 192) hasContrast = true
+      if (alpha !== 255) continue
+      if (rows.readUIntBE(pixel, 3) === 0xffffff) { opaqueWhite++; continue }
+      assert.ok(red >= 48 && green >= 52 && blue >= 59 && red <= green && green <= blue && blue - red <= 11,
+        'opaque edges may only blend the neutral dark outline with the white body')
+      opaqueOutline++
     }
-    assert.ok(hasOpaqueWhite, 'the Windows mark must be visible')
+    assert.ok(opaqueWhite > opaqueOutline, 'the whale body must remain predominantly white')
+    assert.ok(hasContrast, 'every size needs a visible outline on a light taskbar')
   }
 })
 
