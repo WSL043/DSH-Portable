@@ -13,8 +13,8 @@ import { pathToFileURL } from 'node:url'
 import { loadOfficialProfileBundles } from './official-profile-bundles.mjs'
 
 export const OFFICIAL_MARKET_BUNDLE = '@deepseek-ai/dsh-experimental-plugin-market-bundle'
-// A raw.githubusercontent.com file is served without a redirect, which the official market requires of an index.
-export const AWESOME_INDEX_URL = 'https://raw.githubusercontent.com/WSL043/DSH-Portable-Updates/market-index/awesome-index.json'
+// The CDN serves the public official-format index without redirects, including on networks that cannot reach GitHub raw.
+export const AWESOME_INDEX_URL = 'https://cdn.jsdelivr.net/gh/WSL043/DSH-Portable-Updates@market-index/awesome-index.json'
 const STATE_FILE = '.dsh-portable-official-market.json'
 const PLUGIN_MARKET_ROW = /^-[ \t]+id:[ \t]*['"]?plugin-market['"]?[ \t]*$/mu
 

@@ -28,6 +28,7 @@ async function bed(t, { shipped = true, bundles = ['dsh-image-viewer'], patch, f
 
 test('a profile on a core that ships the market gets the bundle and the Awesome index once', async t => {
   const { layout, manifest, patchText } = await bed(t, { patch: '# first run\n[]\n' })
+  assert.equal(AWESOME_INDEX_URL, 'https://cdn.jsdelivr.net/gh/WSL043/DSH-Portable-Updates@market-index/awesome-index.json')
   const first = await ensureOfficialMarket(layout)
   assert.deepEqual(first, { status: 'configured', actions: ['enabled-bundle', 'added-index'] })
   assert.deepEqual((await manifest()).dsh.profile.bundles, ['dsh-image-viewer', OFFICIAL_MARKET_BUNDLE])
