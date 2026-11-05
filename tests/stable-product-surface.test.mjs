@@ -24,8 +24,8 @@ test('stable desktop bridge has no Portable extensions surface or built-in entri
 
 test('current support surfaces list only packages that are still published', async () => {
   const [readme, englishReadme, bugReport] = await Promise.all([
+    read('README.zh-CN.md'),
     read('README.md'),
-    read('README.en.md'),
     read('.github/ISSUE_TEMPLATE/bug-report.yml'),
   ])
 

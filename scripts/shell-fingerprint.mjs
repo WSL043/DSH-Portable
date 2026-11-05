@@ -26,7 +26,7 @@ export async function computeShellFingerprint(root, platform) {
   const shared = (await readdir(path.join(root, 'launcher'), { withFileTypes: true }))
     .filter((entry) => entry.isFile() && entry.name.endsWith('.mjs'))
     .map((entry) => `launcher/${entry.name}`)
-  const files = [...shared, ...await filesBelow(root, platformDirectories[platform])].sort()
+  const files = [...shared, 'desktop-bridge/locales.json', ...await filesBelow(root, platformDirectories[platform])].sort()
   const digest = createHash('sha256')
   for (const filename of files) {
     digest.update(filename)

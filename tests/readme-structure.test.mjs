@@ -8,6 +8,17 @@ const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..')
 const read = (name) => readFile(path.join(root, name), 'utf8')
 const exists = async (filename) => access(filename).then(() => true, () => false)
 
+test('localized README entries remain reachable from the English default', async () => {
+  const english = await read('README.md')
+  for (const locale of ['zh-CN', 'ja', 'es', 'fr', 'de', 'ru', 'pt-BR']) {
+    const name = `README.${locale}.md`
+    assert.ok(english.includes(name), name)
+    const document = await read(name)
+    for (const target of relativeTargets(document)) assert.ok(await exists(target.split(/[?#]/, 1)[0]), target)
+  }
+  assert.match(await read('README.en.md'), /\]\(README\.md\)/)
+})
+
 function readmeDownloadNames(source) {
   return new Set([...source.matchAll(/releases\/latest\/download\/([^)\s"'<>]+)/g)].map((match) => match[1]))
 }
@@ -22,12 +33,12 @@ function relativeTargets(source) {
 
 test('bilingual READMEs retain matching core markers, download assets, and valid relative links', async () => {
   const [chinese, english, staging] = await Promise.all([
+    read('README.zh-CN.md'),
     read('README.md'),
-    read('README.en.md'),
     read('scripts/stage-release-assets.mjs'),
   ])
 
-  for (const [name, document] of [['README.md', chinese], ['README.en.md', english]]) {
+  for (const [name, document] of [['README.zh-CN.md', chinese], ['README.md', english]]) {
     assert.equal((document.match(/<!-- core-support:start -->/g) || []).length, 1, name)
     assert.equal((document.match(/<!-- core-support:end -->/g) || []).length, 1, name)
     assert.ok(document.indexOf('<!-- core-support:start -->') < document.indexOf('<!-- core-support:end -->'), name)
@@ -43,7 +54,7 @@ test('bilingual READMEs retain matching core markers, download assets, and valid
   assert.deepEqual([...chineseDownloads].sort(), [...englishDownloads].sort())
   assert.deepEqual([...chineseDownloads].sort(), [...stagedDownloads].sort())
 
-  for (const [name, document] of [['README.md', chinese], ['README.en.md', english]]) {
+  for (const [name, document] of [['README.zh-CN.md', chinese], ['README.md', english]]) {
     for (const target of relativeTargets(document)) {
       const filename = target.split(/[?#]/, 1)[0]
       if (!filename) continue

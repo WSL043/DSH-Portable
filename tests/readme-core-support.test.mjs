@@ -34,7 +34,7 @@ test('generated table preserves surrounding README and fails on absent markers',
 })
 
 test('the core-support updater accepts both compact landing pages without network access', async () => {
-  for (const name of ['../README.md', '../README.en.md']) {
+  for (const name of ['../README.zh-CN.md', '../README.md']) {
     const source = await readFile(new URL(name, import.meta.url), 'utf8')
     const next = replaceSupport(source, 'generated support fixture')
     assert.match(next, /<!-- core-support:start -->\ngenerated support fixture\n<!-- core-support:end -->/)

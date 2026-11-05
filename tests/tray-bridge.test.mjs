@@ -1031,7 +1031,7 @@ test('Windows tray consumes official projected state in one bounded compact nati
     /private void RefreshAutomaticUpdateCheckItem\(\)[\s\S]+ShortcutKeyDisplayString = updateCheckEnabled && engineUpdateCheckEnabled/,
   )
   assert.match(source, /closeBehaviorItem\.ShortcutKeyDisplayString\s*=\s*closeBehavior/)
-  assert.match(source, /Equals\("standard"[\s\S]*chinese\s*\?\s*"标准"\s*:\s*"Standard"/)
+  assert.match(source, /Equals\("standard"[\s\S]*localize\("标准", "Standard"\)/)
   assert.match(source, /MeasureTrayMenuWidth/)
   assert.doesNotMatch(source, /more\.DropDown\.MinimumSize\s*=\s*new Size\(300,\s*0\)/)
   assert.match(source, /DshMenuColorTable/)
@@ -1204,7 +1204,7 @@ test('Windows notifications distinguish background completion from tasks that ne
   assert.match(source, /PostBridgeInteractionAnswer/)
   assert.match(source, /interactionKey[\s\S]+response/)
   assert.match(source, /L\("任务通知", "Task notifications"\)/)
-  assert.match(client, /notificationsHint:\s*'任务在后台完成，或等待回答和批准时显示系统通知。'/)
+  assert.match(client, /"notificationsHint":\s*"任务在后台完成，或等待回答和批准时显示系统通知。"/)
 })
 
 test('Portable settings explain when Windows has disabled system notifications', async () => {

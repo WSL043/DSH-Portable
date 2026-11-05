@@ -22,9 +22,13 @@ test('bootstrap failure help opens the offline package that is actually publishe
   assert.doesNotMatch(bootstrap, /OfflineDownloadUrl\s*=\s*"[^"]+DSH-Portable-windows-x64-offline\.exe"/)
 })
 
-test('bootstrap UI follows the Windows display language with English fallback', async () => {
+test('bootstrap UI accepts the official language handoff with Windows display language fallback', async () => {
   const bootstrap = await readFile(source, 'utf8')
-  assert.match(bootstrap, /CultureInfo\.InstalledUICulture\.TwoLetterISOLanguageName/)
+  assert.match(bootstrap, /CultureInfo\.CurrentUICulture\.TwoLetterISOLanguageName/)
+  assert.match(bootstrap, /argument == "--language"[\s\S]*BootstrapText\.SetLanguage/)
+  assert.match(bootstrap, /GetManifestResourceStream\("DSH\.Portable\.Locales"\)/)
+  const host = await readFile(new URL('../launcher/windows/LauncherWindow.Update.cs', import.meta.url), 'utf8')
+  assert.match(host, /"--language", uiLanguage/)
   assert.match(bootstrap, /internal static string L\(string chinese, string english\)/)
   assert.match(bootstrap, /BootstrapText\.L\("准备 DSH-Portable", "Preparing DSH-Portable"\)/)
   assert.match(bootstrap, /BootstrapText\.L\("取消", "Cancel"\)/)

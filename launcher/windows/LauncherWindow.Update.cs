@@ -561,6 +561,7 @@ namespace DshPortable
                     String.IsNullOrEmpty(offlineManifestPath) ? manifest.AbsoluteUri : offlineManifestPath,
                     "--window-bounds", String.Join(",", new[] { Bounds.X, Bounds.Y, Bounds.Width, Bounds.Height }.Select(value => value.ToString(System.Globalization.CultureInfo.InvariantCulture))),
                     "--theme", String.Equals(trayTheme, "dark", StringComparison.OrdinalIgnoreCase) ? "dark" : "light",
+                    "--language", uiLanguage,
                 });
             }
             catch

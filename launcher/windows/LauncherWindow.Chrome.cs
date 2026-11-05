@@ -33,8 +33,36 @@ namespace DshPortable
         private static extern bool GetWindowRect(IntPtr window, out DesktopWindowRect rectangle);
 
         private enum DwmWindowCornerPreference { Default = 0, DoNotRound = 1, Round = 2, RoundSmall = 3 }
+        private static readonly Dictionary<string, object> nativeLocales = LoadNativeLocales();
+
+        private static Dictionary<string, object> LoadNativeLocales()
+        {
+            using (Stream stream = Assembly.GetExecutingAssembly().GetManifestResourceStream("DSH.Portable.Locales"))
+            {
+                if (stream == null) return new Dictionary<string, object>();
+                using (StreamReader reader = new StreamReader(stream, Encoding.UTF8))
+                    return new JavaScriptSerializer().Deserialize<Dictionary<string, object>>(reader.ReadToEnd());
+            }
+        }
+
+        private static string NormalizeUiLanguage(string value)
+        {
+            string language = (value ?? "").Split('-')[0].ToLowerInvariant();
+            switch (language)
+            {
+                case "en": case "zh": case "ja": case "es": case "fr": case "de": case "ru": case "pt": return language;
+                default: return "en";
+            }
+        }
+
         private static string L(string chinese, string english)
         {
+            object dictionary, value;
+            if (nativeLocales.TryGetValue(uiLanguage, out dictionary))
+            {
+                Dictionary<string, object> labels = dictionary as Dictionary<string, object>;
+                if (labels != null && labels.TryGetValue(english, out value) && value is string) return (string)value;
+            }
             return uiLanguage.Equals("zh", StringComparison.OrdinalIgnoreCase) ? chinese : english;
         }
 
@@ -56,18 +84,18 @@ namespace DshPortable
                     if (GetUserPreferredUILanguages(MuiLanguageName, out count, buffer, ref size))
                     {
                         string first = new string(buffer).Split('\0')[0];
-                        if (first.Length >= 2) return new CultureInfo(first).TwoLetterISOLanguageName;
+                        if (first.Length >= 2) return NormalizeUiLanguage(new CultureInfo(first).TwoLetterISOLanguageName);
                     }
                 }
             }
             catch (Exception) { }
             string current = CultureInfo.CurrentUICulture.TwoLetterISOLanguageName;
-            return String.IsNullOrEmpty(current) ? CultureInfo.InstalledUICulture.TwoLetterISOLanguageName : current;
+            return NormalizeUiLanguage(String.IsNullOrEmpty(current) ? CultureInfo.InstalledUICulture.TwoLetterISOLanguageName : current);
         }
 
         private static string UiLanguageTag
         {
-            get { return L("zh-CN", "en-US"); }
+            get { return uiLanguage == "zh" ? "zh-CN" : uiLanguage == "pt" ? "pt-BR" : uiLanguage; }
         }
 
         protected override void OnFormClosing(FormClosingEventArgs eventArgs)

@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.ComponentModel;
 using System.Diagnostics;
 using System.Drawing;
@@ -165,10 +166,43 @@ namespace DshPortableBootstrap
 
     internal static class BootstrapText
     {
-        private static readonly string UiLanguage = CultureInfo.InstalledUICulture.TwoLetterISOLanguageName;
+        private static string UiLanguage = CultureInfo.CurrentUICulture.TwoLetterISOLanguageName;
+        private static readonly Dictionary<string, Dictionary<string, string>> Locales = LoadLocales();
+
+        private static Dictionary<string, Dictionary<string, string>> LoadLocales()
+        {
+            using (Stream stream = typeof(BootstrapText).Assembly.GetManifestResourceStream("DSH.Portable.Locales"))
+            {
+                if (stream == null) return new Dictionary<string, Dictionary<string, string>>();
+                return (Dictionary<string, Dictionary<string, string>>)new DataContractJsonSerializer(
+                    typeof(Dictionary<string, Dictionary<string, string>>),
+                    new DataContractJsonSerializerSettings { UseSimpleDictionaryFormat = true }).ReadObject(stream);
+            }
+        }
+
+        internal static void SetLanguage(string language)
+        {
+            if (String.IsNullOrEmpty(language) || language.Length > 35)
+                throw new ArgumentException("Unsupported updater language.");
+            string[] parts = language.Split('-');
+            string normalized = parts[0].ToLowerInvariant();
+            if (Array.IndexOf(new[] { "en", "zh", "ja", "es", "fr", "de", "ru", "pt" }, normalized) < 0)
+                throw new ArgumentException("Unsupported updater language.");
+            foreach (string part in parts)
+            {
+                if (part.Length == 0 || part.Length > 8) throw new ArgumentException("Unsupported updater language.");
+                foreach (char c in part)
+                    if (!(c >= 'A' && c <= 'Z') && !(c >= 'a' && c <= 'z') && !(c >= '0' && c <= '9'))
+                        throw new ArgumentException("Unsupported updater language.");
+            }
+            UiLanguage = normalized;
+        }
 
         internal static string L(string chinese, string english)
         {
+            Dictionary<string, string> dictionary;
+            string value;
+            if (Locales.TryGetValue(UiLanguage, out dictionary) && dictionary.TryGetValue(english, out value)) return value;
             return String.Equals(UiLanguage, "zh", StringComparison.OrdinalIgnoreCase) ? chinese : english;
         }
     }
@@ -337,6 +371,7 @@ namespace DshPortableBootstrap
                 else if (argument == "--allow-http") options.AllowHttp = true;
                 else if (argument == "--no-launch") options.NoLaunch = true;
                 else if (argument == "--upgrade-existing") options.UpgradeExisting = true;
+                else if (argument == "--language") BootstrapText.SetLanguage(RequireValue(args, ref index, argument));
                 else if (argument == "--window-bounds")
                 {
                     string[] parts = RequireValue(args, ref index, argument).Split(',');

@@ -2,10 +2,21 @@ import AppKit
 import Foundation
 import WebKit
 
-private let usesChineseUI = Locale.preferredLanguages.first?.lowercased().hasPrefix("zh") == true
+private func normalizedLanguage(_ value: String) -> String {
+    let language = value.lowercased().split(separator: "-").first.map(String.init) ?? "en"
+    return ["en", "zh", "ja", "es", "fr", "de", "ru", "pt"].contains(language) ? language : "en"
+}
+
+private var uiLanguage = normalizedLanguage(Locale.preferredLanguages.first ?? "en")
+private let nativeLocales: [String: [String: String]] = {
+    guard let url = Bundle.main.url(forResource: "portable-native-locales", withExtension: "json"),
+          let data = try? Data(contentsOf: url),
+          let value = try? JSONSerialization.jsonObject(with: data) as? [String: [String: String]] else { return [:] }
+    return value
+}()
 
 private func L(_ chinese: String, _ english: String) -> String {
-    usesChineseUI ? chinese : english
+    nativeLocales[uiLanguage]?[english] ?? (uiLanguage == "zh" ? chinese : english)
 }
 
 private enum HostError: LocalizedError {
@@ -877,7 +888,13 @@ private final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelega
               (body["schemaVersion"] as? Int) == 1 else { return }
         switch type {
         case "dsh-portable/preferences": mergeLauncherPreferences(body)
-        case "dsh-portable/state": hasRunningSession = body["hasRunningSession"] as? Bool ?? false
+        case "dsh-portable/state":
+            hasRunningSession = body["hasRunningSession"] as? Bool ?? false
+            let nextLanguage = normalizedLanguage(body["locale"] as? String ?? "en")
+            if nextLanguage != uiLanguage {
+                uiLanguage = nextLanguage
+                configureApplicationMenu()
+            }
         case "dsh-portable/pick-directory":
             if let requestID = validRequestID(body["requestId"], prefix: "workspace-") { showDirectoryPicker(requestID: requestID) }
         case "dsh-portable/pick-data-export":

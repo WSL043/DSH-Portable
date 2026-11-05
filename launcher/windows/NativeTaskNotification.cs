@@ -410,7 +410,7 @@ namespace DshPortable
                 .AddArgument("createdAt", createdAt.ToString(CultureInfo.InvariantCulture));
         }
 
-        internal static bool ShowAttention(TrayBridgeSession session, bool chinese)
+        internal static bool ShowAttention(TrayBridgeSession session, Func<string, string, string> localize)
         {
             if (session == null || String.IsNullOrWhiteSpace(session.id) || !Register()) return false;
             try
@@ -419,12 +419,12 @@ namespace DshPortable
                     ? String.Empty
                     : session.pendingInteraction.Trim();
                 string heading = String.Equals(interaction, "question", StringComparison.OrdinalIgnoreCase)
-                    ? (chinese ? "任务有问题需要回答" : "Task has a question")
+                    ? (localize("任务有问题需要回答", "Task has a question"))
                     : String.Equals(interaction, "approval", StringComparison.OrdinalIgnoreCase)
-                        ? (chinese ? "任务等待批准" : "Task needs approval")
-                        : (chinese ? "任务需要你处理" : "Task needs your attention");
+                        ? (localize("任务等待批准", "Task needs approval"))
+                        : (localize("任务需要你处理", "Task needs your attention"));
                 string prompt = String.IsNullOrWhiteSpace(session.pendingInteractionPrompt)
-                    ? (chinese ? "打开任务查看并处理" : "Open the task to review and respond")
+                    ? (localize("打开任务查看并处理", "Open the task to review and respond"))
                     : session.pendingInteractionPrompt.Trim();
                 if (prompt.Length > 512) prompt = prompt.Substring(0, 512);
                 List<string> choices = (session.pendingInteractionOptions ?? new List<string>())
@@ -449,8 +449,8 @@ namespace DshPortable
                         string label = choice;
                         if (String.Equals(interaction, "approval", StringComparison.OrdinalIgnoreCase))
                         {
-                            if (String.Equals(choice, "rejected", StringComparison.Ordinal)) label = chinese ? "拒绝" : "Reject";
-                            else if (String.Equals(choice, "allowed-once", StringComparison.Ordinal)) label = chinese ? "允许一次" : "Allow once";
+                            if (String.Equals(choice, "rejected", StringComparison.Ordinal)) label = localize("拒绝", "Reject");
+                            else if (String.Equals(choice, "allowed-once", StringComparison.Ordinal)) label = localize("允许一次", "Allow once");
                             else continue;
                         }
                         builder.AddButton(AddActivationIdentity(new ToastButton()
@@ -463,7 +463,7 @@ namespace DshPortable
                 }
                 ToastContent content = builder
                     .AddButton(AddActivationIdentity(new ToastButton()
-                        .SetContent(chinese ? "打开" : "Open")
+                        .SetContent(localize("打开", "Open"))
                         .AddArgument("action", "open")
                         .AddArgument("sessionId", session.id), activationId, createdAt))
                     .SetToastScenario(ToastScenario.Reminder)
@@ -477,32 +477,32 @@ namespace DshPortable
             }
         }
 
-        internal static bool ShowCompletion(TrayBridgeSession session, bool chinese)
+        internal static bool ShowCompletion(TrayBridgeSession session, Func<string, string, string> localize)
         {
             if (session == null || String.IsNullOrWhiteSpace(session.id) || !Register()) return false;
             try
             {
                 string finalReply = String.IsNullOrWhiteSpace(session.finalReply)
-                    ? (chinese ? "打开任务查看结果" : "Open the task to view its result")
+                    ? (localize("打开任务查看结果", "Open the task to view its result"))
                     : session.finalReply.Trim();
                 string activationId = Guid.NewGuid().ToString("N");
                 long createdAt = DateTimeOffset.UtcNow.ToUnixTimeSeconds();
                 ToastContentBuilder builder = new ToastContentBuilder()
                     .AddArgument("action", "open")
                     .AddArgument("sessionId", session.id)
-                    .AddText(chinese ? "任务已完成" : "Task completed")
+                    .AddText(localize("任务已完成", "Task completed"))
                     .AddText(String.IsNullOrWhiteSpace(session.title) ? session.id : session.title.Trim())
                     .AddText(finalReply)
-                    .AddInputTextBox("reply", chinese ? "回复此任务" : "Reply to this task", String.Empty);
+                    .AddInputTextBox("reply", localize("回复此任务", "Reply to this task"), String.Empty);
                 AddActivationIdentity(builder, activationId, createdAt);
                 ToastContent content = builder
                     .AddButton(AddActivationIdentity(new ToastButton()
-                        .SetContent(chinese ? "回复" : "Reply")
+                        .SetContent(localize("回复", "Reply"))
                         .AddArgument("action", "reply")
                         .AddArgument("sessionId", session.id)
                         .SetTextBoxId("reply"), activationId, createdAt))
                     .AddButton(AddActivationIdentity(new ToastButton()
-                        .SetContent(chinese ? "打开" : "Open")
+                        .SetContent(localize("打开", "Open"))
                         .AddArgument("action", "open")
                         .AddArgument("sessionId", session.id), activationId, createdAt))
                     .GetToastContent();

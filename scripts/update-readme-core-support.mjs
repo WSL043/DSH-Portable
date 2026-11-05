@@ -49,7 +49,7 @@ export async function updateReadmes() {
     return `| ${label} | ${versions.length ? versions.map(v => `[${v}](${url})`).join(', ') : '—'} |`
   }))
   // Fetch and validate every platform before touching either document.
-  const updates = await Promise.all(['README.md', 'README.en.md'].map(async (name, i) => {
+  const updates = await Promise.all(['README.zh-CN.md', 'README.md'].map(async (name, i) => {
     const zh = i === 0
     const content = renderSupportSection(baseline, rows, zh)
     const url = new URL(`../${name}`, import.meta.url)

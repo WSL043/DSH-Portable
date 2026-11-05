@@ -16,8 +16,8 @@ const sitemap = await readFile(new URL("../site/sitemap.xml", import.meta.url), 
 const workflow = await readFile(new URL("../.github/workflows/pages.yml", import.meta.url), "utf8");
 const privacy = await readFile(new URL("../PRIVACY.md", import.meta.url), "utf8");
 const signing = await readFile(new URL("../CODE_SIGNING.md", import.meta.url), "utf8");
-const readme = await readFile(new URL("../README.md", import.meta.url), "utf8");
-const readmeEnglish = await readFile(new URL("../README.en.md", import.meta.url), "utf8");
+const readme = await readFile(new URL("../README.zh-CN.md", import.meta.url), "utf8");
+const readmeEnglish = await readFile(new URL("../README.md", import.meta.url), "utf8");
 
 test("website uses only stable release asset names that the product publishes", () => {
   const assets = [

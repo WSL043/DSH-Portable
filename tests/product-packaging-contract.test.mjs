@@ -85,8 +85,8 @@ test('the public product identity is DSH-Portable everywhere users see it', asyn
   assert.equal(manifest.name, 'dsh-portable')
   assert.ok(['stable', 'candidate'].includes(classifyProductVersion(manifest.version).channel))
 
-  const chineseReadme = await read('README.md')
-  const englishReadme = await read('README.en.md')
+  const chineseReadme = await read('README.zh-CN.md')
+  const englishReadme = await read('README.md')
   const userReadme = await read('templates/USER-README.zh-CN.txt')
   const userReadmeEnglish = await read('templates/USER-README.en.txt')
   const combined = `${chineseReadme}\n${englishReadme}\n${userReadme}\n${userReadmeEnglish}`
@@ -98,8 +98,8 @@ test('the public product identity is DSH-Portable everywhere users see it', asyn
 })
 
 test('the GitHub landing page gives beginners one obvious download path', async () => {
-  const chineseReadme = await read('README.md')
-  const englishReadme = await read('README.en.md')
+  const chineseReadme = await read('README.zh-CN.md')
+  const englishReadme = await read('README.md')
   const recommendedUrl = 'https://github.com/WSL043/DSH-Portable/releases/latest/download/DSH-Portable-windows-x64.exe'
 
   assert.match(chineseReadme, /<img[^>]+assets\/DSH-Portable\.svg[^>]+alt="DeepSeek Harness"/i)
@@ -120,8 +120,8 @@ test('redistribution metadata keeps the canonical project discoverable without a
   const [license, notice, chinese, english, citation, contributing, windowsBuild, macBuild, linuxBuild] = await Promise.all([
     read('LICENSE'),
     read('NOTICE.md'),
+    read('README.zh-CN.md'),
     read('README.md'),
-    read('README.en.md'),
     read('CITATION.cff'),
     read('CONTRIBUTING.md'),
     read('scripts/build-windows.ps1'),
@@ -143,16 +143,16 @@ test('redistribution metadata keeps the canonical project discoverable without a
   assert.doesNotMatch(license, /Non-Commercial|Commons Clause|no commercial/i)
 })
 
-test('Simplified Chinese is the default GitHub landing page and English is a complete peer', async () => {
+test('English is the default GitHub landing page and Chinese remains a complete peer', async () => {
   const [chinese, english, chineseGuide, englishGuide] = await Promise.all([
+    read('README.zh-CN.md'),
     read('README.md'),
-    read('README.en.md'),
     read('docs/user-guide.zh-CN.md'),
     read('docs/user-guide.en.md'),
   ])
-  assert.equal(await exists('README.zh-CN.md'), false)
-  assert.match(chinese.slice(0, 1400), /<strong>简体中文<\/strong>.+README\.en\.md/s)
-  assert.match(english.slice(0, 1400), /README\.md.+<strong>English<\/strong>/s)
+  assert.equal(await exists('README.zh-CN.md'), true)
+  assert.match(chinese.slice(0, 1400), /README\.md.+<strong>简体中文<\/strong>/s)
+  assert.match(english.slice(0, 1400), /<strong>English<\/strong>.+README\.zh-CN\.md/s)
   assert.equal((englishGuide.match(/assets\/dsh-workspace-0\.6\.4\.png/g) || []).length, 1)
   assert.equal((chineseGuide.match(/assets\/dsh-workspace-0\.6\.4\.png/g) || []).length, 1)
   assert.equal((englishGuide.match(/assets\/dsh-portable-extensions-en\.png/g) || []).length, 0)
@@ -173,8 +173,8 @@ test('Simplified Chinese is the default GitHub landing page and English is a com
 })
 
 test('README status badges stay compact, useful, and visually consistent', async () => {
-  const chinese = await read('README.md')
-  const english = await read('README.en.md')
+  const chinese = await read('README.zh-CN.md')
+  const english = await read('README.md')
 
   for (const document of [chinese, english]) {
     const badgeBlock = document.match(/<p align="center">\s*(?:<a[^>]+><img[^>]+><\/a>\s*){5}<\/p>/)?.[0] ?? ''
@@ -193,8 +193,8 @@ test('update guidance describes the component update path without exposing inter
   const [chinese, english, landingChinese, landingEnglish, userReadme, userReadmeEnglish, releaseTemplate] = await Promise.all([
     read('docs/user-guide.zh-CN.md'),
     read('docs/user-guide.en.md'),
+    read('README.zh-CN.md'),
     read('README.md'),
-    read('README.en.md'),
     read('templates/USER-README.zh-CN.txt'),
     read('templates/USER-README.en.txt'),
     read('templates/RELEASE-NOTES.md'),
@@ -236,8 +236,8 @@ test('update guidance describes the component update path without exposing inter
 
 test('GitHub gives Chinese and English users direct, privacy-safe feedback forms', async () => {
   const [chinese, english, bug, feature, config] = await Promise.all([
+    read('README.zh-CN.md'),
     read('README.md'),
-    read('README.en.md'),
     read('.github/ISSUE_TEMPLATE/bug-report.yml'),
     read('.github/ISSUE_TEMPLATE/feature-request.yml'),
     read('.github/ISSUE_TEMPLATE/config.yml'),
@@ -267,8 +267,8 @@ test('release notes prioritize downloads and keep verification optional', async 
 
 test('public downloads expose a truthful security and code-signing policy', async () => {
   const [chinese, english, releaseNotes, signing, security] = await Promise.all([
+    read('README.zh-CN.md'),
     read('README.md'),
-    read('README.en.md'),
     read('templates/RELEASE-NOTES.md'),
     read('CODE_SIGNING.md'),
     read('SECURITY.md'),
@@ -496,8 +496,8 @@ test('community plugins remain optional and market-discovered', async () => {
     read('.github/workflows/publish.yml'),
     read('docs/user-guide.zh-CN.md'),
     read('docs/user-guide.en.md'),
+    read('README.zh-CN.md'),
     read('README.md'),
-    read('README.en.md'),
   ])
 
   assert.match(workflow, /schedule:/)
@@ -681,8 +681,8 @@ test('plugin management is a generic finished-product capability and release gat
   const [chinese, english, landingChinese, landingEnglish, userReadme, releaseNotes, workflow, smoke] = await Promise.all([
     read('docs/user-guide.zh-CN.md'),
     read('docs/user-guide.en.md'),
+    read('README.zh-CN.md'),
     read('README.md'),
-    read('README.en.md'),
     read('templates/USER-README.zh-CN.txt'),
     read('templates/RELEASE-NOTES.md'),
     readNativeWorkflow(),
@@ -791,8 +791,8 @@ test('fresh products declare no community defaults and upgrades preserve user pr
 
 test('the marketplace candidate packages no hand-maintained portable extension catalog', async () => {
   const [chinese, english, releaseNotes] = await Promise.all([
+    read('README.zh-CN.md'),
     read('README.md'),
-    read('README.en.md'),
     read('templates/RELEASE-NOTES.md'),
   ])
   assert.equal(await exists('desktop-bridge/extensions/catalog.json'), false)

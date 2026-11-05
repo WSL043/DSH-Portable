@@ -4,121 +4,114 @@
 
 <h1 align="center">DSH-Portable</h1>
 
+<p align="center"><strong>English</strong> · <a href="README.zh-CN.md">简体中文</a> · <a href="README.ja.md">日本語</a> · <a href="README.es.md">Español</a> · <a href="README.fr.md">Français</a> · <a href="README.de.md">Deutsch</a> · <a href="README.ru.md">Русский</a> · <a href="README.pt-BR.md">Português (Brasil)</a></p>
+
 <p align="center">
-  <strong>DeepSeek Harness 便携版：整个文件夹拷到 U 盘，换一台电脑接着用。</strong><br>
-  会话、设置、插件和工作区都在文件夹里；不安装、不改系统，Windows / macOS / Linux。
+  <strong>Portable DeepSeek Harness: copy one folder to a USB drive and keep working on another computer.</strong><br>
+  Sessions, settings, plugins, and workspace live in the folder. No install, no system changes; Windows, macOS, Linux.
 </p>
 
 <p align="center">
-  <a href="https://wsl043.github.io/DSH-Portable/"><strong>官网</strong></a>
-  · <a href="https://github.com/WSL043/DSH-Portable/releases/latest"><strong>下载</strong></a>
-  · <a href="#三步启动">开始使用</a>
-  · <a href="docs/user-guide.zh-CN.md">用户指南</a>
-  · <a href="#插件">插件</a>
-  · <a href="#获取帮助">帮助</a>
-  · <strong>简体中文</strong> · <a href="README.en.md">English</a>
+  <a href="https://wsl043.github.io/DSH-Portable/"><strong>Website</strong></a>
+  · <a href="https://github.com/WSL043/DSH-Portable/releases/latest"><strong>Download</strong></a>
+  · <a href="#start-in-3-steps">Get started</a>
+  · <a href="docs/user-guide.en.md">User guide</a>
+  · <a href="#plugins">Plugins</a>
+  · <a href="#get-help">Support</a>
 </p>
 
 <p align="center">
   <a href="https://github.com/WSL043/DSH-Portable"><img src="https://img.shields.io/github/stars/WSL043/DSH-Portable?style=flat-square&amp;label=Stars&amp;color=171717&amp;logo=github" alt="GitHub stars"></a>
-  <a href="https://github.com/WSL043/DSH-Portable/releases/latest"><img src="https://img.shields.io/github/v/release/WSL043/DSH-Portable?display_name=tag&label=%E7%89%88%E6%9C%AC&style=flat-square&color=171717" alt="最新版本"></a>
-  <a href="https://github.com/WSL043/DSH-Portable/releases"><img src="https://img.shields.io/github/downloads/WSL043/DSH-Portable/total?style=flat-square&label=%E4%B8%8B%E8%BD%BD&color=171717" alt="GitHub 下载量"></a>
-  <a href="https://github.com/WSL043/DSH-Portable/actions/workflows/ci.yml"><img src="https://img.shields.io/github/actions/workflow/status/WSL043/DSH-Portable/ci.yml?branch=main&style=flat-square&label=%E6%9E%84%E5%BB%BA&color=171717" alt="跨平台构建状态"></a>
-  <a href="LICENSE"><img src="https://img.shields.io/github/license/WSL043/DSH-Portable?style=flat-square&label=%E8%AE%B8%E5%8F%AF&color=171717" alt="Apache-2.0 许可证"></a>
+  <a href="https://github.com/WSL043/DSH-Portable/releases/latest"><img src="https://img.shields.io/github/v/release/WSL043/DSH-Portable?display_name=tag&label=release&style=flat-square&color=171717" alt="Latest release"></a>
+  <a href="https://github.com/WSL043/DSH-Portable/releases"><img src="https://img.shields.io/github/downloads/WSL043/DSH-Portable/total?style=flat-square&label=downloads&color=171717" alt="GitHub downloads"></a>
+  <a href="https://github.com/WSL043/DSH-Portable/actions/workflows/ci.yml"><img src="https://img.shields.io/github/actions/workflow/status/WSL043/DSH-Portable/ci.yml?branch=main&style=flat-square&label=build&color=171717" alt="Cross-platform build status"></a>
+  <a href="LICENSE"><img src="https://img.shields.io/github/license/WSL043/DSH-Portable?style=flat-square&label=license&color=171717" alt="Apache-2.0 license"></a>
 </p>
 
 <p align="center">
-  <a href="https://github.com/WSL043/DSH-Portable/releases/latest/download/DSH-Portable-windows-x64.exe"><strong>下载 Windows 便携版</strong></a>
+  <a href="https://github.com/WSL043/DSH-Portable/releases/latest/download/DSH-Portable-windows-x64.exe"><strong>Download Windows portable</strong></a>
 </p>
 
 <p align="center">
-  <img src="assets/portable-hero-zh.png" width="1040" alt="DSH-Portable 便携工作环境">
+  <img src="assets/portable-layout-en.svg" width="1040" alt="Portable program, data, and workspace kept together">
 </p>
 
-> DSH-Portable 是独立社区发行版，不是 DeepSeek 官方应用，未获 DeepSeek 背书。<br>
-> DeepSeek 已提供[官方桌面端](https://www.deepseek.com/harness/)；两种选择各有侧重。
+> DSH-Portable is an independent community distribution, not an official DeepSeek application and not endorsed by DeepSeek.<br>
+> DeepSeek also offers an [official desktop app](https://www.deepseek.com/harness/); each option serves different needs.
 
-## 该选哪个
+## Which should I choose?
 
-| | 官方桌面端 | DSH-Portable |
+| | Official desktop app | DSH-Portable |
 | --- | --- | --- |
-| 安装与平台 | 安装式；Windows、macOS | 绿色便携；Windows、macOS、Linux，不安装、不改系统 PATH |
-| 更新节奏 | 跟随官方发布节奏 | Portable 与内核分开更新，可选内核版本 |
-| 携带与维护 | 常规桌面安装 | 完全退出后可把整个文件夹复制到 U 盘或另一台相同平台的电脑；提供保留数据的回滚与恢复工具 |
-| 插件 | 官方插件管理 | 同样的官方插件管理；“更多”仅兼容恢复旧插件配置，社区插件按需安装 |
-| 适合你，如果… | 想装进系统、主要使用一台电脑 | 想带走、多设备使用，或需要可控更新 |
+| Installation and platforms | Installer; Windows and macOS | Portable; Windows, macOS, and Linux, with no installation or PATH changes |
+| Update cadence | Follows the official release schedule | Portable and core update separately; choose a core version |
+| Moving and maintenance | Standard desktop installation | After fully exiting, copy the whole folder to a USB drive or another computer with the same OS and architecture; data-preserving rollback and recovery tools are included |
+| Plugins | Official plugin management | The same official plugin management; More provides diagnostics and recovery, with community plugins installed on demand |
+| A good fit if… | You want an installed app on one computer | You want to carry it between devices or control updates |
 
-## 下载
+## Downloads
 
-日常使用请选择稳定版 0.x（Native）。1.0 线有一个仅 Windows 的 [alpha 预览版](https://github.com/WSL043/DSH-Portable/releases/tag/v1.0.0-alpha.5)，供想尝鲜的用户试用，不是 0.x 的升级路径。
+For everyday use, choose the stable 0.x (Native) line. The 1.0 line has a Windows-only [alpha preview](https://github.com/WSL043/DSH-Portable/releases/tag/v1.0.0-alpha.5) for early adopters; it is not an upgrade path from 0.x.
 
-1.x 正在维护验收，当前官方桌面底包的已知 MCP 安全债阻断新发布；旧 alpha 也不作安全晋级承诺。[当前进度、验收与限制](docs/one-x-maintenance-2026-10-23.md)。
+1.x maintenance and qualification are underway. Known MCP security debt in the official desktop payload blocks new publication; the older alpha is not a security-qualified upgrade. See [current progress, evidence and limitations](docs/one-x-maintenance-2026-10-23.md).
 
 ### Windows
 
-| 需要 | 下载 |
+| Choose this when… | Download |
 | --- | --- |
-| 联网自动准备文件夹 | [在线便携启动器](https://github.com/WSL043/DSH-Portable/releases/latest/download/DSH-Portable-windows-x64.exe)（推荐） |
-| 自行下载并解压 | [标准 ZIP](https://github.com/WSL043/DSH-Portable/releases/latest/download/DSH-Portable-windows-x64-offline.zip) |
-| 目标电脑缺少 WebView2 且无法联网补装 | [完整离线 ZIP](https://github.com/WSL043/DSH-Portable/releases/latest/download/DSH-Portable-windows-x64-complete-offline.zip) |
+| You have internet access and want the folder prepared automatically | [Online portable launcher](https://github.com/WSL043/DSH-Portable/releases/latest/download/DSH-Portable-windows-x64.exe) (recommended) |
+| You prefer to download and extract it yourself | [Standard ZIP](https://github.com/WSL043/DSH-Portable/releases/latest/download/DSH-Portable-windows-x64-offline.zip) |
+| WebView2 is missing and the target cannot download it | [Complete offline ZIP](https://github.com/WSL043/DSH-Portable/releases/latest/download/DSH-Portable-windows-x64-complete-offline.zip) |
 
-不知道怎么选？能联网用在线启动器；想自行解压用标准 ZIP。Windows 11 预装 WebView2，多数 Windows 10 电脑也已有；完整离线 ZIP 自带它。更多[离线部署要求](docs/user-guide.zh-CN.md#离线部署)。
+Not sure? Use the online launcher with internet, or the standard ZIP for manual extraction. Windows 11 includes WebView2, and most Windows 10 PCs already have it; the complete offline ZIP includes it. See the [offline deployment requirements](docs/user-guide.en.md#offline-deployment).
 
 ### macOS
 
-[Apple Silicon（arm64）](https://github.com/WSL043/DSH-Portable/releases/latest/download/DSH-Portable-macos-arm64.zip) · [Intel（x64）](https://github.com/WSL043/DSH-Portable/releases/latest/download/DSH-Portable-macos-x64.zip) · [首次打开说明](docs/user-guide.zh-CN.md#macos)
+[Apple Silicon (arm64)](https://github.com/WSL043/DSH-Portable/releases/latest/download/DSH-Portable-macos-arm64.zip) · [Intel (x64)](https://github.com/WSL043/DSH-Portable/releases/latest/download/DSH-Portable-macos-x64.zip) · [First launch](docs/user-guide.en.md#macos)
 
 ### Linux
 
-| 架构 | AppImage | 完整便携目录 |
+| Architecture | AppImage | Complete portable folder |
 | --- | --- | --- |
-| Intel / AMD（x64） | [下载](https://github.com/WSL043/DSH-Portable/releases/latest/download/DeepSeek-Herness-linux-x64.AppImage) | [下载](https://github.com/WSL043/DSH-Portable/releases/latest/download/DSH-Portable-linux-x64.tar.gz) |
-| ARM64 | [下载](https://github.com/WSL043/DSH-Portable/releases/latest/download/DeepSeek-Herness-linux-arm64.AppImage) | [下载](https://github.com/WSL043/DSH-Portable/releases/latest/download/DSH-Portable-linux-arm64.tar.gz) |
+| Intel / AMD (x64) | [Download](https://github.com/WSL043/DSH-Portable/releases/latest/download/DeepSeek-Herness-linux-x64.AppImage) | [Download](https://github.com/WSL043/DSH-Portable/releases/latest/download/DSH-Portable-linux-x64.tar.gz) |
+| ARM64 | [Download](https://github.com/WSL043/DSH-Portable/releases/latest/download/DeepSeek-Herness-linux-arm64.AppImage) | [Download](https://github.com/WSL043/DSH-Portable/releases/latest/download/DSH-Portable-linux-arm64.tar.gz) |
 
-AppImage 与完整目录的启动和数据位置见[Linux 使用说明](docs/user-guide.zh-CN.md#linux)。
+See the [Linux guide](docs/user-guide.en.md#linux) for AppImage launch details, data location, and the complete folder.
 
-已有安装的文件更新见[离线更新指南](docs/offline-updates.md)，其中列出 Portable 与内核附件的来源及配套文件的获取步骤。
+For an existing installation, see the [offline update guide](docs/offline-updates.md#download-files-english) for the source releases and matching JSON, signature, and ZIP.
 
-## 三步启动
+## Start in 3 steps
 
-1. 下载 [Windows 便携启动器](https://github.com/WSL043/DSH-Portable/releases/latest/download/DSH-Portable-windows-x64.exe)。
-2. 将它放到希望保存的位置并运行；它会在旁边准备完整的 DSH-Portable 文件夹。
-3. 连接模型服务；以后运行文件夹里的 DeepSeek-Herness.exe。
+1. Download the [Windows portable launcher](https://github.com/WSL043/DSH-Portable/releases/latest/download/DSH-Portable-windows-x64.exe).
+2. Put it where you want the app to live and run it; it prepares the complete DSH-Portable folder beside it.
+3. Connect a model service; next time, run DeepSeek-Herness.exe from that folder.
 
-macOS、Linux 解压后直接运行，首次打开的注意事项见[用户指南](docs/user-guide.zh-CN.md#macos)。
+On macOS and Linux, extract and run; see the [guide](docs/user-guide.en.md#macos) for first-launch notes.
 
-关闭按钮默认将应用收进托盘，任务会继续。完全退出请用 **文件 → 退出 DeepSeek Harness**；Windows 可按 Ctrl+Q，托盘菜单提供备用退出。
+The close button sends the app to the tray, so tasks continue. To quit, use **File → Exit DeepSeek Harness**; on Windows press Ctrl+Q. The tray menu is an alternate exit path.
 
-## 它怎么做便携
+## How portability works
 
-- **一个文件夹**：会话、设置、插件和默认工作区集中保存；目录与迁移细节见[用户指南](docs/user-guide.zh-CN.md#便携数据)。
-- **换位置继续**：完全退出后，可把整个文件夹复制到 U 盘或另一台相同系统和架构的电脑；见[迁移步骤](docs/user-guide.zh-CN.md#移动与备份)。
-- **更新不动数据**：Portable 与官方内核分别更新，内核版本可选；更新、跳过、回滚规则见[用户指南](docs/user-guide.zh-CN.md#更新与修复)。
-- **出问题可恢复**：检查、精准修复、支持报告和 DSH-Recovery.exe 保留个人数据；见[恢复说明](docs/user-guide.zh-CN.md#dsh-recoveryexe)。
+- **One folder:** Sessions, settings, plugins, and the default workspace stay together; see the [data guide](docs/user-guide.en.md#portable-data).
+- **Move and resume:** Fully exit, then copy the entire folder to a USB drive or a computer with the same OS and architecture; see [migration steps](docs/user-guide.en.md#move-and-back-up).
+- **Updates keep data:** Portable and official-core updates are separate, with core version selection; see [updates and repair](docs/user-guide.en.md#updates-and-repair).
+- **Recovery when needed:** Checks, targeted repair, support reports, and DSH-Recovery.exe preserve personal data; see the [recovery guide](docs/user-guide.en.md#dsh-recoveryexe).
 
-## 登录与账号
+## Plugins
 
-首次启动会出现“开始使用”，可以**登录 DeepSeek 账号**，也可以**添加 API Key**。登录会在系统浏览器里打开官方授权页，点一次授权即可，不需要在软件里输入密码。登录后“设置”在左下角的账号菜单（登录前显示为“更多”）里。
+New packages no longer install community plugins by default. Existing installations and their enablement states are preserved. Install [Image Viewer](https://github.com/WSL043/dsh-image-viewer) or [Chat Manager](https://github.com/WSL043/dsh-chat-manager) through the official plugin manager when needed.
 
-- 登录凭据以文件形式保存在文件夹的 `data` 目录里，**没有额外加密**：拿到整个文件夹的人可能直接使用你的账号。借给别人或存进 U 盘前，请先退出登录，或清空 `data` 目录；U 盘丢失时，到 DeepSeek 官网撤销授权。
-- 导出“完整迁移”会带上登录信息和密钥，请只保存在你信任的地方。
-- 软件自己的更新和内核下载走 GitHub，插件下载走 npm。更新、内核下载和插件安装会跟随 Windows 或 macOS 的系统代理（也认 `HTTPS_PROXY` 环境变量），浏览器能上的地方它也能上；GitHub 连不上时，会自动改用公共镜像（版本信息必须带签名才采用，安装包用签名信息里的校验值核对）。想关闭或换成自己的镜像，设置环境变量 `DSH_PORTABLE_UPDATE_MIRRORS`（`off` 或逗号分隔的地址）。
+Find more in **Settings → Plugins → Plugin Market**; to add one manually, enter a package name or address in **Plugins → Add plugin**—not a terminal command. See the [plugin guide](docs/user-guide.en.md#plugins).
 
-## 插件
-
-新版本不再默认安装社区插件；已有安装及启停状态保持不变。[Image Viewer](https://github.com/WSL043/dsh-image-viewer) 和 [Chat Manager](https://github.com/WSL043/dsh-chat-manager) 可按需通过官方插件管理安装。
-
-更多插件在 **设置 → 插件 → 插件市场** 搜索安装；手动添加时在 **插件 → 添加插件** 填包名或地址，不要粘贴终端命令。详见[插件指南](docs/user-guide.zh-CN.md#插件)。
-
-## 内核版本可选
+## Choose your core version
 
 <!-- core-support:start -->
-**可选内核（最多 5 个已验证版本）** · 设置 → 更新 · 正式版 0.6.5 起支持（首发 0.6.5-rc.1）。
+**Optional cores (up to 5 verified versions)** · Settings → Updates · Since 0.6.5 stable (first available in 0.6.5-rc.1).
 
 <details>
-<summary>查看 Portable 0.9.9 的可选内核</summary>
+<summary>View available cores for Portable 0.9.9</summary>
 
-| 平台 | 可选内核 |
+| Platform | Available cores |
 | --- | --- |
 | Windows x64 | [0.2.2-rc.1](https://github.com/WSL043/DSH-Portable-Updates/releases/download/update-channel-core-stable/dsh-core-index-windows-x64.json), [0.2.2-alpha.3](https://github.com/WSL043/DSH-Portable-Updates/releases/download/update-channel-core-stable/dsh-core-index-windows-x64.json), [0.2.2-alpha.2](https://github.com/WSL043/DSH-Portable-Updates/releases/download/update-channel-core-stable/dsh-core-index-windows-x64.json), [0.2.1-rc.5](https://github.com/WSL043/DSH-Portable-Updates/releases/download/update-channel-core-stable/dsh-core-index-windows-x64.json), [0.2.1-rc.4](https://github.com/WSL043/DSH-Portable-Updates/releases/download/update-channel-core-stable/dsh-core-index-windows-x64.json) |
 | macOS arm64 | [0.2.2-rc.1](https://github.com/WSL043/DSH-Portable-Updates/releases/download/update-channel-core-stable/dsh-core-index-macos-arm64.json), [0.2.2-alpha.3](https://github.com/WSL043/DSH-Portable-Updates/releases/download/update-channel-core-stable/dsh-core-index-macos-arm64.json), [0.2.2-alpha.2](https://github.com/WSL043/DSH-Portable-Updates/releases/download/update-channel-core-stable/dsh-core-index-macos-arm64.json), [0.2.1-rc.5](https://github.com/WSL043/DSH-Portable-Updates/releases/download/update-channel-core-stable/dsh-core-index-macos-arm64.json), [0.2.1-rc.4](https://github.com/WSL043/DSH-Portable-Updates/releases/download/update-channel-core-stable/dsh-core-index-macos-arm64.json) |
@@ -126,54 +119,56 @@ macOS、Linux 解压后直接运行，首次打开的注意事项见[用户指�
 | Linux x64 | [0.2.2-rc.1](https://github.com/WSL043/DSH-Portable-Updates/releases/download/update-channel-core-stable/dsh-core-index-linux-x64.json), [0.2.2-alpha.3](https://github.com/WSL043/DSH-Portable-Updates/releases/download/update-channel-core-stable/dsh-core-index-linux-x64.json), [0.2.2-alpha.2](https://github.com/WSL043/DSH-Portable-Updates/releases/download/update-channel-core-stable/dsh-core-index-linux-x64.json), [0.2.1-rc.5](https://github.com/WSL043/DSH-Portable-Updates/releases/download/update-channel-core-stable/dsh-core-index-linux-x64.json), [0.2.1-rc.4](https://github.com/WSL043/DSH-Portable-Updates/releases/download/update-channel-core-stable/dsh-core-index-linux-x64.json) |
 | Linux arm64 | [0.2.2-rc.1](https://github.com/WSL043/DSH-Portable-Updates/releases/download/update-channel-core-stable/dsh-core-index-linux-arm64.json), [0.2.2-alpha.3](https://github.com/WSL043/DSH-Portable-Updates/releases/download/update-channel-core-stable/dsh-core-index-linux-arm64.json), [0.2.2-alpha.2](https://github.com/WSL043/DSH-Portable-Updates/releases/download/update-channel-core-stable/dsh-core-index-linux-arm64.json), [0.2.1-rc.5](https://github.com/WSL043/DSH-Portable-Updates/releases/download/update-channel-core-stable/dsh-core-index-linux-arm64.json), [0.2.1-rc.4](https://github.com/WSL043/DSH-Portable-Updates/releases/download/update-channel-core-stable/dsh-core-index-linux-arm64.json) |
 
-候选窗口为最新 5 个版本，至少保留 2 个 RC 或正式版。下表每小时同步 stable 目录中已通过验收的版本，可能少于 5 个；— 表示暂无匹配版本。
+The window covers the newest five versions, retaining at least two release candidates or finals. The table syncs qualified stable-catalog entries hourly and may contain fewer than five; — means no matching version.
 
 </details>
 
 <!-- core-support:end -->
 
-内核选择、兼容检查与回滚规则见[更新与修复指南](docs/user-guide.zh-CN.md#更新与修复)。
+See the [updates and repair guide](docs/user-guide.en.md#updates-and-repair) for core selection, compatibility checks, and rollback.
 
-## 路线
+## Roadmap
 
-- **稳定版 0.x（Native）**：当前公开下载；接下来聚焦打磨与稳定。
-- **1.0 线**：直接运行官方桌面应用，只把数据放进文件夹。目前是仅 Windows 的 [alpha 预览版](https://github.com/WSL043/DSH-Portable/releases/tag/v1.0.0-alpha.5)，不是 0.x 的升级路径：
-  - 官方文件保持原样；官方发布新版本后，在应用内“安装并重启”即可跟上，更新前会校验，新版本异常时自动回到上一版。
-  - 会话、设置、插件和登录状态都在文件夹里，整夹复制到另一台 Windows 电脑即可接着用。
-  - **插件（会话管理、图片查看器）：** 现在公开的 alpha.5 自带这两个插件，默认关闭，要用时在官方“插件”页打开。**之后新发的 alpha 不再自带**（自带会让每次启动先多跑一步），要用时在官方“插件 → 添加插件”里安装：[会话管理 Chat Manager](https://github.com/WSL043/dsh-chat-manager#安装)、[图片查看器 Image Viewer](https://github.com/WSL043/dsh-image-viewer#安装)，按各自说明里的版本安装。新的 0.x 包也不再默认安装二者，已有安装保持不变。
-  - 详细说明见[1.0 预览线指南](https://wsl043.github.io/DSH-Portable/guides/official-desktop-portable.html)。
-- 详见[1.0 路线图](docs/roadmap-toward-1.0.md)与[官方桌面成品实验线](experiments/official-payload/README.md)。
+- **Stable 0.x (Native):** The current public download; near-term work focuses on polish and stability.
+- **1.0 line:** Runs the official desktop app itself and only moves its data into the folder. Currently a Windows-only [alpha preview](https://github.com/WSL043/DSH-Portable/releases/tag/v1.0.0-alpha.5), not an upgrade path from 0.x:
+  - Official files stay unchanged; when the official app ships a new version, "Install and Restart" inside the app follows it, with verification first and an automatic return to the previous version if the new one fails to start.
+  - Sessions, settings, plugins, and sign-in live in the folder; copy it whole to another Windows PC and keep working.
+  - **Plugins (Chat Manager, Image Viewer):** the alpha.5 that is public today ships both, switched off by default; turn them on in the official Plugins page. **Alphas released after it will not ship them** (bundling made every start run an extra step first); install them when you need them from the official Plugins → Add plugin page: [Chat Manager](https://github.com/WSL043/dsh-chat-manager#install) and [Image Viewer](https://github.com/WSL043/dsh-image-viewer#install), using the version their pages list. New 0.x packages also omit both defaults; existing installations are preserved.
+- See the [1.0 roadmap](docs/roadmap-toward-1.0.md) and the [official desktop payload experiment](experiments/official-payload/README.md).
 
-## 获取帮助
+## Get help
 
-- [提交 Bug 报告](https://github.com/WSL043/DSH-Portable/issues/new?template=bug-report.yml) · [提出功能建议](https://github.com/WSL043/DSH-Portable/issues/new?template=feature-request.yml) · [参与讨论](https://github.com/WSL043/DSH-Portable/discussions)
-- 刚升级后出现异常（对话空白、输入框在页面顶部）：先到 **设置 → 更新**，看“内核版本”是不是变成了自带版本；如果你之前用的是“官方测试版”，在同一页重新选它。仍然不行，再提交 Bug 报告，并写明升级前的版本。
-- 网络兼容问题与限制见[上游说明](https://github.com/deepseek-ai/deepseek-harness/discussions/5202)；请勿在 Issue 中粘贴 API Key、登录凭据或私人会话。
+- [Report a bug](https://github.com/WSL043/DSH-Portable/issues/new?template=bug-report.yml) · [Request an improvement](https://github.com/WSL043/DSH-Portable/issues/new?template=feature-request.yml) · [Join a discussion](https://github.com/WSL043/DSH-Portable/discussions)
+- See the [upstream note](https://github.com/deepseek-ai/deepseek-harness/discussions/5202) for network compatibility; do not paste API keys, login credentials, or private conversations into issues.
 
-## 安全
+## Security
 
-DSH 可执行本地代码，请使用可信模型、插件和项目。阅读[隐私说明](PRIVACY.md)、[安全策略](SECURITY.md)与[代码签名策略](CODE_SIGNING.md)。
+DSH can execute local code. Use trusted models, plugins, and projects. Read the [privacy notice](PRIVACY.md), [security policy](SECURITY.md), and [code-signing policy](CODE_SIGNING.md).
 
-## 开源与贡献
+## Open source and contributing
 
-本项目使用 [Apache-2.0](LICENSE)，并附有[组件声明](NOTICE.md)。欢迎提交改进；请先阅读[贡献指南](CONTRIBUTING.md)。
+This project uses [Apache-2.0](LICENSE) and includes its [component notice](NOTICE.md). Contributions are welcome; read [CONTRIBUTING.md](CONTRIBUTING.md) first.
 
 <details>
-<summary><strong>从源码构建</strong></summary>
+<summary><strong>Build from source</strong></summary>
 
 ```powershell
 ./scripts/build-windows.ps1
 ```
 
 ```bash
-bash scripts/build-macos.sh arm64   # 或 x64
-bash scripts/build-linux.sh x64     # 或 arm64
+bash scripts/build-macos.sh arm64   # or x64
+bash scripts/build-linux.sh x64     # or arm64
 ```
 
-依赖、发布内容和成品测试由仓库固定。Release 提供 checksums.txt；高级用户可用 gh attestation verify <下载文件> -R WSL043/DSH-Portable 验证 GitHub/Sigstore 构建证明。
+Dependencies, release contents, and finished-product tests are pinned by the repository. Releases include checksums.txt; advanced users can verify a GitHub/Sigstore build attestation with gh attestation verify <download> -R WSL043/DSH-Portable.
 
 </details>
 
-如果 DSH-Portable 对你有帮助，欢迎在 [GitHub 仓库](https://github.com/WSL043/DSH-Portable)点 Star 并分享给需要便携工作环境的人。
+If DSH-Portable helps, star the [GitHub repository](https://github.com/WSL043/DSH-Portable) and share it with people who want a portable workspace.
 
-DeepSeek Harness、DeepSeek 名称与标志归 DeepSeek 所有。DSH-Portable 由 WSL043 独立维护，未获 DeepSeek 背书。
+DeepSeek Harness, the DeepSeek name, and its marks belong to DeepSeek. DSH-Portable is independently maintained by WSL043 and is not endorsed by DeepSeek.
+
+## Interface languages (unreleased main)
+
+Portable follows the official DSH language setting for native menus, tray, updates and maintenance, with English as the fallback. Additional languages need a compatible official core that provides them, such as DSH 0.2.2-rc.1. Main supports English, Simplified Chinese, Japanese, Spanish, French, German, Russian and Brazilian Portuguese. Third-party plugins supply their own translations. Already-published packages are unchanged.
