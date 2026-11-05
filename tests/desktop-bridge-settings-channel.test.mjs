@@ -45,6 +45,7 @@ function createReactHarness() {
 
   function mount(Component) {
     const hooks = []
+    const hookCounts = []
     let hookIndex = 0
     let pendingEffects = []
     let renderQueued = false
@@ -93,6 +94,7 @@ function createReactHarness() {
       pendingEffects = []
       activeRunner = runner
       tree = Component()
+      hookCounts.push(hookIndex)
       activeRunner = null
       for (const pending of pendingEffects) {
         const cleanup = pending.effect()
@@ -103,6 +105,7 @@ function createReactHarness() {
     render()
     return {
       get tree() { return tree },
+      hookCounts,
       unmount() { for (const hook of hooks) hook.cleanup?.() },
     }
   }
@@ -146,7 +149,7 @@ async function settle() {
   for (let index = 0; index < 5; index += 1) await new Promise(resolve => setImmediate(resolve))
 }
 
-async function loadSettingsComponent(fetchImpl, { nativeMessages = null, nativeFileUpdates = true, nativeFileDownloads = false, page = 'portable-updates', productFetch = null, webCacheHost = null, modernIcons = false, lang = 'en' } = {}) {
+async function loadSettingsComponent(fetchImpl, { nativeMessages = null, nativeFileUpdates = true, nativeFileDownloads = false, page = 'portable-updates', slot = 'settings.section', productFetch = null, webCacheHost = null, modernIcons = false, lang = 'en' } = {}) {
   const source = await readFile(sourceUrl, 'utf8')
   const harness = createReactHarness()
   const registered = []
@@ -229,7 +232,7 @@ async function loadSettingsComponent(fetchImpl, { nativeMessages = null, nativeF
   exports.apply(ctx)
   const registration = registered.find(entry => entry.options.id === page)
   assert.ok(registration, 'Portable settings registration is present')
-  assert.equal(registration.options.name, 'settings.section', 'Portable owns a settings navigation entry')
+  assert.equal(registration.options.name, slot, 'registration belongs to the requested public slot')
   return { harness, mount: () => harness.mount(registration.component), pageListeners,
     setLocale(value) { lang = value; for (const listener of localeListeners) listener() },
     localeListeners,
@@ -918,4 +921,23 @@ test('catalog failures read as a plain sentence, not as HTTP codes', async () =>
     assert.match(text, /update service is unavailable/i)
     assert.doesNotMatch(text, /HTTP 502/)
   } finally { mounted.unmount() }
+})
+
+
+test('footer and environment summary transitions preserve hook order and follow locale changes', async () => {
+  for (const [page, slot] of [['portable-update', 'sidebar.footer.action'], ['portable-environment', 'conversation.hero.portableContext']]) {
+    const initial = deferred()
+    const client = await loadSettingsComponent(async url => url === '/dsh-portable/settings' ? initial.promise : jsonResponse({ status: 'available' }), { page, slot })
+    const mounted = client.mount()
+    try {
+      assert.equal(mounted.tree, null)
+      initial.resolve(jsonResponse({ settings: settings('stable', { productUpdateCheckEnabled: true }), environments: { current: 'test-env', items: [{ id: 'test-env', name: 'Test environment' }] } }))
+      await settle()
+      assert.ok(mounted.tree, 'summary makes the registered control visible')
+      client.setLocale('ja')
+      await settle()
+      assert.equal(new Set(mounted.hookCounts).size, 1, 'async visibility and language transitions keep the same hooks')
+    } finally { mounted.unmount() }
+    assert.equal(client.localeListeners.size, 0)
+  }
 })

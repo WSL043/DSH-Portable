@@ -277,15 +277,33 @@ export function patchPluginManagerActions(source) {
 }
 
 export function patchWorkspaceHeaderActions(source) {
-  const marker = 'dsh-portable-workspace-header-actions-v1'
-  // Older cores use their existing qualified plugin view adapter.
-  if (!source.includes('"sidebar.workspaces.session.menu.item"') || source.includes(marker)) return source
-  source = replaceRequired(source, '"sidebar.workspaces.session.menu.item": {',
-    `/* ${marker} */ "sidebar.workspaces.header.action": { kind: "list", scope: "root" },\n"sidebar.workspaces.session.menu.item": {`, 'workspace header slot declaration')
+  const marker = 'dsh-portable-workspace-header-actions-v2'
+  const legacy = 'dsh-portable-workspace-header-actions-v1'
+  if (!source.includes('"sidebar.workspaces.session.menu.item"')) return source
+  const owner = /(ctx\.slots\.inject\("sidebar\.workspaces",\s*\(\)\s*=>\s*ctx\.slots\.register\(\{\s*name:\s*"sidebar\.workspaces",\s*children:\s*\{)/g
+  const declaration = ' /* ' + marker + ' */ "sidebar.workspaces.header.action": { kind: "list", scope: "root" },'
+  if (source.includes(marker)) {
+    const matches = [...source.matchAll(owner)]
+    if (matches.length !== 1 || !source.slice(matches[0].index + matches[0][0].length).startsWith(declaration))
+      throw new Error('workspace header slot has no matching parent declaration')
+    return source
+  }
+  const repairing = source.includes(legacy)
+  if (repairing) source = replaceRequired(source,
+    '/* ' + legacy + ' */ "sidebar.workspaces.header.action": { kind: "list", scope: "root" },\n',
+    '', 'legacy workspace header slot declaration')
+  const parents = [...source.matchAll(owner)]
+  if (parents.length !== 1) throw new Error('workspace header parent declaration changed upstream')
+  source = replaceRequired(source, parents[0][0], parents[0][0] + declaration, 'workspace header parent declaration')
+  if (repairing) {
+    if (!source.includes('wide && renderSlot("sidebar.workspaces.header.action",')
+      || !/\.\w+_headerActions\{[^}]*?max-width:92px/.test(source))
+      throw new Error('legacy workspace header action changed upstream')
+    return source
+  }
   source = replaceRequired(source, 'children: [wide && (0, react_jsx_runtime.jsx)(ViewOptionsMenu, {',
     'children: [wide && renderSlot("sidebar.workspaces.header.action", { className: WorkspaceBrowser_module_css_default.iconButton }), wide && (0, react_jsx_runtime.jsx)(ViewOptionsMenu, {', 'workspace header action position')
-  // Three header actions need their real width; leave the separate search
-  // control and the collapsed/search-hidden state entirely official-owned.
+  // Keep the official controls and collapsed/search-hidden state.
   const widths = [...source.matchAll(/\.\w+_headerActions\{[^}]*?max-width:60px/g)]
   if (widths.length !== 1) throw new Error('workspace header action width changed upstream')
   return source.replace(widths[0][0], widths[0][0].replace('max-width:60px', 'max-width:92px'))

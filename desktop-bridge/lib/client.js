@@ -1424,9 +1424,9 @@ window.__ModuleLoader__.load({
     function PortableUpdateAction({ wide, primitives, ctx }) {
       const h = React.createElement
       const summary = usePortableShellSummary()
+      const lang = useLocale(ctx)
       const scopes = summary?.availableScopes || []
       if (scopes.length === 0) return null
-      const lang = useLocale(ctx)
       const label = copy[lang].updateReady
       return h('div', { className: 'dshPortableFooterUpdate' },
         h(primitives.Tooltip, { label, side: 'top' }, h('button', {
@@ -1438,11 +1438,11 @@ window.__ModuleLoader__.load({
     function PortableEnvironmentChip({ primitives, ctx }) {
       const h = React.createElement
       const summary = usePortableShellSummary()
+      const lang = useLocale(ctx)
       const environments = summary?.environments
       if (!environments || environments.current === 'default') return null
       const current = environments.items?.find(item => item.id === environments.current)
       const name = current?.name || environments.current
-      const lang = useLocale(ctx)
       const label = format(copy[lang].environmentActive, name)
       return h('span', { className: 'dshPortableEnvironmentChip', title: label, 'aria-label': label },
         h(primitives.IconFolderOpenOutline16, { size: 14 }), h('span', null, name))
