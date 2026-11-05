@@ -182,9 +182,20 @@ namespace DshPortableBootstrap
 
         internal static void SetLanguage(string language)
         {
-            if (!Regex.IsMatch(language ?? "", "^(en|zh|ja|es|fr|de|ru|pt)(-[A-Za-z0-9]+)*$", RegexOptions.IgnoreCase))
+            if (String.IsNullOrEmpty(language) || language.Length > 35)
                 throw new ArgumentException("Unsupported updater language.");
-            UiLanguage = language.Split('-')[0].ToLowerInvariant();
+            string[] parts = language.Split('-');
+            string normalized = parts[0].ToLowerInvariant();
+            if (Array.IndexOf(new[] { "en", "zh", "ja", "es", "fr", "de", "ru", "pt" }, normalized) < 0)
+                throw new ArgumentException("Unsupported updater language.");
+            foreach (string part in parts)
+            {
+                if (part.Length == 0 || part.Length > 8) throw new ArgumentException("Unsupported updater language.");
+                foreach (char c in part)
+                    if (!(c >= 'A' && c <= 'Z') && !(c >= 'a' && c <= 'z') && !(c >= '0' && c <= '9'))
+                        throw new ArgumentException("Unsupported updater language.");
+            }
+            UiLanguage = normalized;
         }
 
         internal static string L(string chinese, string english)
