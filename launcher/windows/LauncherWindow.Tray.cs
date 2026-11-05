@@ -93,8 +93,6 @@ namespace DshPortable
             return text.Replace("&", "&&");
         }
 
-        internal static string SessionHintForLocale(TrayBridgeSession session, bool chinese) { return SessionHintForLocale(session, (zh, en) => chinese ? zh : en); }
-
         internal static string SessionHintForLocale(TrayBridgeSession session, Func<string, string, string> localize)
         {
             if (!String.IsNullOrEmpty(session.pendingInteraction)) return localize("待回复", "Needs input");
@@ -110,8 +108,7 @@ namespace DshPortable
 
         private ToolStripMenuItem CreateSessionMenuItem(TrayBridgeSession session)
         {
-            bool chinese = uiLanguage.Equals("zh", StringComparison.OrdinalIgnoreCase);
-            string hint = SessionHintForLocale(session, chinese);
+            string hint = SessionHintForLocale(session, L);
             ToolStripMenuItem item = new ToolStripMenuItem(MenuTitle(session.title))
             {
                 AutoToolTip = false,
@@ -359,7 +356,7 @@ namespace DshPortable
         {
             bool dark = String.Equals(trayTheme, "dark", StringComparison.OrdinalIgnoreCase);
             DshMenuColorTable colors = new DshMenuColorTable(dark);
-            trayMenu.Renderer = new DshMenuRenderer(colors, uiLanguage.Equals("zh", StringComparison.OrdinalIgnoreCase));
+            trayMenu.Renderer = new DshMenuRenderer(colors);
             trayMenu.BackColor = colors.SurfaceColor;
             trayMenu.ForeColor = colors.TextColor;
             trayMenu.Padding = Padding.Empty;

@@ -231,8 +231,8 @@ test('release staging exposes two obvious Linux choices per architecture', async
 
 test('Chinese-first product docs explain Linux launch, portable data, plugins, and CPU choice', async () => {
   const [chinese, english, chineseGuide, englishGuide, bundled, notes] = await Promise.all([
+    read('README.zh-CN.md'),
     read('README.md'),
-    read('README.en.md'),
     read('docs/user-guide.zh-CN.md'),
     read('docs/user-guide.en.md'),
     read('templates/USER-README.zh-CN.txt'),

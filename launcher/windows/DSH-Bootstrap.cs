@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.ComponentModel;
 using System.Diagnostics;
 using System.Drawing;
@@ -165,10 +166,32 @@ namespace DshPortableBootstrap
 
     internal static class BootstrapText
     {
-        private static readonly string UiLanguage = CultureInfo.InstalledUICulture.TwoLetterISOLanguageName;
+        private static string UiLanguage = CultureInfo.CurrentUICulture.TwoLetterISOLanguageName;
+        private static readonly Dictionary<string, Dictionary<string, string>> Locales = LoadLocales();
+
+        private static Dictionary<string, Dictionary<string, string>> LoadLocales()
+        {
+            using (Stream stream = typeof(BootstrapText).Assembly.GetManifestResourceStream("DSH.Portable.Locales"))
+            {
+                if (stream == null) return new Dictionary<string, Dictionary<string, string>>();
+                return (Dictionary<string, Dictionary<string, string>>)new DataContractJsonSerializer(
+                    typeof(Dictionary<string, Dictionary<string, string>>),
+                    new DataContractJsonSerializerSettings { UseSimpleDictionaryFormat = true }).ReadObject(stream);
+            }
+        }
+
+        internal static void SetLanguage(string language)
+        {
+            if (!Regex.IsMatch(language ?? "", "^(en|zh|ja|es|fr|de|ru|pt)(-[A-Za-z0-9]+)*$", RegexOptions.IgnoreCase))
+                throw new ArgumentException("Unsupported updater language.");
+            UiLanguage = language.Split('-')[0].ToLowerInvariant();
+        }
 
         internal static string L(string chinese, string english)
         {
+            Dictionary<string, string> dictionary;
+            string value;
+            if (Locales.TryGetValue(UiLanguage, out dictionary) && dictionary.TryGetValue(english, out value)) return value;
             return String.Equals(UiLanguage, "zh", StringComparison.OrdinalIgnoreCase) ? chinese : english;
         }
     }
@@ -337,6 +360,7 @@ namespace DshPortableBootstrap
                 else if (argument == "--allow-http") options.AllowHttp = true;
                 else if (argument == "--no-launch") options.NoLaunch = true;
                 else if (argument == "--upgrade-existing") options.UpgradeExisting = true;
+                else if (argument == "--language") BootstrapText.SetLanguage(RequireValue(args, ref index, argument));
                 else if (argument == "--window-bounds")
                 {
                     string[] parts = RequireValue(args, ref index, argument).Split(',');

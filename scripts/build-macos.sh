@@ -194,6 +194,7 @@ xcrun swiftc -O -framework AppKit -framework WebKit \
 
 APP="$STAGE/DSH-Portable.app"
 mkdir -p "$APP/Contents/MacOS" "$APP/Contents/Resources"
+"$BUILD_NODE" "$PROJECT_ROOT/scripts/sync-desktop-locales.mjs" --native-output "$APP/Contents/Resources/portable-native-locales.json"
 cp "$PROJECT_ROOT/launcher/macos/Info.plist" "$APP/Contents/Info.plist"
 cp "$NATIVE_HOST" "$APP/Contents/MacOS/DSH-Portable"
 cp "$PROJECT_ROOT/assets/DSH-Portable.icns" "$APP/Contents/Resources/DSH-Portable.icns"

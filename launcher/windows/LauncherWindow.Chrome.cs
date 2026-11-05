@@ -48,7 +48,11 @@ namespace DshPortable
         private static string NormalizeUiLanguage(string value)
         {
             string language = (value ?? "").Split('-')[0].ToLowerInvariant();
-            return language == "zh" || nativeLocales.ContainsKey(language) ? language : "en";
+            switch (language)
+            {
+                case "en": case "zh": case "ja": case "es": case "fr": case "de": case "ru": case "pt": return language;
+                default: return "en";
+            }
         }
 
         private static string L(string chinese, string english)
@@ -80,13 +84,13 @@ namespace DshPortable
                     if (GetUserPreferredUILanguages(MuiLanguageName, out count, buffer, ref size))
                     {
                         string first = new string(buffer).Split('\0')[0];
-                        if (first.Length >= 2) return new CultureInfo(first).TwoLetterISOLanguageName;
+                        if (first.Length >= 2) return NormalizeUiLanguage(new CultureInfo(first).TwoLetterISOLanguageName);
                     }
                 }
             }
             catch (Exception) { }
             string current = CultureInfo.CurrentUICulture.TwoLetterISOLanguageName;
-            return String.IsNullOrEmpty(current) ? CultureInfo.InstalledUICulture.TwoLetterISOLanguageName : current;
+            return NormalizeUiLanguage(String.IsNullOrEmpty(current) ? CultureInfo.InstalledUICulture.TwoLetterISOLanguageName : current);
         }
 
         private static string UiLanguageTag

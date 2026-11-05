@@ -225,8 +225,8 @@ test('the release surface is Portable-only and does not publish traditional inst
     read('scripts/stage-release-assets.mjs'),
     read('.github/workflows/publish.yml'),
     read('.github/workflows/ci.yml'),
+    read('README.zh-CN.md'),
     read('README.md'),
-    read('README.en.md'),
     read('site/index.html'),
   ])
   for (const text of [staging, publish, workflow, chinese, english, site]) {

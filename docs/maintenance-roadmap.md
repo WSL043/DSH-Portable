@@ -2,9 +2,17 @@
 
 > 下一次 Native 交付以[固定验收标准 G1–G8](native-release-exit-criteria.md)为完成条件。本表 A01–A34 是完整长期台账，不再作为一个永远扩大的单次发布清单；原请求和未完成项仍保留。
 
+## 2026-11-05 语言与 README（未发布）
+
+Portable 的自有菜单、托盘、更新与维护页面复用官方语言状态和 `locale/change`；新增日语、西班牙语、法语、德语、俄语和巴西葡萄牙语，未知语言回退英语，不另存一套偏好。Windows 独立更新器接收同一语言；macOS 菜单、Linux 托盘也复用同一辞书。删除 DOM 语言推断与托盘绘制时重复的二语言翻译，不扩展官方聊天、模型和插件管理页面。
+
+文案维护只改 `desktop-bridge/locales.json`，运行 `node scripts/sync-desktop-locales.mjs --write` 更新浏览器资产；构建时生成本地宿主资源，并检查键和占位符。README 默认页改为英语，中文完整说明移至 `README.zh-CN.md`，其余六语言提供短入口；原英文地址保留跳转说明，内核目录同步机器人只更新英语和中文完整页。
+
+固定提交、成品摘要、实际操作及完成状态以 [#242](https://github.com/WSL043/DSH-Portable/pull/242) 为准。验收区分本机 Windows 的菜单、托盘、更新与维护操作，以及 macOS/Linux 的 CI 构建，不把后者写成实机通过。本批不修改产品版本，不发布 Portable。
+
 ## 2026-10-29 0.9.8 交付记录
 
-[0.9.8](https://github.com/WSL043/DSH-Portable/releases/tag/v0.9.8) 已公开，固定 main `f5db640`；其[最终完整 CI](https://github.com/WSL043/DSH-Portable/actions/runs/40732334843) 39/39、Security 和 CodeQL 均成功，原生产签名整包升级与修复/回退/恢复已实测。范围及致谢见[双语说明](../release-notes/v0.9.8.json)，最近交付与新增维护见[变更记录](../release-notes/UNRELEASED.md)。可选内核按自身资格和签名目录交付，不把准备成功冒充公开可用。下方各日期为当时的维护快照，发布状态以本节为准。
+[0.9.8](https://github.com/WSL043/DSH-Portable/releases/tag/v0.9.8) 已公开，固定 main `f5db640`；其[最终完整 CI](https://github.com/WSL043/DSH-Portable/actions/runs/40732334843) 39/39、Security 和 CodeQL 均成功，原生产签名整包升级与修复/回退/恢复已实测。范围及致谢见[双语说明](../release-notes/v0.9.8.json)，最近交付与新增维护见[变更记录](../release-notes/UNRELEASED.md)。可选内核按自身资格和签名目录交付，不把准备成功冒充公开可用。各日期为当时的维护快照，当前发行状态以 GitHub Releases 和最近交付记录为准。
 
 稳定默认保持 rc.3、图片 0.1.17、会话 1.5.19；可选内核、独立插件大版本候选和 Portable 1.x 官方 MCP 阻断分别维护，不把可选内核写成默认切换。唯一开放的会话插件 #32 仍待原环境配置复核；pnpm 24 小时版本等待期是已证实可解释的机制，不冒充唯一历史根因。
 

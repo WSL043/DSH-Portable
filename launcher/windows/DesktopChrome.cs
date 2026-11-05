@@ -68,9 +68,8 @@ namespace DshPortable
         private readonly Color captionColor;
         private readonly Color runningColor;
         private readonly Color borderColor;
-        private readonly bool chinese;
 
-        internal DshMenuRenderer(DshMenuColorTable colors, bool isChinese)
+        internal DshMenuRenderer(DshMenuColorTable colors)
             : base(colors)
         {
             RoundedEdges = false;
@@ -79,7 +78,6 @@ namespace DshPortable
             captionColor = colors.CaptionColor;
             runningColor = Color.FromArgb(45, 201, 111);
             borderColor = colors.BorderColor;
-            chinese = isChinese;
         }
 
         private static GraphicsPath RoundedRectangle(Rectangle bounds, int radius)
@@ -158,7 +156,7 @@ namespace DshPortable
                 return;
             }
 
-            string status = LauncherWindow.SessionHintForLocale(session, chinese);
+            string status = menuItem.ShortcutKeyDisplayString ?? "";
             Size statusSize = TextRenderer.MeasureText(
                 status,
                 eventArgs.TextFont,

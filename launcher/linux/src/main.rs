@@ -32,6 +32,8 @@ static LAYOUT: OnceLock<ProductLayout> = OnceLock::new();
 static QUITTING: AtomicBool = AtomicBool::new(false);
 static UPDATE_PROMPT_OPEN: AtomicBool = AtomicBool::new(false);
 static HAS_RUNNING_SESSION: AtomicBool = AtomicBool::new(false);
+static UI_LOCALE: std::sync::Mutex<Option<String>> = std::sync::Mutex::new(None);
+static NATIVE_LOCALES: OnceLock<Value> = OnceLock::new();
 
 const NATIVE_BRIDGE_SCRIPT: &str = r#"
 (() => {
@@ -361,7 +363,12 @@ fn write_shell_settings(layout: &ProductLayout, settings: &ShellSettings) -> io:
     fs::rename(temporary, filename)
 }
 
-fn chinese_ui(layout: &ProductLayout) -> bool {
+fn preferred_locale(layout: &ProductLayout) -> String {
+    if let Ok(locale) = UI_LOCALE.lock() {
+        if let Some(value) = locale.as_ref() {
+            return value.clone();
+        }
+    }
     let settings = layout.state_root.join("data/dsh-home/settings.yaml");
     if let Ok(source) = fs::read_to_string(settings) {
         let mut in_locale = false;
@@ -374,19 +381,41 @@ fn chinese_ui(layout: &ProductLayout) -> bool {
             if in_locale && trimmed.starts_with("preference:") {
                 return trimmed
                     .split_once(':')
-                    .map(|(_, value)| value.trim().trim_matches(['\'', '"']).starts_with("zh"))
-                    .unwrap_or(false);
+                    .map(|(_, value)| normalize_locale(value.trim().trim_matches(['\'', '"'])))
+                    .unwrap_or_else(|| "en".to_owned());
             }
         }
     }
-    env::var("LANG")
-        .unwrap_or_default()
-        .to_ascii_lowercase()
-        .starts_with("zh")
+    normalize_locale(&env::var("LANG").unwrap_or_default())
+}
+
+fn normalize_locale(value: &str) -> String {
+    let value = value
+        .split(['-', '_', '.'])
+        .next()
+        .unwrap_or("en")
+        .to_ascii_lowercase();
+    match value.as_str() {
+        "en" | "zh" | "ja" | "es" | "fr" | "de" | "ru" | "pt" => value,
+        _ => "en".to_owned(),
+    }
 }
 
 fn text(layout: &ProductLayout, chinese: &str, english: &str) -> String {
-    if chinese_ui(layout) {
+    let language = preferred_locale(layout);
+    let dictionaries = NATIVE_LOCALES.get_or_init(|| {
+        serde_json::from_str(include_str!("../../../desktop-bridge/locales.json"))
+            .expect("checked desktop dictionaries")
+    });
+    if let Some(value) = dictionaries
+        .get(&language)
+        .and_then(|entry| entry.get("native"))
+        .and_then(|copy| copy.get(english))
+        .and_then(Value::as_str)
+    {
+        return value.to_owned();
+    }
+    if language == "zh" {
         chinese.to_owned()
     } else {
         english.to_owned()
@@ -849,6 +878,25 @@ fn portable_host_message(
             Ok(None)
         }
         "dsh-portable/state" => {
+            let next = normalize_locale(
+                message
+                    .get("locale")
+                    .and_then(Value::as_str)
+                    .unwrap_or("en"),
+            );
+            let changed = if let Ok(mut current) = UI_LOCALE.lock() {
+                if current.as_ref() == Some(&next) {
+                    false
+                } else {
+                    *current = Some(next);
+                    true
+                }
+            } else {
+                false
+            };
+            if changed {
+                setup_tray(window.app_handle(), layout).map_err(|error| error.to_string())?;
+            }
             HAS_RUNNING_SESSION.store(
                 message
                     .get("hasRunningSession")
@@ -1115,8 +1163,11 @@ fn setup_tray(app: &tauri::AppHandle, layout: &ProductLayout) -> tauri::Result<(
             &quit,
         ],
     )?;
-    let startup_for_event = startup.clone();
-    TrayIconBuilder::new()
+    if let Some(tray) = app.tray_by_id("portable") {
+        tray.set_menu(Some(menu))?;
+        return Ok(());
+    }
+    TrayIconBuilder::with_id("portable")
         .icon(
             app.default_window_icon()
                 .expect("bundle icon is configured")
@@ -1136,8 +1187,8 @@ fn setup_tray(app: &tauri::AppHandle, layout: &ProductLayout) -> tauri::Result<(
             "check-engine-update" => check_updates(app.clone(), true, "engine"),
             "startup-update" => {
                 if let Some(layout) = LAYOUT.get() {
-                    let checked = startup_for_event.is_checked().unwrap_or(true);
                     let mut settings = read_shell_settings(layout);
+                    let checked = !(settings.product_update_check_enabled && settings.engine_update_check_enabled);
                     settings.product_update_check_enabled = checked;
                     settings.engine_update_check_enabled = checked;
                     let _ = write_shell_settings(layout, &settings);

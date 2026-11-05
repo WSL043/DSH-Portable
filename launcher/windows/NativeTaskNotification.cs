@@ -410,8 +410,6 @@ namespace DshPortable
                 .AddArgument("createdAt", createdAt.ToString(CultureInfo.InvariantCulture));
         }
 
-        internal static bool ShowAttention(TrayBridgeSession session, bool chinese) { return ShowAttention(session, (zh, en) => chinese ? zh : en); }
-
         internal static bool ShowAttention(TrayBridgeSession session, Func<string, string, string> localize)
         {
             if (session == null || String.IsNullOrWhiteSpace(session.id) || !Register()) return false;
@@ -478,8 +476,6 @@ namespace DshPortable
                 return false;
             }
         }
-
-        internal static bool ShowCompletion(TrayBridgeSession session, bool chinese) { return ShowCompletion(session, (zh, en) => chinese ? zh : en); }
 
         internal static bool ShowCompletion(TrayBridgeSession session, Func<string, string, string> localize)
         {
