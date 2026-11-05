@@ -265,7 +265,7 @@ test('Portable settings expose recovery and only select versions returned by the
 
 test('data import review exposes the real package contents before restart', async () => {
   const source = await readFile(new URL('../desktop-bridge/lib/client.js', import.meta.url), 'utf8')
-  assert.match(source, /dataImportFiles:/)
+  assert.match(source, /"?dataImportFiles"?:/)
   assert.match(source, /styles\.importFileList/)
   assert.match(source, /importInfo\.files\.map/)
 })

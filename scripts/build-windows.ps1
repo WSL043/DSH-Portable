@@ -367,10 +367,14 @@ try {
         if (-not (Test-Path -LiteralPath $RequiredNotificationReference)) { throw "Windows notification compile reference is unavailable: $RequiredNotificationReference" }
     }
     $LauncherExe = Join-Path $Stage 'DeepSeek-Herness.exe'
+    $NativeLocales = Join-Path $Stage 'portable-native-locales.json'
+    & $NodeExe (Join-Path $ProjectRoot 'scripts\sync-desktop-locales.mjs') --native-output $NativeLocales
+    if ($LASTEXITCODE -ne 0) { throw 'Desktop locale validation failed.' }
     $CompilerArgs = @(
         '/nologo', '/target:winexe', '/platform:x64', '/optimize+',
         "/win32icon:$ProjectRoot\assets\DSH-Portable.ico",
         "/win32manifest:$ProjectRoot\launcher\windows\DSH-Portable.manifest",
+        "/resource:$NativeLocales,DSH.Portable.Locales",
         '/reference:System.dll', '/reference:System.Core.dll', '/reference:System.Drawing.dll', '/reference:System.Windows.Forms.dll',
         '/reference:System.Web.Extensions.dll',
         "/reference:$WindowsWinmd", "/reference:$UniversalApiContract", "/reference:$WindowsRuntimeAssembly",
@@ -399,6 +403,7 @@ try {
     )
     & $Csc $CompilerArgs
     if ($LASTEXITCODE -ne 0 -or -not (Test-Path -LiteralPath $LauncherExe)) { throw 'Windows launcher compilation failed.' }
+    Remove-Item -LiteralPath $NativeLocales
     $RecoveryExe = Join-Path $Stage 'DSH-Recovery.exe'
     & $Csc /nologo /target:exe /platform:x64 /optimize+ "/win32icon:$ProjectRoot\assets\DSH-Portable.ico" "/out:$RecoveryExe" (Join-Path $ProjectRoot 'launcher\windows\DSH-Recovery.cs')
     if ($LASTEXITCODE -ne 0 -or -not (Test-Path -LiteralPath $RecoveryExe)) { throw 'Recovery launcher compilation failed.' }

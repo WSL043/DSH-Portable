@@ -281,7 +281,7 @@ namespace DshPortable
                 BeginInvoke((MethodInvoker)delegate
                 {
                     if (shutdownRunning || allowClose || IsDisposed) return;
-                    string nextLanguage = String.Equals(state.locale, "zh", StringComparison.OrdinalIgnoreCase) ? "zh" : "en";
+                    string nextLanguage = NormalizeUiLanguage(state.locale);
                     string nextTheme = String.Equals(state.theme, "dark", StringComparison.OrdinalIgnoreCase) ? "dark" : "light";
                     bool chromeChanged = uiLanguage != nextLanguage || trayTheme != nextTheme;
                     uiLanguage = nextLanguage;

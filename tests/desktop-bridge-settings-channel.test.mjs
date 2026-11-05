@@ -36,6 +36,11 @@ function createReactHarness() {
     useState(initial) { return activeRunner.useState(initial) },
     useEffect(effect, dependencies) { return activeRunner.useEffect(effect, dependencies) },
     useRef(initial) { return activeRunner.useRef(initial) },
+    useSyncExternalStore(subscribe, snapshot) {
+      const [value, setValue] = React.useState(snapshot)
+      React.useEffect(() => subscribe(() => setValue(snapshot())), [subscribe, snapshot])
+      return value
+    },
   }
 
   function mount(Component) {
@@ -202,7 +207,13 @@ async function loadSettingsComponent(fetchImpl, { nativeMessages = null, nativeF
     if (id === '@deepseek-ai/dsh-client-ui-primitives') return primitives
     throw new Error(`unexpected client dependency: ${id}`)
   })
+  const localeListeners = new Set()
   const ctx = {
+    on(name, listener) {
+      assert.equal(name, 'locale/change')
+      localeListeners.add(listener)
+      return () => localeListeners.delete(listener)
+    },
     effect: (native || webCacheHost) ? () => {} : undefined,
     locale: { getLocale: () => ({ active: lang }) },
     theme: { getTheme: () => ({ active: { colorScheme: 'light' } }) },
@@ -220,9 +231,33 @@ async function loadSettingsComponent(fetchImpl, { nativeMessages = null, nativeF
   assert.ok(registration, 'Portable settings registration is present')
   assert.equal(registration.options.name, 'settings.section', 'Portable owns a settings navigation entry')
   return { harness, mount: () => harness.mount(registration.component), pageListeners,
+    setLocale(value) { lang = value; for (const listener of localeListeners) listener() },
+    localeListeners,
     pageEvent(name) { for (const listener of pageListeners.get(name) ?? []) listener() },
   }
 }
+
+test('open Portable pages follow official language changes and release their subscription', async () => {
+  const copy = JSON.parse(await readFile(new URL('../desktop-bridge/locales.json', import.meta.url), 'utf8'))
+  for (const page of ['portable', 'portable-updates']) {
+    const client = await loadSettingsComponent(async url => jsonResponse(url === '/dsh-portable/settings'
+      ? { settings: settings(), versions: { portable: '0.9.9', engine: '0.2.2-rc.1' } }
+      : { schemaVersion: 1, releaseChannel: 'stable', versions: [], unavailable: [] }), { page })
+    const mounted = client.mount()
+    try {
+      await settle()
+      for (const locale of Object.keys(copy)) {
+        client.setLocale(locale)
+        await settle()
+        assert.ok(textContent(mounted.tree).includes(copy[locale][page === 'portable' ? 'maintenance' : 'checkUpdate']), locale)
+      }
+      client.setLocale('pt-BR')
+      await settle()
+      assert.ok(textContent(mounted.tree).includes(copy.pt[page === 'portable' ? 'maintenance' : 'checkUpdate']))
+    } finally { mounted.unmount() }
+    assert.equal(client.localeListeners.size, 0)
+  }
+})
 
 function settings(updateChannel = 'stable', overrides = {}) {
   return {

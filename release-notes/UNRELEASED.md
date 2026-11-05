@@ -2,6 +2,10 @@
 
 ## 未发布维护 / Unreleased maintenance
 
+- Portable 菜单、托盘、更新和维护页面跟随官方 DSH 语言设置，增加日语、西班牙语、法语、德语、俄语和巴西葡萄牙语；复用官方语言变更通知，不增加独立语言偏好。Web 与 Windows 文案共用一份辞书，移除从页面 DOM 猜测语言的分支。
+
+- Portable menus, tray, updates and maintenance follow the official DSH language preference, adding Japanese, Spanish, French, German, Russian and Brazilian Portuguese. Web and Windows copy share one dictionary; language changes use the official event instead of reading the page DOM or adding a separate preference.
+
 - 修复 Windows 自有 WebView2 进程结束后仍使用旧 PID 快照误报超时的问题；安全终止请求后补一次有界检查，继续核对进程归属，不扩大终止范围。数据导入验收在原生阶段失败时直接报告真实阶段。
 
 - Recheck the owned WebView2 process tree after a bounded shutdown request instead of reporting a timeout from stale PIDs. Ownership checks and termination scope stay unchanged. Native import checks now report an early native failure at its actual stage.

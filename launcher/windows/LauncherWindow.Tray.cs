@@ -93,16 +93,18 @@ namespace DshPortable
             return text.Replace("&", "&&");
         }
 
-        internal static string SessionHintForLocale(TrayBridgeSession session, bool chinese)
+        internal static string SessionHintForLocale(TrayBridgeSession session, bool chinese) { return SessionHintForLocale(session, (zh, en) => chinese ? zh : en); }
+
+        internal static string SessionHintForLocale(TrayBridgeSession session, Func<string, string, string> localize)
         {
-            if (!String.IsNullOrEmpty(session.pendingInteraction)) return chinese ? "待回复" : "Needs input";
-            if (session.running) return chinese ? "运行中" : "Running";
+            if (!String.IsNullOrEmpty(session.pendingInteraction)) return localize("待回复", "Needs input");
+            if (session.running) return localize("运行中", "Running");
             string preset = String.IsNullOrWhiteSpace(session.agentPreset) ? "" : session.agentPreset.Trim();
-            if (preset.Equals("coding", StringComparison.OrdinalIgnoreCase)) return chinese ? "编码" : "Coding";
-            if (preset.Equals("plan", StringComparison.OrdinalIgnoreCase)) return chinese ? "计划" : "Plan";
-            if (preset.Equals("review", StringComparison.OrdinalIgnoreCase)) return chinese ? "复核" : "Review";
-            if (preset.Equals("standard", StringComparison.OrdinalIgnoreCase)) return chinese ? "标准" : "Standard";
-            if (String.IsNullOrEmpty(preset)) return chinese ? "已完成" : "Completed";
+            if (preset.Equals("coding", StringComparison.OrdinalIgnoreCase)) return localize("编码", "Coding");
+            if (preset.Equals("plan", StringComparison.OrdinalIgnoreCase)) return localize("计划", "Plan");
+            if (preset.Equals("review", StringComparison.OrdinalIgnoreCase)) return localize("复核", "Review");
+            if (preset.Equals("standard", StringComparison.OrdinalIgnoreCase)) return localize("标准", "Standard");
+            if (String.IsNullOrEmpty(preset)) return localize("已完成", "Completed");
             return preset;
         }
 
@@ -650,7 +652,7 @@ namespace DshPortable
             foreach (TrayBridgeSession session in sessions.Take(3))
             {
                 notificationSessionId = session.id;
-                if (!NativeTaskNotification.ShowCompletion(session, uiLanguage.Equals("zh", StringComparison.OrdinalIgnoreCase)))
+                if (!NativeTaskNotification.ShowCompletion(session, L))
                     fallbackNotifications.Add(Tuple.Create(session, false));
             }
         }
@@ -664,7 +666,7 @@ namespace DshPortable
             foreach (TrayBridgeSession session in sessions.Take(3))
             {
                 notificationSessionId = session.id;
-                if (!NativeTaskNotification.ShowAttention(session, uiLanguage.Equals("zh", StringComparison.OrdinalIgnoreCase)))
+                if (!NativeTaskNotification.ShowAttention(session, L))
                     fallbackNotifications.Add(Tuple.Create(session, true));
             }
         }
