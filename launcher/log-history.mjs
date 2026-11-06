@@ -6,6 +6,7 @@ const HISTORY_DIR = 'history'
 const HISTORY_FILENAMES = new Set(['startup.jsonl', 'runtime-health.jsonl', 'desktop-health.jsonl'])
 const MAX_FILE_BYTES = 128 * 1024
 const MAX_LINE_BYTES = 16 * 1024
+const APPEND_RETRY_WAIT = new Int32Array(new SharedArrayBuffer(4))
 const DEFAULT_MAX_RUNS = 30
 const DEFAULT_MAX_AGE_MS = 14 * 86400000
 const DEFAULT_MAX_BYTES = 32 * 1024 * 1024
@@ -113,40 +114,45 @@ export function appendHistoryLog(logDirectory, startupId, filename, line) {
   if (!validStartupId(startupId) || !HISTORY_FILENAMES.has(filename) || typeof line !== 'string') return false
   if (Buffer.byteLength(line, 'utf8') > MAX_LINE_BYTES) return false
 
-  try {
-    const history = historyDirectory(logDirectory, true)
-    if (history === null) return false
-    const directory = runDirectory(history, startupId, true)
-    if (directory === null) return false
-
-    const current = path.join(directory, filename)
-    let currentInfo = null
+  // Recheck path/link and size guards on each short Windows sharing retry.
+  for (let attempt = 0; attempt < 20; attempt++) {
     try {
-      currentInfo = lstatSync(current)
-      if (currentInfo.isSymbolicLink() || !currentInfo.isFile()) return false
-    } catch (error) {
-      if (error?.code !== 'ENOENT') return false
-    }
+      const history = historyDirectory(logDirectory, true)
+      if (history === null) return false
+      const directory = runDirectory(history, startupId, true)
+      if (directory === null) return false
 
-    const data = `${line}\n`
-    const dataBytes = Buffer.byteLength(data, 'utf8')
-    if (currentInfo !== null && (currentInfo.size > MAX_FILE_BYTES || currentInfo.size + dataBytes > MAX_FILE_BYTES)) {
-      const previous = `${current}.previous`
+      const current = path.join(directory, filename)
+      let currentInfo = null
       try {
-        const previousInfo = lstatSync(previous)
-        if (!previousInfo.isSymbolicLink() && !previousInfo.isFile()) return false
-        rmSync(previous, { force: true })
+        currentInfo = lstatSync(current)
+        if (currentInfo.isSymbolicLink() || !currentInfo.isFile()) return false
       } catch (error) {
         if (error?.code !== 'ENOENT') return false
       }
-      renameSync(current, previous)
-    }
 
-    appendFileSync(current, data, { encoding: 'utf8', mode: 0o600 })
-    return true
-  } catch {
-    return false
+      const data = `${line}\n`
+      const dataBytes = Buffer.byteLength(data, 'utf8')
+      if (currentInfo !== null && (currentInfo.size > MAX_FILE_BYTES || currentInfo.size + dataBytes > MAX_FILE_BYTES)) {
+        const previous = `${current}.previous`
+        try {
+          const previousInfo = lstatSync(previous)
+          if (!previousInfo.isSymbolicLink() && !previousInfo.isFile()) return false
+          rmSync(previous, { force: true })
+        } catch (error) {
+          if (error?.code !== 'ENOENT') return false
+        }
+        renameSync(current, previous)
+      }
+
+      appendFileSync(current, data, { encoding: 'utf8', mode: 0o600 })
+      return true
+    } catch (error) {
+      if (process.platform !== 'win32' || !['EBUSY', 'EPERM', 'EACCES'].includes(error?.code) || attempt === 19) return false
+      Atomics.wait(APPEND_RETRY_WAIT, 0, 0, 5)
+    }
   }
+  return false
 }
 
 /** Prune bounded per-startup history without traversing arbitrary content. */

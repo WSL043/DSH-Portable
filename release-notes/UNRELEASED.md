@@ -2,6 +2,10 @@
 
 ## 未发布维护 / Unreleased maintenance
 
+- 修复共享启动日志被占用时 Node 的准备完成事件可能从每次启动历史中丢失的问题，保留原有日志大小与路径保护。
+
+- Preserve per-start runtime readiness events when the shared startup log is busy, retaining existing log size and path protections.
+
 - 插件安装、更新和发现沿用官方 DSH；新环境不再自动加入社区索引。现有插件与索引保留，需要时可按 README 手动添加。
 
 - Plugin installation, updates and discovery use official DSH. New environments no longer add a community index automatically. Existing plugins and indexes are preserved; the README provides an optional manual index.
