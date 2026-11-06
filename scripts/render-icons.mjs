@@ -59,6 +59,14 @@ const icoSizes = [16, 20, 24, 32, 40, 48, 64, 128, 256]
 const icoImages = await Promise.all(icoSizes.map(async (size) => ({ size, bytes: await png(size, windowsSvg) })))
 await writeFile(path.join(outputDir, 'DSH-Portable.ico'), ico(icoImages))
 
+// Runtime shell icons follow the Windows taskbar, independently of the DSH theme.
+const geometry = svg.toString('utf8').match(/<path\b[^>]*\bd="([^"]+)"/)[1]
+for (const [theme, fill] of [['light', '#000'], ['dark', '#fff']]) {
+  const mark = Buffer.from(`<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 50 50"><path fill="${fill}" d="${geometry}"/></svg>`)
+  const images = await Promise.all(icoSizes.map(async size => ({ size, bytes: await png(size, mark) })))
+  await writeFile(path.join(outputDir, `DSH-Portable-${theme}.ico`), ico(images))
+}
+
 const icnsSpecs = [
   ['icp4', 16], ['icp5', 32], ['icp6', 64], ['ic07', 128], ['ic08', 256],
   ['ic09', 512], ['ic10', 1024], ['ic11', 32], ['ic12', 64], ['ic13', 256], ['ic14', 512],

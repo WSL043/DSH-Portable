@@ -133,8 +133,23 @@ namespace DshPortable
             }
         }
 
+        private void SetSystemIcon(bool dark)
+        {
+            if (systemIcons == null || trayIcon == null || IsDisposed || Disposing || shutdownRunning || systemIconDark == dark) return;
+            Icon = systemIcons.ForBackground(dark);
+            trayIcon.Icon = Icon;
+            systemIconDark = dark;
+        }
+
         protected override void WndProc(ref Message message)
         {
+            if (message.Msg == 0x001A || message.Msg == 0x031A || message.Msg == 0x0015)
+            {
+                // Windows taskbar colors are independent of the DSH page theme.
+                base.WndProc(ref message);
+                SetSystemIcon(DesktopSystemIcons.IsSystemDark());
+                return;
+            }
             if (desktopStart && message.Msg == 0x0005)
                 nativeWasMinimizedOrMaximized = message.WParam == new IntPtr(1) || message.WParam == new IntPtr(2);
             if (desktopStart && !fullscreen && message.Msg == 0x0047 && nativeWasMinimizedOrMaximized)
@@ -663,23 +678,11 @@ namespace DshPortable
             desktopContent.BackColor = background;
             launchPanel.BackColor = background;
             launchContent.BackColor = background;
-            if (logoDark != dark && productIcon.Image != null)
+            if (logoDark != dark)
             {
-                using (Bitmap original = Icon.ToBitmap())
-                {
-                    Bitmap themed = new Bitmap(original.Width, original.Height);
-                    using (Graphics graphics = Graphics.FromImage(themed))
-                    using (System.Drawing.Imaging.ImageAttributes attributes = new System.Drawing.Imaging.ImageAttributes())
-                    {
-                        if (dark) attributes.SetColorMatrix(new System.Drawing.Imaging.ColorMatrix(new float[][] {
-                            new float[] { -1, 0, 0, 0, 0 }, new float[] { 0, -1, 0, 0, 0 },
-                            new float[] { 0, 0, -1, 0, 0 }, new float[] { 0, 0, 0, 1, 0 }, new float[] { 1, 1, 1, 0, 1 } }));
-                        graphics.DrawImage(original, new Rectangle(Point.Empty, themed.Size), 0, 0, original.Width, original.Height, GraphicsUnit.Pixel, attributes);
-                    }
-                    Image retired = productIcon.Image;
-                    productIcon.Image = themed;
-                    retired.Dispose();
-                }
+                Image retired = productIcon.Image;
+                productIcon.Image = systemIcons.ForBackground(dark).ToBitmap();
+                if (retired != null) retired.Dispose();
                 logoDark = dark;
             }
             productLabel.BackColor = background;

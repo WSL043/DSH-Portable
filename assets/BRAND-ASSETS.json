@@ -9,5 +9,5 @@
     "light": "#000000",
     "dark": "#FFFFFF"
   },
-  "derivation": "The official application favicon geometry and adaptive theme are used: black in light mode and white in dark mode. The Windows ICO keeps the white whale on a transparent background with a thin neutral dark outline for contrast on both light and dark taskbars; no pedestal is added. The macOS and shared PNG assets use the black whale on a transparent background."
+  "derivation": "The official application favicon geometry and adaptive theme are used: black in light mode and white in dark mode. The Windows running window and tray follow the Windows taskbar theme independently of the DSH page theme. The static Windows ICO remains a transparent white whale with a neutral outline as a fallback; no pedestal is added. macOS and shared PNG assets use the black whale on a transparent background."
 }

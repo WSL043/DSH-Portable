@@ -2,9 +2,13 @@
 
 ## 未发布维护 / Unreleased maintenance
 
-- 修复工作区顶部扩展槽声明归属错误导致会话列表整体不显示的问题；兼容修复已打包的旧适配，不改会话数据或插件。更新提示与独立环境入口的异步显隐保持相同 Hook 顺序。Windows 无底座白鲸图标加强浅色背景的小尺寸轮廓。
+- Windows 运行中的任务栏和托盘图标按系统任务栏配色使用黑色或白色实心鲸鱼，不再依赖白色图标的细轮廓；保持透明、无底座。起动画面的标志单独跟随 DSH 页面配色；系统配色变更时更新窗口与托盘图标。
 
-- Fix the misplaced workspace-header slot declaration that hid the conversation list, including already packed adapters, without changing sessions or plugins. Keep hook order stable when update and environment controls appear asynchronously. Improve the small white whale outline on light Windows taskbars without adding a background.
+- Running Windows taskbar and tray icons use a solid black or white whale for the system taskbar theme, with a transparent background and no pedestal. The loading logo follows the DSH page theme independently. Windows theme changes refresh the window and tray icons.
+
+- 修复工作区顶部扩展槽声明归属错误导致会话列表整体不显示的问题；兼容修复已打包的旧适配，不改会话数据或插件。更新提示与独立环境入口的异步显隐保持相同 Hook 顺序。
+
+- Fix the misplaced workspace-header slot declaration that hid the conversation list, including already packed adapters, without changing sessions or plugins. Keep hook order stable when update and environment controls appear asynchronously.
 
 - Portable 菜单、托盘、更新和维护页面跟随官方 DSH 语言设置，增加日语、西班牙语、法语、德语、俄语和巴西葡萄牙语；复用官方语言变更通知，不增加独立语言偏好。Web 与 Windows 文案共用一份辞书，移除从页面 DOM 猜测语言的分支。
 
@@ -14,9 +18,9 @@
 
 - Recheck the owned WebView2 process tree after a bounded shutdown request instead of reporting a timeout from stale PIDs. Ownership checks and termination scope stay unchanged. Native import checks now report an early native failure at its actual stage.
 
-- Windows 任务栏和通知区域使用无底色的白色鲸鱼图标，增加细深色轮廓，兼顾浅色与深色背景的辨识度。感谢 [crazyrainman 的反馈](https://github.com/WSL043/DSH-Portable/discussions/39#discussioncomment-19370243)。
+- Windows 静态 EXE 图标保留透明白鲸和细深色轮廓作为未运行时的通用后备；运行中的窗口与托盘使用上述系统配色图标。感谢 [crazyrainman 的反馈](https://github.com/WSL043/DSH-Portable/discussions/39#discussioncomment-19370243)。
 
-- The Windows taskbar and notification area use a white whale with a thin dark outline on a transparent background, keeping it visible on light and dark backgrounds. Thanks to [crazyrainman for the report](https://github.com/WSL043/DSH-Portable/discussions/39#discussioncomment-19370243).
+- The static Windows EXE icon retains a transparent white whale with a thin dark outline as a fallback; running windows and tray icons use the system-theme artwork above. Thanks to [crazyrainman for the report](https://github.com/WSL043/DSH-Portable/discussions/39#discussioncomment-19370243).
 
 - 新版本不再默认安装 Image Viewer 和 Chat Manager；已有安装、配置与启停状态保持不变，可按需通过官方插件管理安装。
 

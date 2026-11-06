@@ -545,6 +545,22 @@ test('desktop icons are derived from the pinned official DSH mark', async () => 
   assert.equal(await exists('assets/DSH-Portable.ico'), true)
   assert.equal(await exists('assets/DSH-Portable.icns'), true)
 
+  for (const [theme, fill] of [['light', 0], ['dark', 255]]) {
+    const runtimeIcon = await readFile(path.join(root, `assets/DSH-Portable-${theme}.ico`))
+    const runtimeFrames = icoPngFrames(runtimeIcon).map(decodeIconPng)
+    assert.deepEqual(runtimeFrames.map(({ width }) => width), [16, 20, 24, 32, 40, 48, 64, 128, 256])
+    for (const { rows, cornerAlphas } of runtimeFrames) {
+      assert.deepEqual(cornerAlphas, [0, 0, 0, 0], 'runtime whales remain transparent and pedestal-free')
+      let ink = 0
+      for (let p = 0; p < rows.length; p += 4) {
+        if (rows[p + 3] === 0) continue
+        assert.deepEqual([...rows.subarray(p, p + 3)], [fill, fill, fill], 'runtime icon has a solid monochrome fill')
+        ink++
+      }
+      assert.ok(ink > 8)
+    }
+  }
+
   const png = await readFile(path.join(root, 'assets/DSH-Portable-512.png'))
   assert.deepEqual(decodeIconPng(png).cornerAlphas, [0, 0, 0, 0], 'the user-visible PNG must have transparent corners')
   const ico = await readFile(path.join(root, 'assets/DSH-Portable.ico'))
@@ -578,7 +594,7 @@ test('Windows package exposes real GUI executables with matching icon and an iso
 
   assert.match(source, /Application\.ExecutablePath/)
   assert.match(source, /portable-cli\.mjs/)
-  assert.match(source, /Icon\.ExtractAssociatedIcon/)
+  assert.match(source, /new DesktopSystemIcons\(Assembly\.GetExecutingAssembly\(\)\)/)
   assert.match(source, /nonInteractive/)
   assert.match(source, /Environment\.ExitCode/)
   assert.match(source, /DSH_PORTABLE_LAUNCHER_DIAGNOSTIC/)

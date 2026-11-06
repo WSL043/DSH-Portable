@@ -90,4 +90,44 @@ namespace DshPortable
         }
     }
 
+    internal sealed class DesktopSystemIcons : IDisposable
+    {
+        private readonly Icon black;
+        private readonly Icon white;
+
+        internal DesktopSystemIcons(Assembly assembly)
+        {
+            black = Load(assembly, "DSH.Portable.Icon.Light");
+            try { white = Load(assembly, "DSH.Portable.Icon.Dark"); }
+            catch { black.Dispose(); throw; }
+        }
+
+        private static Icon Load(Assembly assembly, string name)
+        {
+            using (Stream stream = assembly.GetManifestResourceStream(name))
+            {
+                if (stream == null) throw new InvalidDataException("Missing desktop icon resource: " + name);
+                // Keep an owned HICON: PNG-backed Icon.ToBitmap is unreliable on .NET Framework.
+                using (Icon icon = new Icon(stream))
+                using (Icon native = Icon.FromHandle(icon.Handle))
+                    return (Icon)native.Clone();
+            }
+        }
+
+        internal Icon ForBackground(bool dark) { return dark ? white : black; }
+
+        internal static bool IsSystemDark()
+        {
+            if (SystemInformation.HighContrast) return SystemColors.Control.GetBrightness() < 0.5F;
+            try
+            {
+                object setting = Registry.GetValue(@"HKEY_CURRENT_USER\Software\Microsoft\Windows\CurrentVersion\Themes\Personalize", "SystemUsesLightTheme", 1);
+                return Convert.ToInt32(setting, CultureInfo.InvariantCulture) == 0;
+            }
+            catch { return false; }
+        }
+
+        public void Dispose() { black.Dispose(); white.Dispose(); }
+    }
+
 }

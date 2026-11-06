@@ -106,6 +106,8 @@ async function compileLauncher(output, webview2, notifications) {
     ...winrt.map(filename => `/reference:${filename}`),
     `/reference:${webview2.core}`, `/reference:${webview2.winforms}`,
     `/reference:${notifications.notification}`, `/reference:${notifications.tuple}`,
+    `/resource:${path.join(projectRoot, 'assets/DSH-Portable-light.ico')},DSH.Portable.Icon.Light`,
+    `/resource:${path.join(projectRoot, 'assets/DSH-Portable-dark.ico')},DSH.Portable.Icon.Dark`,
     `/out:${output}`,
     ...sources,
   ])

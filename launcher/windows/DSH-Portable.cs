@@ -102,6 +102,8 @@ namespace DshPortable
         private string notificationSessionId;
         private readonly Panel desktopContent = new DesktopContentPanel { Dock = DockStyle.Fill };
         private bool logoDark;
+        private readonly DesktopSystemIcons systemIcons;
+        private bool systemIconDark;
         private string desktopMenuLanguage;
         private MenuStrip desktopMenu;
         private bool fullscreen;
@@ -174,7 +176,10 @@ namespace DshPortable
 
             // The window has no drawn caption (WS_CAPTION is removed), but the title still names the taskbar button.
             Text = "DeepSeek Harness";
-            Icon = Icon.ExtractAssociatedIcon(Application.ExecutablePath);
+            systemIcons = new DesktopSystemIcons(Assembly.GetExecutingAssembly());
+            Disposed += delegate { systemIcons.Dispose(); };
+            systemIconDark = DesktopSystemIcons.IsSystemDark();
+            Icon = systemIcons.ForBackground(systemIconDark);
             // Keep the executable-owned DSH icon on the native frame so the
             // taskbar never falls back to the hosted WebView/Node identity.
             ShowIcon = true;
@@ -205,8 +210,9 @@ namespace DshPortable
                 Location = desktopStart ? new Point(0, 8) : new Point(24, 20),
                 Size = desktopStart ? new Size(36, 36) : new Size(40, 40),
                 SizeMode = PictureBoxSizeMode.Zoom,
-                Image = Icon == null ? null : Icon.ToBitmap(),
+                Image = systemIcons.ForBackground(trayTheme == "dark").ToBitmap(),
             };
+            logoDark = trayTheme == "dark";
             productLabel = new Label
             {
                 AutoSize = false,
