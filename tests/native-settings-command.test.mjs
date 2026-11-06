@@ -4,16 +4,54 @@ import test from 'node:test'
 import vm from 'node:vm'
 import { patchNativeSettingsCommand, patchPortableUpdatesIcon, patchPluginSettingsNavigation, patchPluginInstallationGuidance, hasOfficialPluginManagement, patchPluginManagerActions, patchWorkspaceHeaderActions } from '../scripts/patch-native-settings-command.mjs'
 
-test('workspace header extension keeps official controls and allocates room without changing hidden state', () => {
-  const source = '"sidebar.workspaces.session.menu.item": { kind: "list" }; children: [wide && (0, react_jsx_runtime.jsx)(ViewOptionsMenu, { original: true })]; .abc_headerActions{opacity:1;max-width:60px;display:flex}.abc_headerActionsHidden{max-width:0}'
+function workspaceHeaderFixture() {
+  return 'function WorkspaceBrowser({ renderSlot, wide }) { return { children: [wide && (0, react_jsx_runtime.jsx)(ViewOptionsMenu, { original: true })] }; }\n'
+    + 'const css = ".abc_headerActions{opacity:1;max-width:60px;display:flex}.abc_headerActionsHidden{max-width:0}";\n'
+    + 'ctx.slots.inject("sidebar.workspaces", () => ctx.slots.register({ name: "sidebar.workspaces", children: { "sidebar.workspaces.directoryFlow": { kind: "single" } } }, WorkspaceBrowser));\n'
+    + 'ctx.slots.inject("contextMenu.content", () => ctx.slots.register({ name: "contextMenu.content", children: { "sidebar.workspaces.session.menu.item": { kind: "list" } } }, function SessionMenu() {}));'
+}
+
+function renderWorkspaceHeader(source) {
+  const entries = new Map()
+  vm.runInNewContext(source, {
+    ctx: { slots: { inject(_name, factory) { factory() }, register(options, component) { entries.set(options.name, { options, component }) } } },
+    ViewOptionsMenu: 'official-view-options',
+    WorkspaceBrowser_module_css_default: { iconButton: 'official-icon-button' },
+    react_jsx_runtime: { jsx: (type, props) => ({ type, props }) },
+  })
+  const workspace = entries.get('sidebar.workspaces')
+  const result = workspace.component({ wide: true, renderSlot(name) {
+    assert.ok(workspace.options.children[name], 'child slot belongs to its rendering workspace entry')
+    return 'archive-shortcut'
+  } })
+  return { entries, result }
+}
+
+test('workspace header declares its child on the rendering parent and preserves official controls', () => {
+  const source = workspaceHeaderFixture()
   const result = patchWorkspaceHeaderActions(source)
-  assert.match(result, /renderSlot\("sidebar.workspaces.header.action", \{ className: WorkspaceBrowser_module_css_default.iconButton \}\), wide &&/)
-  assert.match(result, /ViewOptionsMenu, \{ original: true \}/)
+  const rendered = renderWorkspaceHeader(result)
+  assert.equal(rendered.result.children[0], 'archive-shortcut')
+  assert.equal(rendered.result.children[1].type, 'official-view-options')
+  assert.equal(rendered.entries.get('contextMenu.content').options.children['sidebar.workspaces.header.action'], undefined)
   assert.match(result, /max-width:92px/)
   assert.match(result, /headerActionsHidden\{max-width:0\}/)
   assert.equal(patchWorkspaceHeaderActions(result), result)
   assert.equal(patchWorkspaceHeaderActions('old workspace'), 'old workspace')
   assert.throws(() => patchWorkspaceHeaderActions(source.replace('max-width:60px', 'max-width:61px')), /width changed upstream/)
+  assert.throws(() => patchWorkspaceHeaderActions(source.replace('name: "sidebar.workspaces"', 'name: "changed"')), /parent declaration changed upstream/)
+})
+
+test('already packed v1 workspace adapters are repaired without duplicating the header or widening it again', () => {
+  const legacy = workspaceHeaderFixture()
+    .replace('"sidebar.workspaces.session.menu.item": {', '/* dsh-portable-workspace-header-actions-v1 */ "sidebar.workspaces.header.action": { kind: "list", scope: "root" },\n"sidebar.workspaces.session.menu.item": {')
+    .replace('children: [wide && (0, react_jsx_runtime.jsx)(ViewOptionsMenu, {', 'children: [wide && renderSlot("sidebar.workspaces.header.action", { className: WorkspaceBrowser_module_css_default.iconButton }), wide && (0, react_jsx_runtime.jsx)(ViewOptionsMenu, {')
+    .replace('max-width:60px', 'max-width:92px')
+  assert.throws(() => renderWorkspaceHeader(legacy), /child slot belongs/)
+  const fixed = patchWorkspaceHeaderActions(legacy)
+  assert.equal(renderWorkspaceHeader(fixed).result.children[0], 'archive-shortcut')
+  assert.equal(fixed.split('wide && renderSlot("sidebar.workspaces.header.action"').length - 1, 1)
+  assert.equal(patchWorkspaceHeaderActions(fixed), fixed)
 })
 
 function pluginManagerFixture(refreshAction) {

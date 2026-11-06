@@ -2,6 +2,10 @@
 
 ## 未发布维护 / Unreleased maintenance
 
+- 修复工作区顶部扩展槽声明归属错误导致会话列表整体不显示的问题；兼容修复已打包的旧适配，不改会话数据或插件。更新提示与独立环境入口的异步显隐保持相同 Hook 顺序。Windows 无底座白鲸图标加强浅色背景的小尺寸轮廓。
+
+- Fix the misplaced workspace-header slot declaration that hid the conversation list, including already packed adapters, without changing sessions or plugins. Keep hook order stable when update and environment controls appear asynchronously. Improve the small white whale outline on light Windows taskbars without adding a background.
+
 - Portable 菜单、托盘、更新和维护页面跟随官方 DSH 语言设置，增加日语、西班牙语、法语、德语、俄语和巴西葡萄牙语；复用官方语言变更通知，不增加独立语言偏好。Web 与 Windows 文案共用一份辞书，移除从页面 DOM 猜测语言的分支。
 
 - Portable menus, tray, updates and maintenance follow the official DSH language preference, adding Japanese, Spanish, French, German, Russian and Brazilian Portuguese. Web and Windows copy share one dictionary; language changes use the official event instead of reading the page DOM or adding a separate preference.
