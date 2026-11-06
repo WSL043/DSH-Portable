@@ -545,28 +545,29 @@ test('desktop icons are derived from the pinned official DSH mark', async () => 
   assert.equal(await exists('assets/DSH-Portable.ico'), true)
   assert.equal(await exists('assets/DSH-Portable.icns'), true)
 
+  for (const [theme, fill] of [['light', 0], ['dark', 255]]) {
+    const runtimeIcon = await readFile(path.join(root, `assets/DSH-Portable-${theme}.ico`))
+    const runtimeFrames = icoPngFrames(runtimeIcon).map(decodeIconPng)
+    assert.deepEqual(runtimeFrames.map(({ width }) => width), [16, 20, 24, 32, 40, 48, 64, 128, 256])
+    for (const { rows, cornerAlphas } of runtimeFrames) {
+      assert.deepEqual(cornerAlphas, [0, 0, 0, 0], 'runtime whales remain transparent and pedestal-free')
+      let ink = 0
+      for (let p = 0; p < rows.length; p += 4) {
+        if (rows[p + 3] === 0) continue
+        assert.deepEqual([...rows.subarray(p, p + 3)], [fill, fill, fill], 'runtime icon has a solid monochrome fill')
+        ink++
+      }
+      assert.ok(ink > 8)
+    }
+  }
+
   const png = await readFile(path.join(root, 'assets/DSH-Portable-512.png'))
   assert.deepEqual(decodeIconPng(png).cornerAlphas, [0, 0, 0, 0], 'the user-visible PNG must have transparent corners')
   const ico = await readFile(path.join(root, 'assets/DSH-Portable.ico'))
   const frames = icoPngFrames(ico).map(decodeIconPng)
   assert.deepEqual(frames.map(({ width }) => width), [16, 20, 24, 32, 40, 48, 64, 128, 256])
-  for (const { rows, cornerAlphas } of frames) {
-    assert.deepEqual(cornerAlphas, [0, 0, 0, 0], 'every Windows icon size must have transparent corners')
-    let opaqueWhite = 0
-    let opaqueOutline = 0
-    let hasContrast = false
-    for (let pixel = 0; pixel < rows.length; pixel += 4) {
-      const [red, green, blue, alpha] = rows.subarray(pixel, pixel + 4)
-      if (alpha >= 64 && Math.max(red, green, blue) <= 192) hasContrast = true
-      if (alpha !== 255) continue
-      if (rows.readUIntBE(pixel, 3) === 0xffffff) { opaqueWhite++; continue }
-      assert.ok(red >= 48 && green >= 52 && blue >= 59 && red <= green && green <= blue && blue - red <= 11,
-        'opaque edges may only blend the neutral dark outline with the white body')
-      opaqueOutline++
-    }
-    assert.ok(opaqueWhite > opaqueOutline, 'the whale body must remain predominantly white')
-    assert.ok(hasContrast, 'every size needs a visible outline on a light taskbar')
-  }
+  assert.deepEqual(ico, await readFile(path.join(root, 'assets/DSH-Portable-light.ico')), 'the static EXE uses the solid black official mark')
+  assert.doesNotMatch(windowsSvg, /\bstroke(?:=|-)/, 'the white mark has no black outline')
 })
 
 test('Windows package exposes real GUI executables with matching icon and an isolated portable launch', async () => {
@@ -578,7 +579,7 @@ test('Windows package exposes real GUI executables with matching icon and an iso
 
   assert.match(source, /Application\.ExecutablePath/)
   assert.match(source, /portable-cli\.mjs/)
-  assert.match(source, /Icon\.ExtractAssociatedIcon/)
+  assert.match(source, /new DesktopSystemIcons\(Assembly\.GetExecutingAssembly\(\)\)/)
   assert.match(source, /nonInteractive/)
   assert.match(source, /Environment\.ExitCode/)
   assert.match(source, /DSH_PORTABLE_LAUNCHER_DIAGNOSTIC/)

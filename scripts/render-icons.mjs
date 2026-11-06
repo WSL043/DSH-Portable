@@ -10,7 +10,6 @@ if (!appDir || !sourceSvg || !outputDir) {
 const sharpModule = path.join(path.resolve(appDir), 'node_modules', 'sharp', 'dist', 'index.mjs')
 const { default: sharp } = await import(pathToFileURL(sharpModule).href)
 const svg = await readFile(path.resolve(sourceSvg))
-const windowsSvg = await readFile(new URL('../assets/DSH-Portable-white.svg', import.meta.url))
 await mkdir(path.resolve(outputDir), { recursive: true })
 
 async function png(size, source = svg) {
@@ -56,8 +55,15 @@ function icns(chunks) {
 }
 
 const icoSizes = [16, 20, 24, 32, 40, 48, 64, 128, 256]
-const icoImages = await Promise.all(icoSizes.map(async (size) => ({ size, bytes: await png(size, windowsSvg) })))
-await writeFile(path.join(outputDir, 'DSH-Portable.ico'), ico(icoImages))
+// Runtime shell icons follow the Windows taskbar, independently of the DSH theme.
+const geometry = svg.toString('utf8').match(/<path\b[^>]*\bd="([^"]+)"/)[1]
+for (const [theme, fill] of [['light', '#000'], ['dark', '#fff']]) {
+  const mark = Buffer.from(`<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 50 50"><path fill="${fill}" d="${geometry}"/></svg>`)
+  const images = await Promise.all(icoSizes.map(async size => ({ size, bytes: await png(size, mark) })))
+  const bytes = ico(images)
+  await writeFile(path.join(outputDir, `DSH-Portable-${theme}.ico`), bytes)
+  if (theme === 'light') await writeFile(path.join(outputDir, 'DSH-Portable.ico'), bytes)
+}
 
 const icnsSpecs = [
   ['icp4', 16], ['icp5', 32], ['icp6', 64], ['ic07', 128], ['ic08', 256],

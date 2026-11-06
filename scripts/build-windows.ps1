@@ -375,6 +375,8 @@ try {
         "/win32icon:$ProjectRoot\assets\DSH-Portable.ico",
         "/win32manifest:$ProjectRoot\launcher\windows\DSH-Portable.manifest",
         "/resource:$NativeLocales,DSH.Portable.Locales",
+        "/resource:$ProjectRoot\assets\DSH-Portable-light.ico,DSH.Portable.Icon.Light",
+        "/resource:$ProjectRoot\assets\DSH-Portable-dark.ico,DSH.Portable.Icon.Dark",
         '/reference:System.dll', '/reference:System.Core.dll', '/reference:System.Drawing.dll', '/reference:System.Windows.Forms.dll',
         '/reference:System.Web.Extensions.dll',
         "/reference:$WindowsWinmd", "/reference:$UniversalApiContract", "/reference:$WindowsRuntimeAssembly",

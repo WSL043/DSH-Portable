@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.ComponentModel;
+using System.Drawing;
 using System.Linq;
 using System.Reflection;
 using System.Runtime.InteropServices;
@@ -14,6 +15,23 @@ internal static class WindowControlsFixture
 
     [DllImport("user32.dll")]
     private static extern bool IsWindowVisible(IntPtr handle);
+
+    [DllImport("user32.dll")]
+    private static extern IntPtr SendMessage(IntPtr handle, int message, IntPtr wParam, IntPtr lParam);
+
+    private static void CheckIcon(Bitmap bitmap, bool white)
+    {
+        int ink = 0;
+        for (int y = 0; y < bitmap.Height; y++) for (int x = 0; x < bitmap.Width; x++)
+        {
+            Color color = bitmap.GetPixel(x, y);
+            if (color.A < 128) continue;
+            ink++;
+            Check(white ? Math.Min(color.R, Math.Min(color.G, color.B)) >= 230
+                : Math.Max(color.R, Math.Max(color.G, color.B)) <= 20, "solid system icon fill");
+        }
+        Check(ink > 8, "system icon is not empty");
+    }
 
     private static void Pump()
     {
@@ -62,6 +80,25 @@ internal static class WindowControlsFixture
             invoke("InitializeDesktopMenu", new object[0]);
             form.Show();
             Application.DoEvents();
+            string originalTheme = (string)type.GetField("trayTheme", Private).GetValue(form);
+            foreach (bool dark in new[] { false, true })
+            {
+                invoke("SetSystemIcon", new object[] { dark });
+                type.GetField("trayTheme", Private).SetValue(form, dark ? "light" : "dark");
+                invoke("ApplyDesktopChrome", new object[0]);
+                foreach (int kind in new[] { 0, 1 })
+                {
+                    IntPtr icon = SendMessage(form.Handle, 0x007F, new IntPtr(kind), IntPtr.Zero);
+                    Check(icon != IntPtr.Zero, "native window has its own icon");
+                    using (Icon copy = (Icon)Icon.FromHandle(icon).Clone())
+                    using (Bitmap bitmap = copy.ToBitmap()) CheckIcon(bitmap, dark);
+                }
+                using (Bitmap bitmap = ((NotifyIcon)type.GetField("trayIcon", Private).GetValue(form)).Icon.ToBitmap()) CheckIcon(bitmap, dark);
+                using (Bitmap bitmap = new Bitmap(((PictureBox)type.GetField("productIcon", Private).GetValue(form)).Image)) CheckIcon(bitmap, !dark);
+            }
+            type.GetField("trayTheme", Private).SetValue(form, originalTheme);
+            invoke("ApplyDesktopChrome", new object[0]);
+            SendMessage(form.Handle, 0x001A, IntPtr.Zero, IntPtr.Zero);
             ToolStrip bar = (ToolStrip)type.GetField("desktopMenu", Private).GetValue(form);
             Control content = (Control)type.GetField("desktopContent", Private).GetValue(form);
             ToolStripMenuItem help = (ToolStripMenuItem)bar.Items["menu-help"];
