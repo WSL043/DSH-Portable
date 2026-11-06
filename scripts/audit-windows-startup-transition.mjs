@@ -329,8 +329,9 @@ try {
   }, null, 2))
   if (requireLoading) {
     assert.ok(capturedBoot && nativeLoading, 'the native loading surface was not captured and painted')
-    assert.ok(capsuleReady && capsuleReady.elapsedMs <= 130000,
-      'cold capsule preparation must finish within 130s on the hosted runner')
+    assert.ok(capsuleReady, 'runtime capsule readiness is missing from the per-start history')
+    assert.ok(capsuleReady.elapsedMs <= 130000,
+      'runtime capsule preparation or reuse must finish within 130s on the hosted runner')
     assert.ok(nativeReady && nativeLoading.elapsedMs < nativeReady.elapsedMs,
       'native loading must precede the usable workspace handoff')
     assert.ok(nativeReady.elapsedMs - capsuleReady.elapsedMs <= 30000,

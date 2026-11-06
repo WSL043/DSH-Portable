@@ -7,6 +7,7 @@ import os from 'node:os'
 import path from 'node:path'
 import test from 'node:test'
 import { promisify } from 'node:util'
+import { pathToFileURL } from 'node:url'
 
 const execFileAsync = promisify(execFile)
 const projectRoot = path.resolve(import.meta.dirname, '..')
@@ -243,6 +244,21 @@ test('native startup history survives a locked latest log and concurrent writers
     '      }',
     '      return 0;',
     '    }',
+    '    if (args[2] == "node-latest-locked" || args[2] == "node-history-contended") {',
+    '      string filename = Path.Combine(probe.directory, "startup-latest.jsonl");',
+    '      if (args[2] == "node-history-contended") { filename = Path.Combine(probe.directory, "history", probe.startupId, "startup.jsonl"); Directory.CreateDirectory(Path.GetDirectoryName(filename)); }',
+    '      using (var held = new FileStream(filename, FileMode.OpenOrCreate, FileAccess.ReadWrite, FileShare.None)) {',
+    '        var startInfo = new ProcessStartInfo(args[3], "--input-type=module") { UseShellExecute = false, CreateNoWindow = true, RedirectStandardInput = true };',
+    '        using (var child = Process.Start(startInfo)) {',
+    '          child.StandardInput.Write(File.ReadAllText(args[4])); child.StandardInput.Close();',
+    '          if (args[2] == "node-history-contended") {',
+    '            var wait = Stopwatch.StartNew(); while (!File.Exists(Path.Combine(probe.directory, "node.ready"))) { if (wait.ElapsedMilliseconds > 5000) throw new TimeoutException("node trace barrier"); Thread.Sleep(1); }',
+    '            Thread.Sleep(30); held.Dispose();',
+    '          }',
+    '          if (!child.WaitForExit(5000)) { child.Kill(); throw new TimeoutException("node trace writer"); } return child.ExitCode;',
+    '        }',
+    '      }',
+    '    }',
     '    if (args[2] == "history-contended") {',
     '      string directory = probe.directory;',
     '      probe.directory = Path.Combine(directory, "warmup");',
@@ -296,6 +312,22 @@ test('native startup history survives a locked latest log and concurrent writers
     assert.equal(written[0].phase, 'history-contended')
     assert.equal(written[0].startupId, id)
     assert.equal(written[0].component, 'native-host')
+  }
+  for (const mode of ['node-latest-locked', 'node-history-contended']) {
+    const directory = path.join(fixture, mode)
+    const script = path.join(fixture, mode + '.mjs')
+    await writeFile(script, [
+      "import { writeFileSync } from 'node:fs'",
+      'import { appendStartupTrace } from ' + JSON.stringify(pathToFileURL(path.join(projectRoot, 'launcher/startup-trace.mjs')).href),
+      'writeFileSync(' + JSON.stringify(path.join(directory, 'node.ready')) + ', "ready")',
+      'const trace = ' + JSON.stringify({ filename: path.join(directory, 'startup-latest.jsonl'), startupId: id, startedAt: Date.now() }),
+      'if (!appendStartupTrace(trace, "runtime-entry", "runtime-capsule-ready", { reused: true, elapsedMsRuntime: 8 })) throw Error("Node startup event was lost")',
+    ].join('\n'))
+    await execFileAsync(exe, [directory, id, mode, process.execPath, script], { windowsHide: true, timeout: 15000 })
+    const written = events(await readFile(path.join(directory, 'history', id, 'startup.jsonl'), 'utf8'))
+    assert.equal(written.length, 1, mode + ' preserves the real Node event')
+    assert.equal(written[0].phase, 'runtime-capsule-ready')
+    assert.equal(written[0].reused, true)
   }
   const outside = path.join(fixture, 'outside.jsonl')
   const sentinel = Buffer.from('external sentinel\r\n')

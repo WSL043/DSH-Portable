@@ -43,9 +43,12 @@ export function appendStartupTrace(trace, component, phase, fields = {}) {
       component: String(component).slice(0, 80),
       phase: String(phase).slice(0, 160),
     })
-    appendFileSync(trace.filename, `${line}\n`, 'utf8')
-    appendHistoryLog(path.dirname(trace.filename), trace.startupId, 'startup.jsonl', line)
-    return true
+    // Keep the per-start event even when another process owns the latest log.
+    const recorded = appendHistoryLog(path.dirname(trace.filename), trace.startupId, 'startup.jsonl', line)
+    try {
+      appendFileSync(trace.filename, `${line}\n`, 'utf8')
+      return true
+    } catch { return recorded }
   } catch {
     return false
   }
