@@ -1,10 +1,6 @@
-// Enables the official experimental plugin market (shipped inside @deepseek-ai/dsh 0.2.1-alpha.4 and later) in the
-// Portable profile and gives it the Awesome DSH catalog as its first index source.
-//
-// Both steps are done once per profile, not on every start: the official Plugins page turns the bundle off by removing
-// it from `dsh.profile.bundles`, and an index source can be removed in its Discover tab, so a user's choice has to stick.
-// The one thing done on every start is suspending the bundle when the active core does not ship it (0.2.0-rc.2): the
-// profile must never name a bundle its core cannot resolve.
+// Enables the official market bundle once for the Portable web profile.
+// Discover indexes belong to the user; Portable never adds or edits them.
+// Keep the existing opt-out and historical-core suspend/restore compatibility.
 import { existsSync } from 'node:fs'
 import { createRequire } from 'node:module'
 import { mkdir, readFile, rename, writeFile } from 'node:fs/promises'
@@ -13,27 +9,7 @@ import { pathToFileURL } from 'node:url'
 import { loadOfficialProfileBundles } from './official-profile-bundles.mjs'
 
 export const OFFICIAL_MARKET_BUNDLE = '@deepseek-ai/dsh-experimental-plugin-market-bundle'
-// The CDN serves the public official-format index without redirects, including on networks that cannot reach GitHub raw.
-export const AWESOME_INDEX_URL = 'https://cdn.jsdelivr.net/gh/WSL043/DSH-Portable-Updates@market-index/awesome-index.json'
 const STATE_FILE = '.dsh-portable-official-market.json'
-const PLUGIN_MARKET_ROW = /^-[ \t]+id:[ \t]*['"]?plugin-market['"]?[ \t]*$/mu
-
-function emptyPatch(text) {
-  return text.split(/\r?\n/u).every(line => /^\s*(?:#.*)?$/u.test(line) || /^\s*\[\s*\]\s*$/u.test(line))
-}
-
-/** The patch file with the Awesome index added as a new `plugin-market` row; null when the user already owns that row. */
-export function withAwesomeIndex(text, url = AWESOME_INDEX_URL) {
-  if (PLUGIN_MARKET_ROW.test(text)) return null
-  const row = `- id: plugin-market\n  config:\n    indexes:\n      - ${url}\n`
-  const eol = text.includes('\r\n') ? '\r\n' : '\n'
-  const block = row.replaceAll('\n', eol)
-  if (emptyPatch(text)) {
-    const header = text.split(/\r?\n/u).filter(line => /^\s*#/u.test(line)).join(eol)
-    return `${header ? `${header}${eol}` : ''}${block}`
-  }
-  return `${text.endsWith('\n') ? text : `${text}${eol}`}${block}`
-}
 
 async function readJson(filename, fallback, load) {
   try {
@@ -124,18 +100,7 @@ export async function ensureOfficialMarket(layout, adapters = {}) {
       delete state.suspended
       stateChanged = true
     }
-    if (state.indexOffered !== true) {
-      const patchPath = paths.join(profileRoot, 'cordis.patch.yml')
-      const current = exists(patchPath) ? await load(patchPath, 'utf8') : ''
-      const next = withAwesomeIndex(current)
-      if (next !== null) {
-        await makeDirectory(profileRoot, { recursive: true })
-        await writeAtomic(patchPath, next, save, move)
-        actions.push('added-index')
-      }
-      state.indexOffered = true
-      stateChanged = true
-    }
+
   }
   if (manifestChanged) await writeAtomic(manifestPath, `${JSON.stringify(manifest, null, 2)}\n`, save, move)
   if (stateChanged) await writeAtomic(statePath, `${JSON.stringify({ schemaVersion: 1, ...state })}\n`, save, move)

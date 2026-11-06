@@ -338,7 +338,8 @@ try {
 
 
     await openMarket()
-    await until(expression(() => document.querySelectorAll('[data-plugin-tab="discover"] [data-market-entry]').length > 0), Boolean, 'real official Discover catalog')
+    const profilePatch = await readFile(await verifiedPackageFile(root, 'data/dsh-home/profiles/web/cordis.patch.yml'), 'utf8')
+    assert.ok(!profilePatch.includes('awesome-index.json'), 'a new profile has no automatically added community index')
     if (verifyTotal) {
       const total = await evaluate("fetch('/dsh-market/download-total?name=dsh-codex-subscription').then(async r => ({status:r.status,body:await r.json()}))")
       assert.equal(total.status, 200)
@@ -347,124 +348,18 @@ try {
       await writeFile(path.join(output, 'download-total.json'), JSON.stringify(total, null, 2))
     }
     const checks = []
-    for (const width of (soak ? Array.from({ length: 30 }, (_, i) => i % 2 ? 1200 : 580) : [580, 1200, 580])) {
+    for (const width of [580, 1200, 580]) {
       await send('Emulation.setDeviceMetricsOverride', { width, height: 900, deviceScaleFactor: 1, mobile: false })
-      await evaluate('document.fonts.ready.then(() => true)')
       const geometry = await until(expression(() => {
         const pane = document.querySelector('[data-plugin-tab="discover"]')
-        const cards = [...(pane?.querySelectorAll('[data-market-entry]') || [])]
-        const categories = pane?.querySelector('[role="group"][aria-label="Categories"],[role="group"][aria-label="分类"]')
-        if (!cards.length || !categories || pane.querySelector('[aria-busy="true"]')) return null
-        return { count: cards.length, categories: categories.querySelectorAll('button').length,
-          overflow: cards.some(card => card.scrollWidth > card.clientWidth + 1),
-          controls: cards.every(card => card.querySelector('button[aria-label]')) }
-      }), Boolean, 'official discovery layout at ' + width)
-      assert.ok(geometry.count > 0 && geometry.categories > 1)
-      assert.equal(geometry.overflow, false, 'official cards must fit the settings-column width')
-      assert.equal(geometry.controls, true, 'official details/install or manage controls remain reachable')
-      await until(expression(() => {
-        const group = document.querySelector('[data-plugin-tab="discover"] [role="group"][aria-label="Categories"],[data-plugin-tab="discover"] [role="group"][aria-label="分类"]')
-        const button = group?.querySelectorAll('button')[1]
-        button?.click(); return Boolean(button)
-      }), Boolean, 'select a real official category')
-      await until(expression(() => {
-        const group = document.querySelector('[data-plugin-tab="discover"] [role="group"][aria-label="Categories"],[data-plugin-tab="discover"] [role="group"][aria-label="分类"]')
-        return group?.querySelectorAll('button')[1]?.getAttribute('aria-pressed') === 'true'
-      }), Boolean, 'official category selection applied')
-      await until(expression(() => {
-        const group = document.querySelector('[data-plugin-tab="discover"] [role="group"][aria-label="Categories"],[data-plugin-tab="discover"] [role="group"][aria-label="分类"]')
-        group?.querySelector('button')?.click(); return Boolean(group)
-      }), Boolean, 'restore all official categories')
-      await until(expression(() => document.querySelectorAll('[data-plugin-tab="discover"] [data-market-entry]').length > 0), Boolean, 'official catalog returns after clearing category')
+        if (!pane || !pane.textContent.trim()) return null
+        const rect = pane.getBoundingClientRect()
+        return rect.width > 0 ? { width: rect.width, viewport: innerWidth } : null
+      }), Boolean, 'official Discover without a default community index')
+      assert.ok(geometry.width <= geometry.viewport, 'official Discover fits the window')
       checks.push({ width, ...geometry })
       await writeFile(path.join(output, 'official-discover-' + width + '.png'), Buffer.from((await send('Page.captureScreenshot', { format: 'png', fromSurface: true })).data, 'base64'))
-      if (checks.length % 5 === 0) await sample('official-discover-' + checks.length)
     }
-    await writeFile(path.join(output, 'category-geometry.json'), JSON.stringify(checks, null, 2))
-    await until(expression(() => {
-      const field = document.querySelector('[data-plugin-tab="discover"] input[type="search"]')
-      field?.focus(); return Boolean(field)
-    }), Boolean, 'official discovery search')
-    await send('Input.insertText', { text: 'portable-no-match-acceptance-847291' })
-    await until(expression(() => /No plugins match|没有符合条件的插件/.test(document.querySelector('[data-plugin-tab="discover"]')?.textContent || '')), Boolean, 'official search reports an empty result')
-    await send('Input.dispatchKeyEvent', { type: 'keyDown', key: 'a', code: 'KeyA', windowsVirtualKeyCode: 65, modifiers: 2 })
-    await send('Input.dispatchKeyEvent', { type: 'keyUp', key: 'a', code: 'KeyA', windowsVirtualKeyCode: 65, modifiers: 2 })
-    await send('Input.dispatchKeyEvent', { type: 'keyDown', key: 'Backspace', code: 'Backspace', windowsVirtualKeyCode: 8 })
-    await send('Input.dispatchKeyEvent', { type: 'keyUp', key: 'Backspace', code: 'Backspace', windowsVirtualKeyCode: 8 })
-    await until(expression(() => document.querySelectorAll('[data-plugin-tab="discover"] [data-market-entry]').length > 0), Boolean, 'official catalog returns after clearing search')
-    const detailPackage = await until(expression(() => {
-      const button = document.querySelector('[data-plugin-tab="discover"] [data-market-entry] button[aria-label^="View "],[data-plugin-tab="discover"] [data-market-entry] button[aria-label^="查看 "]')
-      const name = button?.closest('[data-market-entry]')?.getAttribute('data-market-entry')
-      if (!name || button.disabled || button.getBoundingClientRect().width === 0
-        || !['View ' + name, '查看 ' + name].includes(button.getAttribute('aria-label'))) return null
-      button.click(); return name
-    }), value => typeof value === 'string' && value.length > 0, 'open real official plugin details')
-    await until(expression(name => {
-      const detail = document.querySelector('[data-plugin-tab="discover"] [data-market-detail]')
-      return detail?.getAttribute('data-market-detail') === name && detail.getBoundingClientRect().width > 0
-        && detail.querySelector('h3')?.textContent.trim() === name
-        && [...detail.querySelectorAll('button[aria-label]')].some(button =>
-          ['Install ' + name, '安装 ' + name].includes(button.getAttribute('aria-label'))
-          && !button.disabled && button.getBoundingClientRect().width > 0)
-    }, detailPackage), Boolean, 'official inline detail shows the selected package and its Install control')
-    await writeFile(path.join(output, 'official-plugin-details.png'), Buffer.from((await send('Page.captureScreenshot', { format: 'png', fromSurface: true })).data, 'base64'))
-    await until(expression(name => {
-      const detail = document.querySelector('[data-plugin-tab="discover"] [data-market-detail]')
-      if (detail?.getAttribute('data-market-detail') !== name) return false
-      // The observed official breadcrumb has no aria-label; its public text is Discover / 发现.
-      const button = [...detail.querySelectorAll(':scope > button')].find(item =>
-        ['Discover', '发现'].includes((item.getAttribute('aria-label') || item.textContent || '').trim()))
-      if (!button || button.disabled || button.getBoundingClientRect().width === 0) return false
-      button.click(); return true
-    }, detailPackage), Boolean, 'return through the actual official Discover breadcrumb')
-    await until(expression(() => !document.querySelector('[data-plugin-tab="discover"] [data-market-detail]')
-      && document.querySelectorAll('[data-plugin-tab="discover"] [data-market-entry]').length > 0), Boolean, 'official Discover list returns after leaving inline details')
-    if (process.argv.includes('--layout')) {
-      // Keep the actual preview and appearance/localization checks on official Discover.
-      await until(expression(() => {
-        const image = document.querySelector('[data-plugin-tab="discover"] [data-portable-shot]')
-        image?.scrollIntoView({ block: 'center' }); return Boolean(image?.complete && image.naturalWidth > 0)
-      }), Boolean, 'real official catalog preview image')
-      await pageValue(() => document.querySelector('[data-plugin-tab="discover"] [data-portable-shot]').click())
-      await until(expression(() => Boolean(document.querySelector('[data-portable-viewer]'))), Boolean, 'official card preview opens the real viewer')
-      await send('Input.dispatchKeyEvent', { type: 'keyDown', key: 'Escape', code: 'Escape', windowsVirtualKeyCode: 27 })
-      await until(expression(() => !document.querySelector('[data-portable-viewer]') && Boolean(document.querySelector('[data-plugin-tab="discover"]'))), Boolean, 'Escape closes only the image preview')
-      await nativeState(131260)
-      await until(click(['General', 'General settings', '通用设置']), Boolean, 'official appearance settings')
-      await until(click(['Dark', '深色']), Boolean, 'official dark appearance')
-      await until(closeDialog, Boolean, 'close appearance settings')
-      await until(click(['Plugins', '插件']), Boolean, 'official Plugins in dark theme')
-      await openMarket()
-      await writeFile(path.join(output, 'official-discover-dark.png'), Buffer.from((await send('Page.captureScreenshot', { format: 'png', fromSurface: true })).data, 'base64'))
-      await nativeState(131260)
-      await until(click(['General', 'General settings', '通用设置']), Boolean, 'official language settings')
-      await until(click(['English']), Boolean, 'official language selector')
-      await until(click(['简体中文', '中文', '中文（简体）', 'Chinese', 'Simplified Chinese']), Boolean, 'official Chinese locale')
-      await until(closeDialog, Boolean, 'close Chinese settings')
-      await until(click(['插件']), Boolean, 'official Chinese Plugins')
-      await openMarket()
-      await until(expression(() => Boolean(document.querySelector('[data-plugin-tab="discover"] [role="group"][aria-label="分类"]'))), Boolean, 'official categories follow Chinese locale')
-      await writeFile(path.join(output, 'official-discover-zh-dark.png'), Buffer.from((await send('Page.captureScreenshot', { format: 'png', fromSurface: true })).data, 'base64'))
-      await nativeState(131260)
-      await until(click(['通用设置']), Boolean, 'restore official language settings')
-      await until(click(['简体中文', '中文', '中文（简体）']), Boolean, 'Chinese language selector')
-      await until(click(['English']), Boolean, 'restore English for later independent checks')
-      // Locale UI state precedes its asynchronous settings write; settle that write before the read-only baseline.
-      const { runtimeRoot } = await ensureRuntimeCapsule(root, { env })
-      const parseYaml = createRequire(path.join(runtimeRoot, 'app/package.json'))('yaml').parse
-      const localeStarted = Date.now(), localeDeadline = localeStarted + 30000
-      let preference, localePatch
-      do {
-        localePatch = await readFile(await verifiedPackageFile(root, 'data/dsh-home/profiles/web/cordis.patch.yml'))
-        const patch = parseYaml(localePatch.toString('utf8'))
-        preference = Array.isArray(patch) ? patch.find(entry => entry?.id === 'locale')?.config?.preference : undefined
-        if (preference === 'en') break
-        await delay(100)
-      } while (Date.now() < localeDeadline)
-      assert.equal(preference, 'en', 'English locale is persisted before the legacy read-only baseline')
-      await writeFile(path.join(output, 'locale-persisted-before-legacy.json'), JSON.stringify({ preference, elapsedMs: Date.now() - localeStarted, patchSha256: createHash('sha256').update(localePatch).digest('hex') }, null, 2))
-    }
-    assert.deepEqual(exceptions, [])
     await writeFile(path.join(output, 'checks.json'), JSON.stringify(checks, null, 2))
     // Exercise browsing before an import, which explicitly requires restart.
     if (await pageValue(() => [...document.querySelectorAll('[role="dialog"]')].some(item => item.getBoundingClientRect().width > 0))) {

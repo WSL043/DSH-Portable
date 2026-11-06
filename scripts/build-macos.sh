@@ -136,7 +136,6 @@ fi
 "$NODE_EXE" "$PROJECT_ROOT/scripts/patch-native-boot-handoff.mjs" "$STAGE/app"
 "$NODE_EXE" "$PROJECT_ROOT/scripts/patch-native-settings-command.mjs" "$STAGE/app"
 "$NODE_EXE" "$PROJECT_ROOT/scripts/patch-loopback-connection.mjs" "$STAGE/app"
-"$NODE_EXE" "$PROJECT_ROOT/scripts/patch-official-market-tarball.mjs" "$STAGE/app"
 "$NODE_EXE" "$PROJECT_ROOT/scripts/patch-historical-descriptor.mjs" "$STAGE/app"
 "$NODE_EXE" "$PROJECT_ROOT/scripts/patch-portable-hero-context.mjs" "$STAGE/app"
 "$NODE_EXE" "$PROJECT_ROOT/scripts/patch-client-module-startup.mjs" "$STAGE/app"

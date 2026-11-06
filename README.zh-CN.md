@@ -109,7 +109,7 @@ macOS、Linux 解压后直接运行，首次打开的注意事项见[用户指�
 
 新版本不再默认安装社区插件；已有安装及启停状态保持不变。[Image Viewer](https://github.com/WSL043/dsh-image-viewer) 和 [Chat Manager](https://github.com/WSL043/dsh-chat-manager) 可按需通过官方插件管理安装。
 
-更多插件在 **设置 → 插件 → 插件市场** 搜索安装；手动添加时在 **插件 → 添加插件** 填包名或地址，不要粘贴终端命令。详见[插件指南](docs/user-guide.zh-CN.md#插件)。
+插件安装和更新使用官方“插件 → 已安装 / 发现”。Portable 不再自动添加发现索引；如有需要，可在“发现 → 管理索引源”手动添加[社区索引](https://cdn.jsdelivr.net/gh/WSL043/DSH-Portable-Updates@market-index/awesome-index.json)。现有插件和用户的索引选择保持不变。
 
 ## 内核版本可选
 

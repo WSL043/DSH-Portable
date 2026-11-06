@@ -2,6 +2,10 @@
 
 ## 未发布维护 / Unreleased maintenance
 
+- 插件安装、更新和发现沿用官方 DSH；新环境不再自动加入社区索引。现有插件与索引保留，需要时可按 README 手动添加。
+
+- Plugin installation, updates and discovery use official DSH. New environments no longer add a community index automatically. Existing plugins and indexes are preserved; the README provides an optional manual index.
+
 - Windows 运行中的任务栏和托盘图标按系统任务栏配色使用黑色或白色实心鲸鱼，不再依赖白色图标的细轮廓；保持透明、无底座；静态 EXE 图标也统一为无轮廓的黑色官方标志。起动画面的标志单独跟随 DSH 页面配色；系统配色变更时更新窗口与托盘图标。感谢 [crazyrainman 的反馈](https://github.com/WSL043/DSH-Portable/discussions/39#discussioncomment-19370243)。
 
 - Running Windows taskbar and tray icons use a solid black or white whale for the system taskbar theme, with a transparent background and no pedestal. Static EXE icons use the solid black official mark without an outline. The loading logo follows the DSH page theme independently. Windows theme changes refresh the window and tray icons. Thanks to [crazyrainman for the report](https://github.com/WSL043/DSH-Portable/discussions/39#discussioncomment-19370243).
