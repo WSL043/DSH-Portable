@@ -2,9 +2,9 @@
 
 ## 未发布维护 / Unreleased maintenance
 
-- Windows 运行中的任务栏和托盘图标按系统任务栏配色使用黑色或白色实心鲸鱼，不再依赖白色图标的细轮廓；保持透明、无底座。起动画面的标志单独跟随 DSH 页面配色；系统配色变更时更新窗口与托盘图标。
+- Windows 运行中的任务栏和托盘图标按系统任务栏配色使用黑色或白色实心鲸鱼，不再依赖白色图标的细轮廓；保持透明、无底座；静态 EXE 图标也统一为无轮廓的黑色官方标志。起动画面的标志单独跟随 DSH 页面配色；系统配色变更时更新窗口与托盘图标。感谢 [crazyrainman 的反馈](https://github.com/WSL043/DSH-Portable/discussions/39#discussioncomment-19370243)。
 
-- Running Windows taskbar and tray icons use a solid black or white whale for the system taskbar theme, with a transparent background and no pedestal. The loading logo follows the DSH page theme independently. Windows theme changes refresh the window and tray icons.
+- Running Windows taskbar and tray icons use a solid black or white whale for the system taskbar theme, with a transparent background and no pedestal. Static EXE icons use the solid black official mark without an outline. The loading logo follows the DSH page theme independently. Windows theme changes refresh the window and tray icons. Thanks to [crazyrainman for the report](https://github.com/WSL043/DSH-Portable/discussions/39#discussioncomment-19370243).
 
 - 修复工作区顶部扩展槽声明归属错误导致会话列表整体不显示的问题；兼容修复已打包的旧适配，不改会话数据或插件。更新提示与独立环境入口的异步显隐保持相同 Hook 顺序。
 
@@ -17,10 +17,6 @@
 - 修复 Windows 自有 WebView2 进程结束后仍使用旧 PID 快照误报超时的问题；安全终止请求后补一次有界检查，继续核对进程归属，不扩大终止范围。数据导入验收在原生阶段失败时直接报告真实阶段。
 
 - Recheck the owned WebView2 process tree after a bounded shutdown request instead of reporting a timeout from stale PIDs. Ownership checks and termination scope stay unchanged. Native import checks now report an early native failure at its actual stage.
-
-- Windows 静态 EXE 图标保留透明白鲸和细深色轮廓作为未运行时的通用后备；运行中的窗口与托盘使用上述系统配色图标。感谢 [crazyrainman 的反馈](https://github.com/WSL043/DSH-Portable/discussions/39#discussioncomment-19370243)。
-
-- The static Windows EXE icon retains a transparent white whale with a thin dark outline as a fallback; running windows and tray icons use the system-theme artwork above. Thanks to [crazyrainman for the report](https://github.com/WSL043/DSH-Portable/discussions/39#discussioncomment-19370243).
 
 - 新版本不再默认安装 Image Viewer 和 Chat Manager；已有安装、配置与启停状态保持不变，可按需通过官方插件管理安装。
 

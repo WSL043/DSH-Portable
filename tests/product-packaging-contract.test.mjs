@@ -566,23 +566,8 @@ test('desktop icons are derived from the pinned official DSH mark', async () => 
   const ico = await readFile(path.join(root, 'assets/DSH-Portable.ico'))
   const frames = icoPngFrames(ico).map(decodeIconPng)
   assert.deepEqual(frames.map(({ width }) => width), [16, 20, 24, 32, 40, 48, 64, 128, 256])
-  for (const { rows, cornerAlphas } of frames) {
-    assert.deepEqual(cornerAlphas, [0, 0, 0, 0], 'every Windows icon size must have transparent corners')
-    let opaqueWhite = 0
-    let opaqueOutline = 0
-    let hasContrast = false
-    for (let pixel = 0; pixel < rows.length; pixel += 4) {
-      const [red, green, blue, alpha] = rows.subarray(pixel, pixel + 4)
-      if (alpha >= 64 && Math.max(red, green, blue) <= 192) hasContrast = true
-      if (alpha !== 255) continue
-      if (rows.readUIntBE(pixel, 3) === 0xffffff) { opaqueWhite++; continue }
-      assert.ok(red >= 48 && green >= 52 && blue >= 59 && red <= green && green <= blue && blue - red <= 11,
-        'opaque edges may only blend the neutral dark outline with the white body')
-      opaqueOutline++
-    }
-    assert.ok(opaqueWhite > opaqueOutline, 'the whale body must remain predominantly white')
-    assert.ok(hasContrast, 'every size needs a visible outline on a light taskbar')
-  }
+  assert.deepEqual(ico, await readFile(path.join(root, 'assets/DSH-Portable-light.ico')), 'the static EXE uses the solid black official mark')
+  assert.doesNotMatch(windowsSvg, /\bstroke(?:=|-)/, 'the white mark has no black outline')
 })
 
 test('Windows package exposes real GUI executables with matching icon and an isolated portable launch', async () => {
