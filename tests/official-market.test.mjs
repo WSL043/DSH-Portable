@@ -28,7 +28,7 @@ async function bed(t, { shipped = true, bundles = ['dsh-image-viewer'], patch, f
 
 test('official initialization and user plugin/index choices stay untouched', async t => {
   for (const patch of [undefined, '[]\n', '- id: plugin-market\n  config:\n    indexes:\n      - https://example.com/mine.json\n']) {
-    const { layout, manifest, patchText } = await bed(t, { patch })
+    const { layout, manifest, patchText } = await bed(t, { patch, bundles: ['user-plugin', OFFICIAL_MARKET_BUNDLE] })
     const before = await manifest()
     assert.deepEqual(await ensureOfficialMarket(layout), { status: 'unchanged', actions: [] })
     assert.deepEqual(await manifest(), before)
@@ -36,10 +36,38 @@ test('official initialization and user plugin/index choices stay untouched', asy
   }
 })
 
-test('new profiles are initialized only by official DSH', async t => {
-  const { layout, profile } = await bed(t, { fresh: true })
-  assert.deepEqual(await ensureOfficialMarket(layout), { status: 'skipped', reason: 'no-profile' })
-  await assert.rejects(lstat(profile), { code: 'ENOENT' })
+test('a fresh shipped market initializes the selected official web template under its writer lock once', async t => {
+  const { layout, profile, manifest, patchText } = await bed(t, { fresh: true })
+  const selected = ['selected-official-web-template']
+  let locked = false, initialized = 0
+  const api = { PROFILE_TEMPLATES: { web: { bundles: selected } }, DEFAULT_PROFILE_BUNDLES: ['official-fallback'],
+    async withFileLock(filename, callback, options) {
+      assert.equal(filename, path.join(profile, 'package.json'))
+      assert.equal(options.waitMs, 0)
+      locked = true
+      try { return await callback() } finally { locked = false }
+    },
+    async initProfile(directory, bundles) {
+      assert.equal(locked, true)
+      assert.equal(directory, profile)
+      assert.equal(bundles, selected, 'use the selected runtime template without reconstructing a bundle list')
+      initialized++
+      await writeFile(path.join(directory, 'package.json'), JSON.stringify({ name: 'web', dependencies: {}, dsh: { profile: { bundles } } }))
+    },
+  }
+  const first = await ensureOfficialMarket(layout, { loadProfileInitialization: async () => api,
+    async writeFile(...args) { assert.equal(locked, true, 'the first offer stays under the official profile lock'); return writeFile(...args) } })
+  assert.deepEqual(first, { status: 'configured', actions: ['enabled-bundle'] })
+  assert.equal(initialized, 1)
+  assert.deepEqual((await manifest()).dsh.profile.bundles, [...selected, OFFICIAL_MARKET_BUNDLE])
+  assert.equal(await patchText(), null)
+  const edited = await manifest()
+  edited.dsh.profile.bundles = [...selected]
+  await writeFile(path.join(profile, 'package.json'), JSON.stringify(edited))
+  await writeFile(path.join(profile, 'cordis.patch.yml'), '[]\n')
+  assert.deepEqual(await ensureOfficialMarket(layout, { loadProfileInitialization: () => { throw Error('existing profiles do not initialize again') } }), { status: 'unchanged', actions: [] })
+  assert.deepEqual((await manifest()).dsh.profile.bundles, selected)
+  assert.equal(await patchText(), '[]\n', 'a later user removal stays removed')
 })
 
 test('existing market survives a rollback to a core without it and is restored on return', async t => {

@@ -541,58 +541,14 @@ try {
   })`)
   assert.deepEqual(extensionUi, { root: false, tab: false, advanced: false })
   await selectPluginTab(['Discover', '发现'], 'official Discover tab')
-  const marketUi = await waitForValue(client, `(() => {
-    const pane = document.querySelector('[data-plugin-tab="discover"]'), cards = [...(pane?.querySelectorAll('[data-market-entry]') || [])]
-    const installButtons = cards.flatMap(card => [...card.querySelectorAll('button[aria-label]')]).filter(item => /^(Install |安装 )/.test(item.getAttribute('aria-label') || '') && !item.disabled).length
-    const icons = cards.filter(card => card.querySelector(':scope > span[aria-hidden="true"] img,:scope > span[aria-hidden="true"] svg')).length
-    return { search: Boolean(pane?.querySelector('input[type="search"]')), cards: cards.length, installButtons, icons }
-  })()`, value => value?.search && value.cards > 0 && value.installButtons > 0 && value.icons > 0, 'visual official Discover cards', 60000)
-  assert.ok(marketUi.installButtons > 0)
-  assert.ok(marketUi.icons > 0)
-  const picturedUi = await waitForValue(client, `(() => {
-    const card = [...document.querySelectorAll('[data-plugin-tab="discover"] [data-market-entry]')].find(item => item.querySelector('[data-portable-shot]'))
-    const shot = card?.querySelector('[data-portable-shot]')
-    const open = card?.querySelector('button[aria-label^="View "],button[aria-label^="查看 "]')
-    shot?.scrollIntoView({ block: 'center' })
-    const rect = shot?.getBoundingClientRect()
-    return { name: card?.getAttribute('data-market-entry'), title: open?.textContent.trim(), cardShot: Boolean(shot?.complete && shot.naturalWidth > 0), width: rect?.width || 0, height: rect?.height || 0 }
-  })()`, value => value?.name && value.title && value.cardShot && value.width > 0 && value.height > 0, 'actual official catalog preview', 60000)
-  assert.ok(picturedUi.cardShot)
+  await waitForValue(client, `(() => {
+    const pane = document.querySelector('[data-plugin-tab="discover"]')
+    return Boolean(pane && pane.getBoundingClientRect().width > 0 && pane.textContent.trim())
+  })()`, Boolean, 'official Discover remains available without a default community index')
   if (screenshotPath) {
     const screenshot = await client.send('Page.captureScreenshot', { format: 'png', fromSurface: true })
     await writeSmokeScreenshot(screenshotPath, Buffer.from(screenshot.data, 'base64'))
   }
-  await waitForValue(client, `(() => {
-    const card = [...document.querySelectorAll('[data-plugin-tab="discover"] [data-market-entry]')].find(item => item.getAttribute('data-market-entry') === ${JSON.stringify(picturedUi.name)})
-    const shot = card?.querySelector('[data-portable-shot]')
-    shot?.click(); return Boolean(shot)
-  })()`, Boolean, 'open the actual official preview')
-  await waitForValue(client, 'Boolean(document.querySelector(\'[data-portable-viewer]\'))', Boolean, 'official preview viewer')
-  await client.send('Input.dispatchKeyEvent', { type: 'keyDown', key: 'Escape', code: 'Escape', windowsVirtualKeyCode: 27 })
-  await client.send('Input.dispatchKeyEvent', { type: 'keyUp', key: 'Escape', code: 'Escape', windowsVirtualKeyCode: 27 })
-  await waitForValue(client, '!document.querySelector(\'[data-portable-viewer]\')', Boolean, 'Escape closes only the preview')
-  await waitForValue(client, `(() => {
-    const card = [...document.querySelectorAll('[data-plugin-tab="discover"] [data-market-entry]')].find(item => item.getAttribute('data-market-entry') === ${JSON.stringify(picturedUi.name)})
-    const button = card && [...card.querySelectorAll('button[aria-label]')].find(item => ['View ', '查看 '].some(prefix => item.getAttribute('aria-label') === prefix + ${JSON.stringify(picturedUi.title)}))
-    button?.click(); return Boolean(button)
-  })()`, Boolean, 'open the actual official catalog detail')
-  const project = await waitForValue(client, `(() => {
-    const detail = document.querySelector('[data-plugin-tab="discover"] [data-market-detail]')
-    if (detail?.getAttribute('data-market-detail') !== ${JSON.stringify(picturedUi.name)} || detail.querySelector('h3')?.textContent.trim() !== ${JSON.stringify(picturedUi.title)}) return null
-    const source = [...detail.querySelectorAll('dt')].find(item => ['Source code', '源代码'].includes(item.textContent.trim()))
-    const link = source?.nextElementSibling?.querySelector('a[href]')
-    return { projectHref: link?.href || '', external: link?.target === '_blank' && link?.relList.contains('noopener') && link?.relList.contains('noreferrer') }
-  })()`, value => value?.projectHref && value.external, 'the selected official plugin project source')
-  assert.ok(['http:', 'https:'].includes(new URL(project.projectHref).protocol))
-  await waitForValue(client, `(() => {
-    const detail = document.querySelector('[data-plugin-tab="discover"] [data-market-detail]')
-    if (detail?.getAttribute('data-market-detail') !== ${JSON.stringify(picturedUi.name)}) return false
-    const button = [...detail.querySelectorAll(':scope > button')].find(item => ['Discover', '发现'].includes((item.getAttribute('aria-label') || item.textContent || '').trim()))
-    button?.click(); return Boolean(button)
-  })()`, Boolean, 'return via the actual official Discover breadcrumb')
-  await waitForValue(client, '!document.querySelector(\'[data-plugin-tab="discover"] [data-market-detail]\') && document.querySelectorAll(\'[data-plugin-tab="discover"] [data-market-entry]\').length > 0', Boolean, 'official catalog returns after details')
-  // Compact/Cards persistence belonged to the retired private renderer. The
-  // official catalog and preview above are the current visual integration gate.
   if (installedScreenshotPath) {
     await selectPluginTab(['Installed', '已安装'], 'official Installed tab')
     await waitForValue(client, 'document.querySelectorAll(\'[data-plugin-panel] [data-plugin-package]\').length', value => value > 0, 'official Installed screenshot inventory')
