@@ -101,7 +101,7 @@ The close button sends the app to the tray, so tasks continue. To quit, use **Fi
 
 New packages no longer install community plugins by default. Existing installations and their enablement states are preserved. Install [Image Viewer](https://github.com/WSL043/dsh-image-viewer) or [Chat Manager](https://github.com/WSL043/dsh-chat-manager) through the official plugin manager when needed.
 
-Find more in **Settings → Plugins → Plugin Market**; to add one manually, enter a package name or address in **Plugins → Add plugin**—not a terminal command. See the [plugin guide](docs/user-guide.en.md#plugins).
+Use official **Plugins → Installed / Discover** for installation and updates. Portable does not add a Discover index automatically. If needed, add the optional [community index](https://cdn.jsdelivr.net/gh/WSL043/DSH-Portable-Updates@market-index/awesome-index.json) in **Discover → Manage index sources**. Existing plugins and index choices remain unchanged. See the [plugin guide](docs/user-guide.en.md#plugins).
 
 ## Choose your core version
 
