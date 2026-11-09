@@ -133,7 +133,9 @@ test('security collection preserves runtime artifacts and every external writer 
   const gateName = 'Require bound actual-ASAR security authorization before any external write';
   for (const [job, roots] of [[alpha.jobs.package, ['smoke-root-moved', 'smoke-lite-root-moved']], [channel.jobs.gates, ['T27/work/portable']]]) {
     const step = job.steps.find(step => step.name === collectorName);
-    assert.match(step.if, /^always\(\)(?: && steps\.qualification-cache\.outputs\.cache-hit != 'true')?$/);
+    assert.equal(step.if, job === channel.jobs.gates
+      ? "always() && github.event_name == 'workflow_dispatch' && inputs.publish_channel == true"
+      : 'always()');
     for (const root of roots) assert.ok(step.env.SECURITY_ROOTS.includes(root));
     assert.match(step.run, /node scripts\/official-payload-security-evidence\.mjs collect/);
     assert.match(step.run, /exit 0/);

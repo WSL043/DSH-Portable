@@ -14,7 +14,7 @@ Windows x64 的 1.x 开发线，当前启动器标识仍为 `1.0.0-alpha.5`，�
 
 ## 验收与发布边界
 
-桌面通道定时发现官方候选并生成签名、哈希、更新、恢复和安全证据。发布通道需手动指定 `publish_channel=true`。手动打包默认只生成 Actions 产物（`publish_draft=false`）。具体操作见 [通道运维](../../docs/pure-portable-operations.md)。
+桌面通道定时发现官方候选并自动验证签名、哈希、更新和恢复。main 的验收流程或验收源码变更时，也会运行同一套检查。发布通道需手动指定 `publish_channel=true`。手动打包默认只生成 Actions 产物（`publish_draft=false`）。具体操作见 [通道运维](../../docs/pure-portable-operations.md)。
 
 真实验收使用官方签名成品，覆盖页面输入、插件生命周期、正常退出、搬迁、跨版本更新及文件/注册表边界；源码单测、同版本检查、端口可达都不能代替这些结果。测试结果按场景和成品摘要报告。
 
