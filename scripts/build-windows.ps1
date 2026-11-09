@@ -249,8 +249,11 @@ try {
     if ($LASTEXITCODE -ne 0) { throw "Session export UI adaptation failed with exit code $LASTEXITCODE" }
     & $NodeExe (Join-Path $ProjectRoot 'scripts\patch-permission-localization.mjs') (Join-Path $Stage 'app')
     if ($LASTEXITCODE -ne 0) { throw "Permission localization adaptation failed with exit code $LASTEXITCODE" }
-    & $NodeExe (Join-Path $ProjectRoot 'scripts\patch-theme-bootstrap.mjs') (Join-Path $Stage 'app')
-    if ($LASTEXITCODE -ne 0) { throw 'Theme bootstrap patch failed.' }
+    Push-Location -LiteralPath (Join-Path $Stage 'app')
+    try {
+        & $NodeExe (Join-Path $ProjectRoot 'scripts\patch-theme-bootstrap.mjs')
+        if ($LASTEXITCODE -ne 0) { throw 'Theme bootstrap patch failed.' }
+    } finally { Pop-Location }
     & $NodeExe (Join-Path $ProjectRoot 'scripts\patch-account-login.mjs') (Join-Path $Stage 'app')
     if ($LASTEXITCODE -ne 0) { throw 'Account login patch failed.' }
     & $NodeExe (Join-Path $ProjectRoot 'scripts\patch-native-boot-handoff.mjs') (Join-Path $Stage 'app')

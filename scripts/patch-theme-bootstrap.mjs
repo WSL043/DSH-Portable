@@ -1,6 +1,7 @@
 import { readFile, writeFile } from 'node:fs/promises'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
+import { safeDataTarget } from '../launcher/data-paths.mjs'
 
 const marker = 'dsh-portable-theme-bootstrap-v1'
 
@@ -12,13 +13,15 @@ export function patchThemeBootstrap(source) {
 }
 
 if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
-  if (!process.argv[2]) throw new Error('usage: patch-theme-bootstrap.mjs <app-root>')
-  const lib = path.join(path.resolve(process.argv[2]), 'node_modules', '@deepseek-ai', 'dsh-client-ui-theme', 'lib')
-  const host = await readFile(path.join(lib, 'index.js'), 'utf8')
+  if (process.argv.length !== 2) throw new Error('Run patch-theme-bootstrap.mjs from the staged app directory')
+  const lib = 'node_modules/@deepseek-ai/dsh-client-ui-theme/lib'
+  const hostFile = await safeDataTarget(process.cwd(), lib + '/index.js', { createParents: false })
+  const filename = await safeDataTarget(process.cwd(), lib + '/client.js', { createParents: false })
+  if (!hostFile || !filename) throw new Error('Staged official theme package is missing')
+  const host = await readFile(hostFile, 'utf8')
   if (!host.includes('document.documentElement.dataset.dsThemeSource = preference')) {
     throw new Error('Official theme boot preference seam changed upstream')
   }
-  const filename = path.join(lib, 'client.js')
   const source = await readFile(filename, 'utf8')
   const patched = patchThemeBootstrap(source)
   if (patched !== source) await writeFile(filename, patched, 'utf8')

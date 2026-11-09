@@ -131,7 +131,7 @@ fi
 "$NODE_EXE" "$PROJECT_ROOT/scripts/stage-local-integrations.mjs" "$STAGE/app"
 "$NODE_EXE" "$PROJECT_ROOT/scripts/patch-session-export-ui.mjs" "$STAGE/app"
 "$NODE_EXE" "$PROJECT_ROOT/scripts/patch-permission-localization.mjs" "$STAGE/app"
-"$NODE_EXE" "$PROJECT_ROOT/scripts/patch-theme-bootstrap.mjs" "$STAGE/app"
+(cd "$STAGE/app" && "$NODE_EXE" "$PROJECT_ROOT/scripts/patch-theme-bootstrap.mjs")
 "$NODE_EXE" "$PROJECT_ROOT/scripts/patch-account-login.mjs" "$STAGE/app"
 "$NODE_EXE" "$PROJECT_ROOT/scripts/patch-native-boot-handoff.mjs" "$STAGE/app"
 "$NODE_EXE" "$PROJECT_ROOT/scripts/patch-native-settings-command.mjs" "$STAGE/app"
