@@ -2,6 +2,10 @@
 
 <p align="center"><a href="README.md">English</a> · <a href="README.zh-CN.md">简体中文</a> · <strong>日本語</strong> · <a href="README.es.md">Español</a> · <a href="README.fr.md">Français</a> · <a href="README.de.md">Deutsch</a> · <a href="README.ru.md">Русский</a> · <a href="README.pt-BR.md">Português (Brasil)</a></p>
 
+<p align="center">
+  <img src="assets/portable-hero-zh.png" width="1040" alt="DSH-Portable の紹介画像（簡体字中国語の画面）">
+</p>
+
 DeepSeek Harness をフォルダーごと持ち運べます。会話・設定・プラグイン・ワークスペースをまとめて保管し、Windows / macOS / Linux で使用できます。
 
 ## 使い始める

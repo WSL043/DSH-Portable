@@ -2,6 +2,10 @@
 
 <p align="center"><a href="README.md">English</a> · <a href="README.zh-CN.md">简体中文</a> · <a href="README.ja.md">日本語</a> · <a href="README.es.md">Español</a> · <a href="README.fr.md">Français</a> · <strong>Deutsch</strong> · <a href="README.ru.md">Русский</a> · <a href="README.pt-BR.md">Português (Brasil)</a></p>
 
+<p align="center">
+  <img src="assets/portable-hero-zh.png" width="1040" alt="Illustration von DSH-Portable mit vereinfachter chinesischer Benutzeroberfläche">
+</p>
+
 DeepSeek Harness zum Mitnehmen: Gespräche, Einstellungen, Plugins und Arbeitsbereich bleiben in einem Ordner. Für Windows, macOS und Linux.
 
 ## Erste Schritte
