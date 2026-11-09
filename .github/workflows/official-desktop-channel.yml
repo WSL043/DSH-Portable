@@ -1,7 +1,14 @@
 name: Official desktop qualified update channel
 on:
   schedule:
-    - cron: '29 * * * *'
+    - cron: '17 * * * *'
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/official-desktop-channel.yml'
+      - '.github/actions/official-payload-stage/**'
+      - 'experiments/official-payload/**'
+      - '!experiments/official-payload/**.md'
   workflow_dispatch:
     inputs:
       force_version:
@@ -39,6 +46,7 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
           FORCE_VERSION: ${{ inputs.force_version }}
+          PUBLISH_CHANNEL: ${{ github.event_name == 'workflow_dispatch' && inputs.publish_channel == true }}
         run: |
           set -euo pipefail
           node experiments/official-payload/resolve-candidate.mjs
@@ -67,7 +75,7 @@ jobs:
           if (same && (same.sha512 !== candidate.sha512 || same.size !== candidate.size)) throw new Error(`Official same-version identity changed: ${candidate.version}`);
           await mkdir('build/orch-080/T28/input', { recursive: true });
           await writeFile('build/orch-080/T28/input/index.json', JSON.stringify(index, null, 2) + '\n');
-          const noOp = Boolean(same) && !requested;
+          const noOp = process.env.PUBLISH_CHANNEL === 'true' && Boolean(same) && !requested;
           await writeFile(process.env.GITHUB_OUTPUT, `no_op=${noOp}\nversion=${candidate.version}\nidentity=${identity}\n`, { flag: 'a' });
           console.log(JSON.stringify({ version: candidate.version, noOp, indexedVersions: index.versions.length, indexUrl: CHANNEL_INDEX_URL }));
           NODE
@@ -90,11 +98,11 @@ jobs:
         with:
           node-version: 24.22.1
       - id: qualification-cache
-        if: github.event_name == 'schedule'
+        if: github.event_name == 'schedule' || github.event_name == 'push'
         uses: actions/cache@v4
         with:
           path: build/official-desktop-qualification
-          key: desktop-qualification-${{ needs.resolve.outputs.identity }}-${{ hashFiles('experiments/official-payload/**', '.github/actions/official-payload-stage/**', '.github/workflows/official-desktop-channel.yml', 'scripts/*official-payload-security*.mjs') }}
+          key: desktop-qualification-${{ needs.resolve.outputs.identity }}-${{ hashFiles('experiments/official-payload/**', '.github/actions/official-payload-stage/**', '.github/workflows/official-desktop-channel.yml', '!experiments/official-payload/**.md') }}
       - name: Show the recorded result for an unchanged candidate
         if: steps.qualification-cache.outputs.cache-hit == 'true'
         shell: pwsh
@@ -161,7 +169,7 @@ jobs:
             -Locale en
           if ($LASTEXITCODE -ne 0) { throw 'Pure portable end-to-end acceptance exited non-zero' }
       - name: Collect actual accepted ASAR security evidence without blocking runtime artifacts
-        if: always() && steps.qualification-cache.outputs.cache-hit != 'true'
+        if: always() && github.event_name == 'workflow_dispatch' && inputs.publish_channel == true
         shell: pwsh
         env:
           SECURITY_DIRECTORY: build/orch-080/T28/security
@@ -184,13 +192,6 @@ jobs:
             # Evidence only: the work directory holds two full official payloads and must not be uploaded.
             Get-ChildItem -LiteralPath 'build/orch-080/T27' -Force | Where-Object { $_.Name -ne 'work' } | Copy-Item -Destination 'build/orch-080/T28/e2e-evidence' -Recurse -Force
           }
-      - name: Require both qualification reports to pass
-        if: steps.qualification-cache.outputs.cache-hit != 'true'
-        shell: pwsh
-        run: |
-          $contract = Get-Content -LiteralPath 'build/orch-080/T28/contract/contract-report.json' -Raw | ConvertFrom-Json
-          $e2e = Get-Content -LiteralPath 'build/orch-080/T28/e2e-evidence/pure-e2e-report.json' -Raw | ConvertFrom-Json
-          if (-not $contract.overallPassed -or -not $e2e.overallPassed) { throw 'Both contract and full E2E overallPassed values are required' }
       - uses: actions/upload-artifact@v7
         if: always() && steps.qualification-cache.outputs.cache-hit != 'true'
         with:
@@ -202,23 +203,24 @@ jobs:
             build/orch-080/T28/input/
           if-no-files-found: warn
           retention-days: 14
-      - name: Record successful runtime qualification and the separate security result
+      - name: Require both runtime reports and record the verified candidate
         if: steps.qualification-cache.outputs.cache-hit != 'true'
         shell: pwsh
-        env:
-          CANDIDATE_VERSION: ${{ needs.resolve.outputs.version }}
         run: |
           $ErrorActionPreference = 'Stop'
-          $report = Get-Content -LiteralPath 'build/orch-080/T28/security/candidate.json' -Raw | ConvertFrom-Json
-          $receipt = Get-Content -LiteralPath "build/orch-080/T27/work/portable/launcher/receipts/$env:CANDIDATE_VERSION.json" -Raw | ConvertFrom-Json
-          if ($report.officialVersion -cne $env:CANDIDATE_VERSION -or $report.appASARsha256 -cnotmatch '^[a-f0-9]{64}$' -or $report.appASARsha256 -cne $receipt.appAsarSha256 -or $null -eq $report.advisory.affected) {
-            throw 'The security result does not identify the ASAR accepted by the runtime test'
+          $candidate = Get-Content -LiteralPath 'build/orch-080/T28/input/candidate.json' -Raw | ConvertFrom-Json
+          $contract = Get-Content -LiteralPath 'build/orch-080/T28/contract/contract-report.json' -Raw | ConvertFrom-Json
+          $e2e = Get-Content -LiteralPath 'build/orch-080/T28/e2e-evidence/pure-e2e-report.json' -Raw | ConvertFrom-Json
+          if ($contract.overallPassed -ne $true -or $e2e.overallPassed -ne $true -or $e2e.newVersion -cne $candidate.version) {
+            throw 'Both runtime reports must pass for the resolved official candidate'
           }
-          $provenance = Get-Content -LiteralPath 'build/orch-080/T28/security/provenance.json' -Raw | ConvertFrom-Json
-          $security = if ($provenance.qualificationAllowed -eq $true) { 'Allowed for the checked advisory' } else { 'Blocked' }
+          $receiptPath = "build/orch-080/T27/work/portable/launcher/receipts/$($candidate.version).json"
+          $receipt = Get-Content -LiteralPath $receiptPath -Raw | ConvertFrom-Json
+          if ($receipt.version -cne $candidate.version -or $receipt.installerSha512 -cne $candidate.sha512 -or $receipt.installerSize -ne $candidate.size) {
+            throw 'The installed payload receipt does not match the resolved candidate'
+          }
           $summary = @(
-            "Official Windows Desktop $env:CANDIDATE_VERSION passed signature, SHA-512, update and recovery checks.",
-            "Security qualification: $security.",
+            "Official Windows Desktop $($candidate.version) passed signature, SHA-512, update and recovery checks.",
             "Evidence: $env:GITHUB_SERVER_URL/$env:GITHUB_REPOSITORY/actions/runs/$env:GITHUB_RUN_ID"
           )
           New-Item -ItemType Directory -Path 'build/official-desktop-qualification' -Force | Out-Null

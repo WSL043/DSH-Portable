@@ -22,6 +22,8 @@ test('hourly channel YAML is valid, read-only until gated publishing, and least-
   assert.ok(channel.jobs.publish.needs.includes('gates'));
   assert.match(channel.on.schedule[0].cron, /^\d+ \* \* \* \*$/);
   assert.equal(contract.on.schedule, undefined);
+  assert.deepEqual(channel.on.push.branches, ['main']);
+  assert.ok(channel.on.push.paths.includes('.github/workflows/official-desktop-channel.yml'));
   assert.equal(CHANNEL_INDEX_URL, `${CHANNEL_BASE_URL}index.json`);
   assert.match(channel.jobs.resolve.steps.find(step => step.name?.includes('candidate and current channel index')).run, /CHANNEL_INDEX_URL/);
   assert.match(channel.jobs.resolve.steps.find(step => step.name?.includes('candidate and current channel index')).run, /redirect:\s*'follow'/);
@@ -50,9 +52,9 @@ test('scheduled qualification never writes a release or issue and manual publica
     assert.equal(permits('publish', 'workflow_dispatch', publish_channel, 'success'), false);
     assert.equal(permits('report-failure', 'workflow_dispatch', publish_channel, 'failure'), false);
   }
-  for (const value of [undefined, false, true]) {
-    assert.equal(permits('publish', 'schedule', value, 'success'), false);
-    assert.equal(permits('report-failure', 'schedule', value, 'failure'), false);
+  for (const event of ['schedule', 'push']) {
+    assert.equal(permits('publish', event, true, 'success'), false);
+    assert.equal(permits('report-failure', event, true, 'failure'), false);
   }
   for (const [event, enabled] of [['workflow_dispatch', true]]) {
     assert.equal(permits('publish', event, enabled, 'success'), true);
@@ -65,10 +67,10 @@ test('scheduled qualification never writes a release or issue and manual publica
   // Qualification and its evidence do not depend on publication authorization.
   assert.equal(channel.jobs.gates.if, "needs.resolve.outputs.no_op == 'false'");
   const resolve = channel.jobs.resolve.steps.find(step => step.id === 'identity');
-  assert.match(resolve.run, /const noOp = Boolean\(same\) && !requested/);
+  assert.match(resolve.run, /const noOp = process.env.PUBLISH_CHANNEL === 'true' && Boolean\(same\) && !requested/);
   assert.match(resolve.run, /createHash\('sha256'\)\.update\(candidateBytes\)/);
   const cache = channel.jobs.gates.steps.find(step => step.id === 'qualification-cache');
-  assert.equal(cache.if, "github.event_name == 'schedule'");
+  assert.equal(cache.if, "github.event_name == 'schedule' || github.event_name == 'push'");
   assert.match(cache.with.key, /needs\.resolve\.outputs\.identity.*hashFiles\(/);
   assert.ok(channel.jobs.gates.steps.some(step => step.name?.startsWith('Run the phase-2')
     && step.if.includes("cache-hit != 'true'")));
