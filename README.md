@@ -109,7 +109,7 @@ Use official **Plugins → Installed / Discover** for installation and updates. 
 **Optional cores (up to 5 verified versions)** · Settings → Updates · Since 0.6.5 stable (first available in 0.6.5-rc.1).
 
 <details>
-<summary>View available cores for Portable 0.9.9</summary>
+<summary>View available cores for Portable 0.9.10</summary>
 
 | Platform | Available cores |
 | --- | --- |
