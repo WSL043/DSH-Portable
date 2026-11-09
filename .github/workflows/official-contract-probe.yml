@@ -1,8 +1,6 @@
 name: Official desktop update contract probe
 on:
   workflow_dispatch:
-  schedule:
-    - cron: '29 * * * *'
 permissions:
   contents: read
 concurrency:
