@@ -1,0 +1,37 @@
+{
+  "version": "0.9.10",
+  "zh": {
+    "summary": "改进 Windows 启动、便携语言设置和工作区稳定性，继续使用已验收的 rc.5 内核。",
+    "highlights": [
+      "Windows ZIP 预备运行环境，减少首次启动的重复准备；共享日志被占用时保留每次启动的诊断记录。",
+      "Portable 的菜单、托盘、更新和维护界面跟随官方语言设置；启动主题读取官方设置的初始值。",
+      "修复会话列表可能不显示的问题；Windows 任务栏和托盘使用随系统配色变化的实心鲸鱼标志。",
+      "插件发现和管理使用官方界面，新环境不再自动添加社区索引。现有索引仍可使用。",
+      "修复依赖缓存和旧运行记录整理时遇到链接或占用文件的处理，并改进启动共享文件冲突的提示。"
+    ],
+    "upgradeNotes": [
+      "正常退出后更新。新包内置 DSH 0.2.1-rc.5；可在内核更新中另行选择已验收版本。",
+      "需要社区插件目录时，按 README 将索引添加到官方「发现」。"
+    ],
+    "acknowledgements": [
+      "感谢 [crazyrainman](https://github.com/WSL043/DSH-Portable/discussions/39#discussioncomment-19370243) 的图标反馈。"
+    ]
+  },
+  "en": {
+    "summary": "Improves Windows startup, Portable language support, and workspace reliability while keeping the qualified rc.5 core.",
+    "highlights": [
+      "Windows ZIPs prepare the runtime to reduce first-launch work. Each startup retains its diagnostic history when the shared log is busy.",
+      "Portable menus, tray, updates, and maintenance follow the official language preference. Startup reads the official initial theme preference.",
+      "Fixes a missing conversation sidebar. The Windows taskbar and tray use a solid whale that follows the system color scheme.",
+      "Plugin discovery and management use the official interface. New environments no longer add a community index automatically, and existing indexes remain available.",
+      "Handles linked or busy files during maintenance and makes shared-file startup conflicts easier to diagnose."
+    ],
+    "upgradeNotes": [
+      "Exit normally before updating. The package bundles DSH 0.2.1-rc.5. Core updates offer separately qualified versions.",
+      "To use the community plugin catalog, follow the README to add its index in the official Discover page."
+    ],
+    "acknowledgements": [
+      "Thanks to [crazyrainman](https://github.com/WSL043/DSH-Portable/discussions/39#discussioncomment-19370243) for the icon feedback."
+    ]
+  }
+}
