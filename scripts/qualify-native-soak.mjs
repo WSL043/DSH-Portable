@@ -125,16 +125,18 @@ async function navigation() {
 }
 async function pluginCycle() {
   await page.getByRole('button', { name: /^(Plugins|插件)$/ }).first().click()
-  for (const name of ['dsh-image-viewer', 'dsh-chat-manager']) {
-    const toggle = page.locator(`[data-plugin-package="${name}"]`).getByRole('switch')
-    await toggle.waitFor()
-    if (await toggle.getAttribute('aria-checked') !== 'true') await toggle.click()
-    await page.waitForFunction(name => document.querySelector(`[data-plugin-package="${name}"] [role="switch"]`)?.getAttribute('aria-checked') === 'true', name)
-    await toggle.click()
-    await page.waitForFunction(name => document.querySelector(`[data-plugin-package="${name}"] [role="switch"]`)?.getAttribute('aria-checked') === 'false', name)
-    await toggle.click()
-    await page.waitForFunction(name => document.querySelector(`[data-plugin-package="${name}"] [role="switch"]`)?.getAttribute('aria-checked') === 'true', name)
-  }
+  const name = '@deepseek-ai/dsh-experimental-inspector-profile'
+  const toggle = page.locator(`[data-plugin-package="${name}"]`).getByRole('switch')
+  await toggle.waitFor()
+  const original = await toggle.getAttribute('aria-checked')
+  assert.ok(original === 'true' || original === 'false')
+  const opposite = original === 'true' ? 'false' : 'true'
+  const waitForState = expected => page.waitForFunction(({ name, expected }) =>
+    document.querySelector(`[data-plugin-package="${name}"] [role="switch"]`)?.getAttribute('aria-checked') === expected, { name, expected })
+  await toggle.click()
+  await waitForState(opposite)
+  await toggle.click()
+  await waitForState(original)
   await page.getByRole('button', { name: /^(New session|新会话)$/i }).first().click()
   await composer().waitFor({ state: 'visible' }); result.pluginCycles++
 }
@@ -153,15 +155,13 @@ async function imageCycle() {
   await transfer.dispose()
   const thumbnails = page.locator('[role="group"] button[title]').filter({ has: page.locator(':scope > img') })
   await thumbnails.first().click()
-  const viewer = page.locator('.niv-root'); await viewer.waitFor()
-  await viewer.getByRole('button', { name: /^(Mark region|标记区域)$/ }).click()
-  await viewer.locator('.niv-image').click()
-  const note = `SOAK_NOTE_${result.images}`
-  await viewer.locator('textarea').fill(note)
-  await viewer.locator('.niv-close-floating').click()
+  const viewer = page.getByRole('dialog', { name: /^(Original image preview|原图预览)$/ })
+  await viewer.waitFor({ state: 'visible' })
+  const dimensions = await viewer.locator('img').evaluate(image => [image.naturalWidth, image.naturalHeight])
+  assert.deepEqual(dimensions, [320, 240])
+  await viewer.getByRole('button', { name: /^(Close original image preview|关闭原图预览)$/ }).click()
   await viewer.waitFor({ state: 'hidden' })
-  await page.waitForFunction(note => document.querySelector('[contenteditable="true"][role="textbox"]')?.textContent.includes(note), note)
-  assert.ok(await thumbnails.count() >= 2)
+  assert.equal(await thumbnails.count(), 1)
   // Remove fixture attachments before any model request; no Files API is exercised.
   const remove = page.getByRole('button', { name: /^(Remove image|Remove attachment|删除图片|移除图片|删除附件|移除附件)/ })
   while (await remove.count()) await remove.first().click()
