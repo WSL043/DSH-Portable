@@ -13,7 +13,8 @@ export function patchThemeBootstrap(source) {
 }
 
 if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
-  if (process.argv.length !== 2) throw new Error('Run patch-theme-bootstrap.mjs from the staged app directory')
+  if (process.argv.length !== 3) throw new Error('usage: patch-theme-bootstrap.mjs <staged-app-directory>')
+  process.chdir(process.argv[2])
   const lib = 'node_modules/@deepseek-ai/dsh-client-ui-theme/lib'
   const hostFile = await safeDataTarget(process.cwd(), lib + '/index.js', { createParents: false })
   const filename = await safeDataTarget(process.cwd(), lib + '/client.js', { createParents: false })
