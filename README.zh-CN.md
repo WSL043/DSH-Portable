@@ -33,7 +33,7 @@
 </p>
 
 <p align="center">
-  <img src="assets/portable-hero-zh.png" width="1040" alt="DSH-Portable 便携工作环境">
+  <img src="assets/portable-hero-zh.png" width="1040" alt="DSH-Portable 便携工作环境示意图（简体中文界面）">
 </p>
 
 > DSH-Portable 是独立社区发行版，不是 DeepSeek 官方应用，未获 DeepSeek 背书。<br>

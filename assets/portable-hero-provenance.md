@@ -6,4 +6,4 @@ Reference: a real Chinese dark-theme DSH 0.1.6-alpha.2 main interface captured f
 
 Direction: retain the recognizable real DSH interface; compose it as floating interface layers inside an abstract digital folder; use monochrome lighting and restrained depth; communicate taking the Agent and its working environment together. Avoid fabricated application controls, colorful effects, or a physical tablet/bag metaphor.
 
-The English README retains its English structure diagram until an English-reference illustration is verified. This illustration does not substitute for actual product screenshots or native acceptance.
+All localized README pages share this illustration. Its interface is in Simplified Chinese. This illustration does not substitute for actual product screenshots or native acceptance.

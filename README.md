@@ -33,7 +33,7 @@
 </p>
 
 <p align="center">
-  <img src="assets/portable-layout-en.svg" width="1040" alt="Portable program, data, and workspace kept together">
+  <img src="assets/portable-hero-zh.png" width="1040" alt="DSH-Portable product illustration with the Simplified Chinese interface">
 </p>
 
 > DSH-Portable is an independent community distribution, not an official DeepSeek application and not endorsed by DeepSeek.<br>
