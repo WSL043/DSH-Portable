@@ -4,27 +4,28 @@
 
 ## 先验收，发布另行授权
 
-当前 `official-desktop-channel.yml` 在线状态为 **disabled_manually**。本轮不启用、不发布、不修改公开索引。手动运行的两个发布开关默认均为 false；计划任务的原发布路径仍存在，不能把手动默认安全等同允许重新启用定时任务。
+定时任务每小时从官方 Windows Desktop feed 发现候选，核验签名和 SHA-512，运行真实更新、离线修复、回退与健康恢复，并读取实际 ASAR 的安全报告。候选身份、验收源码均相同时复用已记录的结果。定时任务只生成验收证据。需要发布通道时手动指定 `publish_channel=true`，重新执行本轮验收和安全授权。
 
 仅验收的示例（先提交并推送待验分支，`<branch>` 替换为实际分支）：
 
 ```powershell
+gh workflow run official-desktop-channel.yml --ref <branch> -f force_version=0.2.2-rc.1 -f publish_channel=false
 gh workflow run official-pure-alpha.yml --ref <branch> -f alpha=99 -f smoke=all -f publish_draft=false
 gh workflow run official-pure-e2e.yml --ref <branch> -f candidate_version=0.2.1-rc.3
 gh workflow run official-pure-e2e.yml --ref <branch> -f scenario=data-transfer -f candidate_version=0.2.1-rc.3
 ```
 
-第一条使用生产目录中已接纳的版本，生成完整包与 Bootstrap 包并实际冒烟，不创建 alpha.99 草稿或标签；不表示最新 nightly 已被接纳。第二条由受控旧候选 `candidate.json` 的 `0.1.7-rc.2` 升级至官方 feed 当前版本；参数只断言新版身份，不改写生产目录。feed 版本改变后应先核实身份再调整断言。
+第一条执行与定时任务相同的 Windows Desktop 完整资格检查。打包流程使用生产目录中已接纳的版本，生成完整包与 Bootstrap 包并实际冒烟，不创建 alpha.99 草稿或标签；不表示最新 nightly 已被接纳。更新 E2E 由受控旧候选 `candidate.json` 的 `0.1.7-rc.2` 升级至官方 feed 当前版本；参数只断言新版身份，不改写生产目录。feed 版本改变后应先核实身份再调整断言。
 
 `candidate.json` 的旧版本是跨版本 E2E 输入，不是过时的生产版本锁，不能随源码基线刷新一起覆盖。
 
-第三条验证独立 Linux 源归档到 Windows 桌面的迁移：2022 使用明文、2025 使用加密密码文件，各做两轮真实 UI，不创建发布。离线入口、默认排除与故障注入边界见 [数据和恢复验收](one-x-data-recovery-2026-10-23.md)。
+数据迁移场景验证独立 Linux 源归档到 Windows 桌面的迁移：2022 使用明文、2025 使用加密密码文件，各做两轮真实 UI，不创建发布。离线入口、默认排除与故障注入边界见 [数据和恢复验收](one-x-data-recovery-2026-10-23.md)。
 
 ## 门槛和证据
 
 1. 下载前核对官方候选来源；下载后验证完整大小、SHA-512、有效 Authenticode 与 DeepSeek 发布者，安全展开 NSIS。
 2. 更新契约哨兵用真实官方界面验证 updater 交接；完整 E2E 验证旧到新、离线修复、保留版本及健康回退、真实窗口、退出、协议恢复和写入边界。完整包与轻量包还须各自首启、二启和搬迁后的官方 CLI 配置检查；跨机真实 UI 另走 data-transfer 场景。
-3. 从实际冒烟根的 ASAR 收集安全报告。最新签名 Windows `0.2.1-rc.3` 的 MCP client/core 仍为 2.2.0，三份相关清单完整性通过，但命中 GHSA-6prh-2h8m-c8cw；运行成功仍为 security blocked。
+3. 从实际冒烟根的 ASAR 收集安全报告。此前验收的签名 Windows `0.2.1-rc.3` 的 MCP client/core 仍为 2.2.0，三份相关清单完整性通过，但命中 GHSA-6prh-2h8m-c8cw；运行成功仍为 security blocked。
 4. 发布入口先验证共享 CLI 的报告绑定：同一 repository/run/attempt/source/candidate、实际 ASAR 大小/摘要、原报告与复核报告摘要、包摘要以及严格布尔资格。`--report-only` 返回 0 不授予发布资格。
 5. 历史版本的启动器资产不可重建覆盖。只生成本次候选的副本；已有同名不同摘要资产必须拒绝，禁止用 mutable 模式绕过。
 

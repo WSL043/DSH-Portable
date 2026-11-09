@@ -5,26 +5,22 @@ import test from 'node:test'
 import vm from 'node:vm'
 import { patchThemeBootstrap } from '../scripts/patch-theme-bootstrap.mjs'
 
-const host = "const preference = selected;\n  const systemDark = preference === 'system' && systemDarkMode;\nconst dark = preference === 'dark' || systemDark;"
 const client = 'const DEFAULT_PREFERENCE = "system"; class Theme { constructor(host) { this.host = host;\n\t\t\t\tthis.preference = DEFAULT_PREFERENCE; } reset() { this.preference = DEFAULT_PREFERENCE; } } new Theme().preference;'
 
-test('the client inherits the durable boot preference before asynchronous settings arrive', () => {
+test('the client inherits the official boot preference before asynchronous settings arrive', () => {
   for (const selected of ['dark', 'light', 'system']) {
-    const attributes = new Map()
-    const document = { body: { setAttribute: (key, value) => attributes.set(key, value), getAttribute: key => attributes.get(key) } }
-    vm.runInNewContext(patchThemeBootstrap(host, 'host'), { document, selected, systemDarkMode: false })
-    assert.equal(vm.runInNewContext(patchThemeBootstrap(client, 'client'), { document }), selected)
+    const document = { documentElement: { dataset: { dsThemeSource: selected } } }
+    assert.equal(vm.runInNewContext(patchThemeBootstrap(client), { document }), selected)
   }
-  assert.equal(vm.runInNewContext(patchThemeBootstrap(client, 'client')), 'system')
-  assert.equal(vm.runInNewContext(patchThemeBootstrap(client, 'client'), { document: { body: { getAttribute: () => 'invalid' } } }), 'system')
+  assert.equal(vm.runInNewContext(patchThemeBootstrap(client)), 'system')
+  const document = { documentElement: { dataset: { dsThemeSource: 'invalid' } } }
+  assert.equal(vm.runInNewContext(patchThemeBootstrap(client), { document }), 'system')
 })
 
-test('theme bootstrap patch is idempotent and rejects changed upstream seams', () => {
-  for (const [source, kind] of [[host, 'host'], [client, 'client']]) {
-    const patched = patchThemeBootstrap(source, kind)
-    assert.equal(patchThemeBootstrap(patched, kind), patched)
-    assert.throws(() => patchThemeBootstrap('', kind), /seam changed/)
-  }
+test('theme bootstrap patch is idempotent and rejects a changed client seam', () => {
+  const patched = patchThemeBootstrap(client)
+  assert.equal(patchThemeBootstrap(patched), patched)
+  assert.throws(() => patchThemeBootstrap(''), /seam changed/)
 })
 
 test('every product builder preserves the boot preference and native preference changes update chrome', async () => {
