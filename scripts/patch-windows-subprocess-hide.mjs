@@ -42,7 +42,8 @@ export async function verifyInstalledWindowsSubprocesses(root) {
   verifyWindowsSubprocessHide(await readLib(runner, subprocessHideModule(await readLib(runner, 'index.js'))))
 
   const acl = 'dsh-sandbox-windows-acl'
-  const types = (await readdir(path.join(root, 'node_modules', '@deepseek-ai', acl, 'lib')))
+  const aclLib = await verifiedPackageFile(root, 'node_modules', '@deepseek-ai', acl, 'lib')
+  const types = (await readdir(aclLib))
     .filter(name => /^types-[A-Za-z0-9_-]+\.js$/.test(name))
   assert.equal(types.length, 1, 'Expected one official Windows ACL types module')
   verifyWindowsAclHide(await readLib(acl, types[0]))
