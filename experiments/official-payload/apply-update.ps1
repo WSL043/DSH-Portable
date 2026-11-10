@@ -279,10 +279,6 @@ try {
         if ($Version -notmatch $versionPattern -or $Version -ceq $originalVersion) { throw 'A retained previous version is not available' }
     } elseif (-not $Install) {
         if (-not (Test-Path -LiteralPath (Join-Path $appRoot ($originalVersion + '/DeepSeek Harness.exe')) -PathType Leaf)) { throw 'Current app version is missing or incomplete; use repair' }
-        if ($null -ne $current.PSObject.Properties['rejected'] -and [string]$current.rejected.version -ceq $Version) {
-            $rejectedAt = [DateTime]::MinValue
-            if ([DateTime]::TryParse([string]$current.rejected.at, [Globalization.CultureInfo]::InvariantCulture, [Globalization.DateTimeStyles]::RoundtripKind, [ref]$rejectedAt) -and ([DateTime]::UtcNow - $rejectedAt.ToUniversalTime()).TotalHours -lt 24) { throw 'This version was rolled back within the last 24 hours; not retrying yet' }
-        }
     }
     $status.version = $Version
     if ($Rollback) {
@@ -305,10 +301,19 @@ try {
         $Version = [string]$candidate.version
     } elseif ($Install -and -not $Version) { $candidate = Get-LatestAcceptedIndexCandidate $index; $Version = [string]$candidate.version }
     else { $candidate = Get-AcceptedIndexCandidate $index $Version }
+    $status.version = $Version
+    if ($operation -eq 'update') {
+        if ((Compare-OfficialVersion $Version $originalVersion) -le 0) {
+            throw 'Updates require a newer application version; use repair for the current version or rollback for the retained previous version'
+        }
+        if ($null -ne $current.PSObject.Properties['rejected'] -and [string]$current.rejected.version -ceq $Version) {
+            $rejectedAt = [DateTime]::MinValue
+            if ([DateTime]::TryParse([string]$current.rejected.at, [Globalization.CultureInfo]::InvariantCulture, [Globalization.DateTimeStyles]::RoundtripKind, [ref]$rejectedAt) -and ([DateTime]::UtcNow - $rejectedAt.ToUniversalTime()).TotalHours -lt 24) { throw 'This version was rolled back within the last 24 hours; not retrying yet' }
+        }
+    }
     # Preserve the exact accepted-index schema for a later completely offline operation.
     # It records candidate identity; it does not grant release/security qualification.
     if (-not $IndexFile) { Write-Atomic (Join-Path $launcherRoot 'accepted-index.json') $index }
-    $status.version = $Version
     $partial = Join-Path $appRoot ($Version + '.partial'); $candidatePath = Join-Path $appRoot $Version
     $repairBackup = Join-Path $appRoot ($Version + '.repair-backup')
     $receiptPath = Join-Path $launcherRoot ('receipts/' + $Version + '.json')

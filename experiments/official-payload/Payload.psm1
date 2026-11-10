@@ -68,6 +68,34 @@ function Assert-Candidate($Candidate) {
     if ([Convert]::FromBase64String([string]$Candidate.sha512).Length -ne 64 -or [long]$Candidate.size -lt 1000000 -or [long]$Candidate.size -gt 2147483648) { throw 'Invalid official package identity' }
 }
 
+function Compare-OfficialVersion([string]$Left, [string]$Right) {
+    $a = $Left.Split('-', 2)
+    $b = $Right.Split('-', 2)
+    $aBase = $a[0].Split('.')
+    $bBase = $b[0].Split('.')
+    for ($i = 0; $i -lt 3; $i++) {
+        $base = ([Numerics.BigInteger]::Parse($aBase[$i])).CompareTo([Numerics.BigInteger]::Parse($bBase[$i]))
+        if ($base -ne 0) { return $base }
+    }
+    if ($a.Count -eq 1 -or $b.Count -eq 1) { return $b.Count.CompareTo($a.Count) }
+
+    $aPre = $a[1].Split('.')
+    $bPre = $b[1].Split('.')
+    for ($i = 0; $i -lt [Math]::Min($aPre.Count, $bPre.Count); $i++) {
+        $x = $aPre[$i]; $y = $bPre[$i]
+        if ($x -ceq $y) { continue }
+        $xNumeric = $x -match '^[0-9]+$'; $yNumeric = $y -match '^[0-9]+$'
+        if ($xNumeric -and $yNumeric) {
+            return ([Numerics.BigInteger]::Parse($x)).CompareTo([Numerics.BigInteger]::Parse($y))
+        } elseif ($xNumeric -ne $yNumeric) {
+            if ($xNumeric) { return -1 }
+            return 1
+        }
+        return [string]::CompareOrdinal($x, $y)
+    }
+    return $aPre.Count.CompareTo($bPre.Count)
+}
+
 function Get-AcceptedIndexCandidate($Index, [string]$RequestedVersion) {
     if ($null -eq $Index.versions -or $Index.versions.Count -gt 100) { throw 'Accepted index has an invalid versions list' }
     $seen = @{}; $found = $null
@@ -440,4 +468,4 @@ function Get-AcceptedInstallerCandidate($Index, [string]$Installer) {
     return Get-AcceptedIndexCandidate $Index ([string]$matched.version)
 }
 
-Export-ModuleMember -Function Get-AcceptedInstallerCandidate,Read-LocalAcceptedIndex,Assert-ReceiptedPayload,Assert-PlainPath,Assert-FeedUrl,Read-BoundedHttpText,Assert-Candidate,Get-AcceptedIndexCandidate,Get-LatestAcceptedIndexCandidate,Assert-Installer,Receive-OfficialInstallerBytes,Get-OfficialInstaller,Assert-Archive,Assert-ArchiveEntryPath,Get-VersionRetentionPlan,Get-PortablePayloadTreeHash,Remove-OwnedOlderPayloads,Get-AsarVersion,Rewrite-AppUpdateYml,Expand-OfficialPayload,Remove-PortableScratch
+Export-ModuleMember -Function Compare-OfficialVersion,Get-AcceptedInstallerCandidate,Read-LocalAcceptedIndex,Assert-ReceiptedPayload,Assert-PlainPath,Assert-FeedUrl,Read-BoundedHttpText,Assert-Candidate,Get-AcceptedIndexCandidate,Get-LatestAcceptedIndexCandidate,Assert-Installer,Receive-OfficialInstallerBytes,Get-OfficialInstaller,Assert-Archive,Assert-ArchiveEntryPath,Get-VersionRetentionPlan,Get-PortablePayloadTreeHash,Remove-OwnedOlderPayloads,Get-AsarVersion,Rewrite-AppUpdateYml,Expand-OfficialPayload,Remove-PortableScratch
