@@ -72,6 +72,12 @@ test('scheduled qualification never writes a release or issue and manual publica
   const cache = channel.jobs.gates.steps.find(step => step.id === 'qualification-cache');
   assert.equal(cache.if, "github.event_name == 'schedule' || github.event_name == 'push'");
   assert.match(cache.with.key, /needs\.resolve\.outputs\.identity.*hashFiles\(/);
+  assert.match(cache.with.key, /scripts\/check-official-payload-security\.mjs/);
+  const security = channel.jobs.gates.steps.find(step => step.name?.startsWith('Collect actual accepted ASAR'));
+  assert.match(security.if, /cache-hit != 'true'.*stage-new\.outcome == 'success'/);
+  assert.doesNotMatch(security.if, /publish_channel|workflow_dispatch/);
+  const record = channel.jobs.gates.steps.find(step => step.name?.startsWith('Require both runtime reports'));
+  assert.match(record.run, /security\/summary\.md[\s\S]+official-desktop-qualification\/result\.md/);
   assert.ok(channel.jobs.gates.steps.some(step => step.name?.startsWith('Run the phase-2')
     && step.if.includes("cache-hit != 'true'")));
   assert.ok(channel.jobs.gates.steps.some(step => step.uses?.startsWith('actions/upload-artifact@')));

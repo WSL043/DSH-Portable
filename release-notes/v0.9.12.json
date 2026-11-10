@@ -1,0 +1,27 @@
+{
+  "version": "0.9.12",
+  "zh": {
+    "summary": "精简便携版对官方 DSH 的兼容层，继续独立更新便携程序与内核。",
+    "highlights": [
+      "权限文案和登录页面注册使用官方实现。登录时仍会打开系统浏览器。",
+      "Windows 使用官方的后台进程隐藏机制，避免弹出终端。",
+      "移除旧插件市场中已不再使用的附加功能，保留受支持旧内核所需的插件更新入口。"
+    ],
+    "upgradeNotes": [
+      "从 0.9.10 或更早版本首次升级时，请下载本页的新版 Windows 便携启动器，用它升级现有文件夹。",
+      "离线整包需要与当前内核版本一致。要切换内核，请使用独立的内核更新。"
+    ]
+  },
+  "en": {
+    "summary": "Simplifies the compatibility layer for official DSH while keeping Portable and core updates independent.",
+    "highlights": [
+      "Use official permission translations and account-page registration. Signing in still opens the system browser.",
+      "Use official Windows background process handling to keep terminal windows hidden.",
+      "Remove unused market extras and retain the plugin update entry for supported older cores."
+    ],
+    "upgradeNotes": [
+      "For your first upgrade from 0.9.10 or earlier, use the new Windows portable launcher on this page to update your existing folder.",
+      "Offline full packages must match the current core version. Use Core Updates to switch versions."
+    ]
+  }
+}
