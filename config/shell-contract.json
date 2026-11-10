@@ -1,6 +1,6 @@
 {
   "schemaVersion": 1,
-  "contract": 3,
+  "contract": 4,
   "shell": {
     "env": [
       "DSH_PORTABLE_BASE_STATE_ROOT",
