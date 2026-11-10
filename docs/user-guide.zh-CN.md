@@ -210,7 +210,7 @@ AppImage 的会话、设置、插件和工作区保存在旁边的 `DSH-Portable
 
 可选 Provider：[Codex Subscription](https://github.com/WSL043/dsh-codex-subscription) 可通过现有插件市场或标准 DSH 命令连接 ChatGPT/Codex 订阅；不会默认安装。
 
-新版本不再默认安装社区插件。[Image Viewer](https://github.com/WSL043/dsh-image-viewer) 和 [Chat Manager](https://github.com/WSL043/dsh-chat-manager) 可按需通过官方插件管理安装。其他社区插件仍按需从插件市场或通过标准 DSH 命令安装。普通升级会完整保留现有 Profile 及其中已安装或已移除的插件，不会因默认列表清空而卸载、停用或禁用已有插件。
+新版本不再默认安装社区插件。归档会话管理推荐使用 [`@michengai/dsh-archive-manager`](https://github.com/MichengAI/dsh-archive-manager)，可在 **插件 → 添加插件** 中安装。其他社区插件仍按需从插件市场或通过标准 DSH 命令安装。普通升级会保留现有 Profile、已安装插件及启停状态。
 
 ### DSH 终端与插件管理命令
 

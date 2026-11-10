@@ -208,7 +208,7 @@ In the official **Plugins → Add plugin** dialog, enter a **package name or add
 
 Optional provider: [Codex Subscription](https://github.com/WSL043/dsh-codex-subscription) connects a ChatGPT/Codex subscription through the existing Plugin Market or standard DSH command; it is not installed by default.
 
-New packages do not install community plugins by default. Install [Image Viewer](https://github.com/WSL043/dsh-image-viewer) or [Chat Manager](https://github.com/WSL043/dsh-chat-manager) through the official plugin manager when needed. Other community plugins remain opt-in through the Plugin Market or standard DSH commands. Normal upgrades preserve the existing Profile, installed packages and enablement states; an empty default list never removes or disables existing plugins.
+New packages do not install community plugins by default. For archived chats, we recommend [`@michengai/dsh-archive-manager`](https://github.com/MichengAI/dsh-archive-manager), available through **Plugins → Add plugin**. Other community plugins remain opt-in through the Plugin Market or standard DSH commands. Normal upgrades preserve the existing Profile, installed packages and enablement states.
 
 ### DSH Terminal and plugin management commands
 

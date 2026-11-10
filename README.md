@@ -118,7 +118,7 @@ In **Plugins → Discover**, open the source selector and choose **Manage index 
 https://cdn.jsdelivr.net/gh/WSL043/DSH-Portable-Updates@market-index/awesome-index.json
 ```
 
-For archived chats, see [Chat Manager](https://github.com/WSL043/dsh-chat-manager). For installation and updates, see the [plugin guide](docs/user-guide.en.md#plugins).
+For archived chats, we recommend [`@michengai/dsh-archive-manager`](https://github.com/MichengAI/dsh-archive-manager). Add it from **Plugins → Add plugin**. See the [plugin guide](docs/user-guide.en.md#plugins) for installation and updates.
 
 ## Choose your core version
 

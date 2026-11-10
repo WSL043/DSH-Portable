@@ -124,7 +124,7 @@ macOS、Linux 解压后直接运行，首次打开的注意事项见[用户指�
 https://cdn.jsdelivr.net/gh/WSL043/DSH-Portable-Updates@market-index/awesome-index.json
 ```
 
-归档会话管理可参考 [Chat Manager](https://github.com/WSL043/dsh-chat-manager)。安装和更新步骤见[插件指南](docs/user-guide.zh-CN.md#插件)。
+归档会话管理推荐使用 [`@michengai/dsh-archive-manager`](https://github.com/MichengAI/dsh-archive-manager)，可在 **插件 → 添加插件** 中安装。安装和更新步骤见[插件指南](docs/user-guide.zh-CN.md#插件)。
 
 ## 内核版本可选
 
