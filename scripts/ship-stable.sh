@@ -112,40 +112,14 @@ if [ "$MODE" != --resume ]; then
   gh release list -R "$REPOSITORY" --limit 3 | sed 's/^/release: /'
 fi
 
-# Qualification gate: five-core window, same-contract carry-over, never-qualified blocked cores excused.
+# Verify the signed five-platform catalogs before showing the new shell to installed users.
+SHELL_CONTRACT="$(git show "$HEAD_SHA:config/shell-contract.json" | node -p 'JSON.parse(require("node:fs").readFileSync(0)).contract')"
+NODE_VERSION="$(git show "$HEAD_SHA:upstream.lock.json" | node -p 'JSON.parse(require("node:fs").readFileSync(0)).node.version')"
 gate_state() {
   local state
-  # A dropped connection must read as "not known yet", never as a failed gate or a node crash.
   state="$(gh release download update-channel-core -R "$UPDATES" -p qualification-state.json -O - 2>/dev/null)" || return 1
   [ -n "$state" ] || return 1
-  # Cores the stable catalog already offers for this shell contract carry over without another run.
-  local index contract
-  index="$(gh release download update-channel-core-stable -R "$UPDATES" -p dsh-core-index-windows-x64.json -O - 2>/dev/null)" || index='{}'
-  contract="$(node scripts/shell-contract.mjs number)"
-  printf '%s' "$state" \
-    | HEAD_SHORT="${HEAD_SHA:0:7}" CATALOG_INDEX="$index" SHELL_CONTRACT="$contract" node --input-type=module -e "
-      import { comparePortableVersions, coreWindow } from './launcher/update-core.mjs'
-      let s = ''
-      for await (const chunk of process.stdin) s += chunk
-      const rows = JSON.parse(s)
-      const catalog = JSON.parse(process.env.CATALOG_INDEX || '{}')
-      const contract = Number(process.env.SHELL_CONTRACT)
-      const versions = coreWindow([...new Set(rows.map(row => row.version))].sort((a, b) => comparePortableVersions(b, a)))
-      const here = rows.filter(row => row.sourceSha.startsWith(process.env.HEAD_SHORT))
-      // A core that was deliberately blocked and has never qualified on any shell was never offered to users, so
-      // this release cannot take it away: it is reported but does not hold the release back.
-      const everQualified = new Set(rows.filter(row => row.status === 'success').map(row => row.version))
-      const lines = versions.map(version => {
-        const row = here.find(item => item.version === version)
-        const carried = (catalog.versions ?? []).some(entry => entry.version === version && entry.manifest?.requiredShellContract === contract)
-        const status = row ? row.status : carried ? 'success' : 'pending'
-        return version + ' ' + (status === 'blocked' && !everQualified.has(version) ? 'excused' : status)
-      })
-      console.log(lines.join('; '))
-      const bad = lines.filter(line => /(failed|blocked)\$/.test(line))
-      const open = lines.filter(line => !/(success|excused)\$/.test(line))
-      process.exit(bad.length ? 3 : open.length === 0 && lines.some(line => line.endsWith('success')) ? 0 : 1)
-    "
+  printf '%s' "$state" | node scripts/check-release-core-window.mjs "$HEAD_SHA" "$VERSION" "$SHELL_CONTRACT" "$NODE_VERSION"
 }
 
 echo "qualifying the newest official cores on $TAG (feed stays on the previous shell until all pass)"

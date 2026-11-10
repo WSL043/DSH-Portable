@@ -1,0 +1,25 @@
+{
+  "version": "0.9.11",
+  "zh": {
+    "summary": "改进 Windows 便携版整包升级，保留当前已选的 DSH 内核版本。",
+    "highlights": [
+      "Windows 在线整包升级会先为新版本准备并验证同版本内核，再切换程序文件。",
+      "内核没有通过新版本兼容性验证时停止升级，保留原有便携版和数据。"
+    ],
+    "upgradeNotes": [
+      "从 0.9.10 或更早版本首次升级时，请下载本页的新版 Windows 便携启动器，用它升级现有文件夹。旧版内置更新器仍按旧流程运行。",
+      "离线整包需要与当前内核版本一致。要切换内核，请使用独立的内核更新。"
+    ]
+  },
+  "en": {
+    "summary": "Improves Windows full-package upgrades so the selected DSH core version is preserved.",
+    "highlights": [
+      "Windows online full-package updates prepare and verify the same core version for the new Portable package before switching program files.",
+      "The update stops if the current core has no compatible package, leaving the existing Portable installation and data in place."
+    ],
+    "upgradeNotes": [
+      "For your first upgrade from 0.9.10 or earlier, download the new Windows portable launcher on this page and use it to update the existing folder. Earlier versions still run their original updater.",
+      "Offline full packages must match the current core version. Use the separate Core Updates action to switch versions."
+    ]
+  }
+}
