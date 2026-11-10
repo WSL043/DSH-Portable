@@ -112,7 +112,9 @@ async function buildRollbackProbe(archive, manifest) {
     })).runtimeRoot : source
     const app = path.join(runtime, 'app')
     const fixtureRoot = await realpath(temporary)
-    const bin = await realpath(path.join(app, 'node_modules', '@deepseek-ai', 'dsh', 'lib', 'bin.js'))
+    const commandPath = path.resolve(app, 'node_modules', '@deepseek-ai', 'dsh', 'lib', 'bin.js')
+    if (!commandPath.startsWith(fixtureRoot + path.sep)) throw new Error('Rollback fixture command escaped the temporary directory.')
+    const bin = await realpath(commandPath)
     if (!bin.startsWith(fixtureRoot + path.sep)) throw new Error('Rollback fixture command escaped the temporary directory.')
     const code = await readFile(bin, 'utf8')
     const shebang = /^#![^\n]*\n/.exec(code)?.[0] ?? ''
