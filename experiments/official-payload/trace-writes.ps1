@@ -117,6 +117,7 @@ $unclassifiedEvents = [long]0
 $operations = @('WriteFile','SetEndOfFileInformationFile','SetRenameInformationFile','SetDispositionInformationFile','RegSetValue','RegDeleteValue','RegDeleteKey','RegCreateKey')
 $root = [IO.Path]::GetFullPath($PortableRoot).TrimEnd('\') + '\'
 $systemPowerShell = Join-Path ([Environment]::SystemDirectory) 'WindowsPowerShell\v1.0\powershell.exe'
+$rootLauncherPath = Join-Path $root 'DeepSeek Harness Portable.exe'
 $extractorPath = Join-Path $PortableRoot 'launcher\7z.exe'
 $directoryMetadataPath = [IO.Path]::GetPathRoot([IO.Path]::GetFullPath($PortableRoot)).TrimEnd('\') + '\$Directory'
 $tempRoot = $env:TEMP.TrimEnd('\')+'\'
@@ -152,13 +153,17 @@ Import-Csv -LiteralPath $csv | ForEach-Object {
             # Reviewed in alpha3 run 36404975086: paired .NET process registration
             # writes/deletes, not portable account, profile or application data.
             if ($_.'Process Name' -in @('DeepSeek Harness Portable.exe','powershell.exe') -and $_.Operation -in @('RegSetValue','RegDeleteValue') -and $_.Path -match '^HKLM\\System\\CurrentControlSet\\Services\\ASP\.NET_4\.0\.30319\\Names\\[A-Za-z0-9]+$') { $category='reviewed-dotnet-system-registration' }
-            # Reviewed in hosted run 40568630750: this exact system PowerShell
-            # REG_BINARY state is WNF_WIL_FEATURE_DEVICE_USAGE_TRACKING_1.
+            # The exact REG_BINARY state is WNF_WIL_FEATURE_DEVICE_USAGE_TRACKING_1.
+            # Hosted runs 40568630750 and 42785349193 observed it from system PowerShell
+            # and the owned root launcher, respectively. Keep both image paths exact.
             # https://github.com/ionescu007/wnfun/blob/5e7ae991ee8a9557c63c841d67b57cd1e36c617d/script_python/WellKnownWnfNames.py#L1008
-            if ($owner.owned -and $_.'Process Name' -eq 'powershell.exe' -and $_.Operation -eq 'RegSetValue' -and
-                [string]::Equals([string]$owner.imagePath, $systemPowerShell, [StringComparison]::OrdinalIgnoreCase) -and
+            if ($owner.owned -and $_.Operation -eq 'RegSetValue' -and
                 [string]::Equals([string]$_.Path, 'HKLM\SOFTWARE\Microsoft\Windows NT\CurrentVersion\Notifications\Data\418A073AA3BC1C75', [StringComparison]::OrdinalIgnoreCase) -and
-                $_.Detail -match '^Type: REG_BINARY(?:,|$)') { $category='reviewed-windows-feature-usage' }
+                $_.Detail -match '^Type: REG_BINARY(?:,|$)' -and
+                (($_.'Process Name' -eq 'powershell.exe' -and [string]::Equals([string]$owner.imagePath, $systemPowerShell, [StringComparison]::OrdinalIgnoreCase)) -or
+                 ($_.'Process Name' -eq 'DeepSeek Harness Portable.exe' -and [string]::Equals([string]$owner.imagePath, $rootLauncherPath, [StringComparison]::OrdinalIgnoreCase)))) {
+                $category='reviewed-windows-feature-usage'
+            }
             if ($_.Path -match '\\Microsoft\\Spelling\\|^HKCU\\Software\\Microsoft\\Spelling') { $category='windows-shared-spelling' }
             # Reviewed in native run 36409052501: DirectX shader cache files,
             # https://microsoft.github.io/DirectX-Specs/d3d/ShaderCache.html
