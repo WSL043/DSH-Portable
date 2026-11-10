@@ -9,6 +9,8 @@ import path from 'node:path'
 import { promisify } from 'node:util'
 import { readLogTail, redactDiagnosticText } from '../launcher/diagnostic-policy.mjs'
 import { layoutForRoot } from '../launcher/portable-core.mjs'
+import { ensureRuntimeCapsule } from '../launcher/runtime-capsule.mjs'
+import { createRuntimeCapsule } from './create-runtime-capsule.mjs'
 
 const execFileAsync = promisify(execFile)
 
@@ -89,7 +91,7 @@ async function buildRollbackProbe(archive, manifest) {
   }
 
   const portableVersion = manifest.updateKind === 'engine' ? manifest.portableVersion : '9999.0.0-rollback.1'
-  const dshVersion = manifest.updateKind === 'engine' ? '9999.0.0-alpha.1' : `${manifest.component.dshVersion}-rollback-probe`
+  const dshVersion = manifest.updateKind === 'engine' ? '9999.0.0-alpha.1' : manifest.component.dshVersion
   const componentFile = path.join(source, 'component.json')
   const componentsFile = path.join(source, 'licenses', 'COMPONENTS.json')
   const component = JSON.parse(await readFile(componentFile, 'utf8'))
@@ -100,6 +102,27 @@ async function buildRollbackProbe(archive, manifest) {
   components.dshVersion = dshVersion
   await writeFile(componentFile, `${JSON.stringify(component, null, 2)}\n`)
   await writeFile(componentsFile, `${JSON.stringify(components, null, 2)}\n`)
+
+  // A Portable update must keep the core version. Fail the health check in the
+  // fixture command itself, while leaving profile preflight and archive checks valid.
+  if (manifest.updateKind !== 'engine') {
+    const capsule = component.kind === 'dsh-runtime-capsule'
+    const runtime = capsule ? (await ensureRuntimeCapsule(source, {
+      env: { ...process.env, DSH_PORTABLE_RUNTIME_CACHE: path.join(temporary, 'runtime-cache') },
+    })).runtimeRoot : source
+    const app = path.join(runtime, 'app')
+    const bin = path.join(app, 'node_modules', '@deepseek-ai', 'dsh', 'lib', 'bin.js')
+    const code = await readFile(bin, 'utf8')
+    const shebang = /^#![^\n]*\n/.exec(code)?.[0] ?? ''
+    await writeFile(bin, shebang + "if (process.argv[2] === '--version') throw new Error('Rollback health probe');\n"
+      + code.slice(shebang.length))
+    if (capsule) {
+      const runtimeManifest = path.join(source, 'runtime-capsule.json')
+      const { required } = JSON.parse(await readFile(runtimeManifest, 'utf8'))
+      await createRuntimeCapsule(app, path.join(source, 'runtime', 'DSH-App.dshpack'),
+        runtimeManifest, { required, level: 1, groupDuplicates: false })
+    }
+  }
 
   if (process.platform === 'win32') {
     await execFileAsync('tar.exe', ['-a', '-c', '-f', probeArchive, '-C', source, '.'])
@@ -291,7 +314,7 @@ async function main() {
     for (const [filename, content] of sentinels) assert.equal(await readFile(filename, 'utf8'), content)
 
     await checkpoint('rollback-update')
-    let rollbackDiagnostic = ''
+    let rollbackFailure
     try {
       await execFileAsync(node, [
         ...cliPrefix,
@@ -304,14 +327,15 @@ async function main() {
         '--update-manifest',
         `${origin}/rollback-manifest.json`,
       ], { encoding: 'utf8', timeout: 180000, windowsHide: true, maxBuffer: 4 * 1024 * 1024 })
-      assert.fail('The rollback probe unexpectedly succeeded.')
     } catch (error) {
-      rollbackDiagnostic = `${error?.stderr ?? ''}\n${error?.stdout ?? ''}`
-      const rollbackError = JSON.parse(rollbackDiagnostic.trim().split(/\r?\n/).filter(Boolean).at(-1))
-      assert.equal(rollbackError.type, 'portable-error')
-      assert.equal(rollbackError.code, 'UPDATE_ROLLED_BACK', JSON.stringify(rollbackError))
-      assert.doesNotMatch(rollbackDiagnostic, /(?:token|authorization|cookie)=/i)
+      rollbackFailure = error
     }
+    assert.ok(rollbackFailure, 'The rollback probe unexpectedly returned a successful result.')
+    const rollbackDiagnostic = `${rollbackFailure.stderr ?? ''}\n${rollbackFailure.stdout ?? ''}`
+    const rollbackError = JSON.parse(rollbackDiagnostic.trim().split(/\r?\n/).filter(Boolean).at(-1))
+    assert.equal(rollbackError.type, 'portable-error')
+    assert.equal(rollbackError.code, 'UPDATE_ROLLED_BACK', JSON.stringify(rollbackError))
+    assert.doesNotMatch(rollbackDiagnostic, /(?:token|authorization|cookie)=/i)
     await checkpoint('rollback-status')
     const rollbackStatus = JSON.parse((await execFileAsync(node, [...cliPrefix, 'status', '--json'], {
       encoding: 'utf8', timeout: 30000, windowsHide: true,

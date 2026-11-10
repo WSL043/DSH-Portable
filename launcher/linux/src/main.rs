@@ -525,7 +525,8 @@ fn check_updates(_app: tauri::AppHandle, interactive: bool, scope: &'static str)
             }
             Ok(value)
                 if interactive
-                    && value.get("status").and_then(Value::as_str) == Some("product-core-mismatch") =>
+                    && value.get("status").and_then(Value::as_str)
+                        == Some("product-core-mismatch") =>
             {
                 dialog(
                     PRODUCT_NAME,
