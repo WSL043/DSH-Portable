@@ -129,7 +129,7 @@ See the [updates and repair guide](docs/user-guide.en.md#updates-and-repair) for
 
 - **Stable 0.x (Native):** The current public download; near-term work focuses on polish and stability.
 - **1.0 line:** Runs the official Desktop with its managed data in a portable folder. The [release candidate](https://github.com/WSL043/DSH-Portable/releases/tag/v1.0.0-rc.1) is for Windows x64:
-  - Official files stay unchanged; when the official app ships a new version, "Install and Restart" inside the app follows it, with verification first and an automatic return to the previous version if the new one fails to start.
+  - The 1.x update channel checks hourly for official Windows Desktop releases and publishes them after signature, SHA-512, update, and recovery checks pass. Once an update appears, choose **Install and Restart** in the app. Portable rolls back to the previous version if the new version fails its startup check.
   - Sessions, settings, plugins, and sign-in live in the folder; copy it whole to another Windows PC and keep working.
   - Install and manage plugins in the official Desktop’s **Plugins** page. New 1.x packages ship with no preinstalled community plugins.
 - See the [1.0 roadmap](docs/roadmap-toward-1.0.md) and the [official desktop payload experiment](experiments/official-payload/README.md).
