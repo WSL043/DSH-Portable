@@ -196,6 +196,8 @@ test('offline complete manifests preflight the signed Windows ZIP and delegate o
   assert.equal(result.existingFullUpdater, true)
   assert.equal(result.latest, '0.9.4')
   assert.equal(result.fullPackageManifestFile, await realpath(input))
+  await writeOfflineManifest(input, { ...full, dshVersion: '0.1.0-rc.5' })
+  assert.equal((await read()).status, 'product-core-mismatch')
   for (const [patch, message] of [[{ filename: '../complete.zip' }, /archive name/i], [{ bytes: payload.length - 1 }, /size/i],
     [{ sha256: 'a'.repeat(64) }, /digest/i]]) {
     await writeOfflineManifest(input, { ...full, payloads: { windowsX64: { ...full.payloads.windowsX64, ...patch } } })
@@ -259,7 +261,7 @@ test('preparing offline files saves signed originals, follows full-package requi
     publish('product.json', updateManifest({ portableVersion: '0.9.8', component: {
       ...updateManifest().component, requiredNodeVersion: '99.0.0',
     } }))
-    const full = publish('portable-manifest.json', { schemaVersion: 2, version: '0.9.8', releaseChannel: 'stable',
+    const full = publish('portable-manifest.json', { schemaVersion: 2, version: '0.9.8', releaseChannel: 'stable', dshVersion: '0.2.1-rc.5',
       payloads: { windowsX64: { filename: 'complete.zip', url: 'https://example.invalid/complete.zip', bytes: payload.length, sha256: digest } } })
     const saved = await prepare({ layout: { ...fixture.layout, platform: 'win32' }, scope: 'product', manifestUrl: 'https://example.invalid/product.json' })
     assert.equal(saved.status, 'saved')
@@ -279,7 +281,9 @@ test('preparing offline files saves signed originals, follows full-package requi
       assert.equal(path.basename(current.files.manifest), 'portable-manifest.json', 'a current connected machine still saves the full package')
       assert.deepEqual(await readFile(current.files.manifest), full.bytes)
       assert.deepEqual(await readFile(current.files.signature), full.signature)
-      await writeFile(componentsFile, JSON.stringify({ ...components, portableVersion: '0.9.7', shellFingerprint: 'a'.repeat(64) }))
+      await writeFile(componentsFile, JSON.stringify({
+        ...components, portableVersion: '0.9.7', dshVersion: '0.2.1-rc.5', shellFingerprint: 'a'.repeat(64),
+      }))
       const offline = await readLocalUpdate({ layout: { ...fixture.layout, platform: 'win32' }, input: current.files.manifest }, offlineVerification)
       assert.equal(offline.existingFullUpdater, true, 'the older offline machine is not bound to the connected machine fingerprint')
       assert.equal(offline.latest, '0.9.8')
@@ -455,10 +459,26 @@ test('portable preview versions compare monotonically without lexical mistakes',
   assert.throws(() => comparePortableVersions('latest', '0.1.0'), /valid semantic version/i)
 })
 
+test('Portable update never changes the selected core, including when a full package is required', () => {
+  const manifest = updateManifest({ portableVersion: '0.9.10', requiredShellSchema: 30,
+    component: { ...updateManifest().component, dshVersion: '0.2.1-rc.5' } })
+  for (const dshVersion of ['0.2.2-rc.1', '0.2.1-rc.4']) {
+    const installed = { portableVersion: '0.9.9', dshVersion, updaterSchema: 1, shellSchema: 29, nodeVersion: '24.19.0' }
+    const online = evaluateUpdate(manifest, installed, 'windows-x64')
+    assert.equal(online.status, 'full-package-required')
+    assert.equal(online.delivery, 'full-package')
+    const result = evaluateUpdate(manifest, installed, 'windows-x64', { offline: true })
+    assert.equal(result.status, 'product-core-mismatch')
+    assert.equal(result.delivery, 'none')
+    assert.equal(result.engineCurrent, dshVersion)
+    assert.equal(result.engineLatest, '0.2.1-rc.5')
+  }
+})
+
 test('update evaluation distinguishes current, component update, full package, and wrong platform', () => {
   const installed = {
     portableVersion: '0.1.0-rc.6-portable.5',
-    dshVersion: '0.1.0-rc.6',
+    dshVersion: '0.1.0-rc.7',
     updaterSchema: 1,
     shellSchema: 1,
     nodeVersion: '24.19.0',
@@ -474,7 +494,7 @@ test('update evaluation distinguishes current, component update, full package, a
     name: 'DeepSeek Harness',
     current: installed.dshVersion,
     latest: updateManifest().component.dshVersion,
-    changed: true,
+    changed: false,
   })
   assert.equal(componentUpdate.delivery, 'component')
   assert.equal(evaluateUpdate(updateManifest({ portableVersion: installed.portableVersion }), installed, 'windows-x64').status, 'current')
@@ -741,7 +761,7 @@ test('automatic checks use the stable feed for legacy candidate metadata', async
 })
 
 test('single-line clients accept legacy candidate metadata without a channel-mismatch state', () => {
-  const base = { dshVersion: '0.1.0-rc.8', updaterSchema: 1, shellSchema: 1, nodeVersion: '24.19.0' }
+  const base = { dshVersion: '0.1.0-rc.7', updaterSchema: 1, shellSchema: 1, nodeVersion: '24.19.0' }
   const legacyCandidate = updateManifest({ portableVersion: '0.4.0-rc.2', releaseChannel: 'candidate' })
   const stableClient = { ...base, portableVersion: '0.3.0', releaseChannel: 'stable' }
   const result = evaluateUpdate(legacyCandidate, stableClient, 'windows-x64')
@@ -831,7 +851,7 @@ test('runtime layout changes require a verified complete-package update', () => 
   const installed = {
     portableVersion: '0.4.15',
     releaseChannel: 'stable',
-    dshVersion: '0.1.1-rc.2',
+    dshVersion: '0.1.0-rc.7',
     updaterSchema: 1,
     shellSchema: 21,
     nodeVersion: '24.19.0',
@@ -896,7 +916,7 @@ test('update checks read installed metadata and cache a successful result', asyn
     await mkdir(path.join(root, 'licenses'), { recursive: true })
     await writeFile(path.join(root, 'licenses', 'COMPONENTS.json'), `${JSON.stringify({
       portableVersion: '0.1.0-rc.6-portable.5',
-      dshVersion: '0.1.0-rc.6',
+      dshVersion: '0.1.0-rc.7',
       updaterSchema: 1,
       shellSchema: 1,
       nodeVersion: '24.19.0',
@@ -928,7 +948,7 @@ test('choosing later suppresses automatic prompts but never hides a forced check
   try {
     await mkdir(path.join(root, 'licenses'), { recursive: true })
     await writeFile(path.join(root, 'licenses', 'COMPONENTS.json'), `${JSON.stringify({
-      portableVersion: '0.1.0-rc.6-portable.5', dshVersion: '0.1.0-rc.6', updaterSchema: 1, shellSchema: 1, nodeVersion: '24.19.0',
+      portableVersion: '0.1.0-rc.6-portable.5', dshVersion: '0.1.0-rc.7', updaterSchema: 1, shellSchema: 1, nodeVersion: '24.19.0',
     })}\n`)
     const url = `http://127.0.0.1:${server.address().port}/update.json`
     await checkForUpdate({ layout, manifestUrl: url, allowHttp: true, force: true, now: 1000 })
@@ -957,7 +977,7 @@ test('skipping one version suppresses only that automatic prompt', async () => {
   try {
     await mkdir(path.join(root, 'licenses'), { recursive: true })
     await writeFile(path.join(root, 'licenses', 'COMPONENTS.json'), `${JSON.stringify({
-      portableVersion: '0.1.0-rc.6-portable.5', dshVersion: '0.1.0-rc.6', updaterSchema: 1, shellSchema: 1, nodeVersion: '24.19.0',
+      portableVersion: '0.1.0-rc.6-portable.5', dshVersion: '0.1.0-rc.7', updaterSchema: 1, shellSchema: 1, nodeVersion: '24.19.0',
     })}\n`)
     const url = `http://127.0.0.1:${server.address().port}/update.json`
     await checkForUpdate({ layout, manifestUrl: url, allowHttp: true, force: true, now: 1000 })
@@ -1318,7 +1338,7 @@ async function makeUpdateFixture() {
   await writeFile(path.join(layout.appDir, dshRelative), 'old app')
   await writeFile(path.join(stagedRoot, 'app', dshRelative), 'new app')
   await writeFile(path.join(root, 'licenses', 'COMPONENTS.json'), `${JSON.stringify({
-    portableVersion: '0.1.0-rc.6-portable.5', dshVersion: '0.1.0-rc.6', dshCommit: 'a'.repeat(40),
+    portableVersion: '0.1.0-rc.6-portable.5', dshVersion: '0.1.0-rc.7', dshCommit: 'b'.repeat(40),
     releaseChannel: 'candidate', platform: 'windows-x64', nodeVersion: '24.19.0', updaterSchema: 1, shellSchema: 1,
   })}\n`)
   await writeFile(path.join(stagedRoot, 'licenses', 'COMPONENTS.json'), `${JSON.stringify({
@@ -1600,7 +1620,7 @@ test('Portable catalog filters channels and keeps exact approved version URLs', 
   t.after(() => rm(root, { recursive: true, force: true }))
   const layout = layoutForRoot(root)
   await mkdir(path.join(root, 'licenses'), { recursive: true })
-  const installed = { portableVersion: '0.6.6', releaseChannel: 'stable', dshVersion: '0.1.3-alpha.2', updaterSchema: 1, shellSchema: 1, nodeVersion: '24.19.0' }
+  const installed = { portableVersion: '0.6.6', releaseChannel: 'stable', dshVersion: '0.1.0-rc.7', updaterSchema: 1, shellSchema: 1, nodeVersion: '24.19.0' }
   await writeFile(path.join(root, 'licenses', 'COMPONENTS.json'), JSON.stringify(installed))
   const platform = platformUpdateKey(process.platform, process.arch)
   const entry = version => ({ version,
@@ -1808,7 +1828,7 @@ async function contractUpdateFixture({ stagedContract = 3 } = {}) {
   await patch(path.join(fixture.stagedRoot, 'licenses', 'COMPONENTS.json'), { shellContract: stagedContract, shellFingerprint: 'b'.repeat(64), releaseChannel: 'stable', pnpmVersion: '10.1.0', defaultPlugins: [{ package: 'dsh-image-viewer', version: '0.1.15' }] })
   await patch(path.join(fixture.stagedRoot, 'component.json'), { releaseChannel: 'stable' })
   const update = {
-    status: 'available', latest: '0.5.0-rc.2', releaseChannel: 'stable', platform: 'windows-x64', minimumUpdaterSchema: 1,
+    status: 'available', updateKind: 'engine', latest: '0.5.0-rc.2', releaseChannel: 'stable', platform: 'windows-x64', minimumUpdaterSchema: 1,
     requiredShellSchema: 21, requiredShellContract: 3, requiredShellFingerprint: 'b'.repeat(64),
     component: { kind: 'dsh-runtime-capsule', dshVersion: '0.1.1-rc.3', dshCommit: 'b'.repeat(40), requiredNodeVersion: '24.19.0', bytes: 4, sha256: 'c'.repeat(64), urls: ['https://example.invalid/x'] },
   }
@@ -1907,7 +1927,8 @@ test('temporary check failures retain reminder choices without advertising stale
       t.after(() => rm(fixture.root, { recursive: true, force: true }))
       const { layout } = fixture
       const manifest = updateManifest({ platform: platformUpdateKey(), ...(scope === 'engine'
-        ? { updateKind: 'engine', portableVersion: '0.1.0-rc.6-portable.5' } : {}) })
+        ? { updateKind: 'engine', portableVersion: '0.1.0-rc.6-portable.5',
+          component: { ...updateManifest().component, dshVersion: '0.1.0-rc.8' } } : {}) })
       const manifestUrl = 'https://example.invalid/' + scope + '.json'
       let requests = 0, offline = false
       const fetchImpl = async () => {

@@ -39,7 +39,7 @@ async function makePayload(root, version) {
   await writeFile(path.join(packageRoot, 'DeepSeek-Herness.exe'), 'new launcher\n')
   await writeFile(path.join(packageRoot, 'runtime', 'node', 'node.exe'), 'new node\n')
   await writeFile(path.join(packageRoot, 'app', 'package.json'), '{"name":"new-app"}\n')
-  await writeFile(path.join(packageRoot, 'licenses', 'COMPONENTS.json'), `${JSON.stringify({ portableVersion: version })}\n`)
+  await writeFile(path.join(packageRoot, 'licenses', 'COMPONENTS.json'), `${JSON.stringify({ portableVersion: version, dshVersion: '0.2.1-rc.5' })}\n`)
   const archive = path.join(root, 'payload.zip')
   await execFileAsync('tar.exe', ['-a', '-c', '-f', archive, '-C', path.join(root, 'payload'), 'DSH-Portable'])
   const bytes = await readFile(archive)
@@ -54,7 +54,7 @@ async function createOldInstall(destination) {
   await writeFile(path.join(destination, 'DeepSeek-Herness.exe'), 'old launcher\n')
   await writeFile(path.join(destination, 'runtime', 'node', 'node.exe'), 'old node\n')
   await writeFile(path.join(destination, 'app', 'package.json'), '{"name":"old-app"}\n')
-  await writeFile(path.join(destination, 'licenses', 'COMPONENTS.json'), `${JSON.stringify({ portableVersion: '0.2.4' })}\n`)
+  await writeFile(path.join(destination, 'licenses', 'COMPONENTS.json'), `${JSON.stringify({ portableVersion: '0.2.4', dshVersion: '0.2.1-rc.5' })}\n`)
 
   const profileSettings = path.join(destination, 'data', 'dsh-home', 'profiles', 'web', 'settings.json')
   const userPlugin = path.join(destination, 'data', 'dsh-home', 'profiles', 'web', 'node_modules', 'example-user-plugin', 'package.json')

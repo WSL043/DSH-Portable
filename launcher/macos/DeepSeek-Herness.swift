@@ -385,6 +385,13 @@ private final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelega
             alert.runModal()
             return
         }
+        if status == "product-core-mismatch" {
+            alert.messageText = L("便携更新已停止", "Portable update blocked")
+            alert.informativeText = L("此更新包无法保留当前 DSH 内核。请在内核更新中单独切换版本。",
+                                      "This package cannot keep your current DSH core. To switch cores, use Core Updates.")
+            alert.runModal()
+            return
+        }
         if status == "full-package-required" || (status == "available" && installedMode) {
             alert.messageText = L("DSH-Portable 需要完整更新", "DSH-Portable needs a complete update")
             alert.informativeText = updateDescription(update, fullPackage: true)
@@ -441,9 +448,7 @@ private final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelega
                 L("交付方式：轻量内核更新", "Delivery: lightweight engine update")
         }
         let product = "DSH-Portable \(productCurrent)  →  \(productLatest)"
-        let engine = engineCurrent != engineLatest
-            ? L("内置官方 DSH \(engineCurrent)  →  \(engineLatest)", "Bundled official DSH \(engineCurrent)  →  \(engineLatest)")
-            : L("内置官方 DSH \(engineLatest)（本次不变）", "Bundled official DSH \(engineLatest) (unchanged)")
+        let engine = L("保留当前 DSH \(engineCurrent)", "Keep current DSH \(engineCurrent)")
         let delivery = fullPackage
             ? L("交付方式：完整更新", "Delivery: complete package")
             : L("交付方式：轻量更新（仅下载已变更的 DSH 应用组件）",

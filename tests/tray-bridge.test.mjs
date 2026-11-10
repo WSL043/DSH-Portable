@@ -1067,7 +1067,7 @@ test('Windows tray consumes official projected state in one bounded compact nati
   assert.match(source, /任务仍在运行|task is still running/i)
   assert.match(source, /现在更新|Update now/)
   assert.match(source, /DSH-Portable 更新|DSH-Portable update/)
-  assert.match(source, /官方 DSH|Bundled official DSH/)
+  assert.match(source, /保留当前 DSH|Keep current DSH/)
   assert.match(source, /稍后|Later/)
   assert.doesNotMatch(source, /item\.Checked\s*=\s*true/)
   assert.doesNotMatch(source, /item\.Tag\s*=\s*"current"/)

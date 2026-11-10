@@ -132,7 +132,7 @@ const server = createServer((request, response) => {
   response.writeHead(404).end()
 })
 
-try {
+upgrade: try {
   await mkdir(targetSourceRoot, { recursive: true })
   await execFileAsync('tar.exe', ['-x', '-f', newArchive, '-C', targetSourceRoot, 'DSH-Portable/launcher', 'DSH-Portable/licenses/COMPONENTS.json'], {
     timeout: 5 * 60 * 1000, windowsHide: true,
@@ -196,6 +196,21 @@ try {
       || (oldComponents.releaseChannel === 'candidate' && fullManifestSource.releaseChannel === 'stable'),
     'only legacy candidate-to-stable migration or same-line upgrades are supported',
   )
+  if (fullManifestSource.dshVersion && oldComponents.dshVersion !== fullManifestSource.dshVersion) {
+    const installedComponents = path.join(destination, 'licenses', 'COMPONENTS.json')
+    const before = await readFile(installedComponents, 'utf8')
+    await assert.rejects(execFileAsync(path.join(targetSourceRoot, 'DSH-Portable', 'launcher', 'DSH-FullUpdater.exe'), [
+      '--upgrade-existing', '--manifest', `${origin}/portable-manifest.json`,
+      '--destination', destination, '--allow-http', '--no-launch', '--result', resultPath,
+    ], { timeout: 300_000, windowsHide: true }), { code: 1 })
+    const refusal = JSON.parse(await readFile(resultPath, 'utf8'))
+    assert.equal(refusal.status, 'failed')
+    assert.match(refusal.message, /Could not prepare the current DSH core|未能为新版便携包准备当前 DSH 内核/)
+    assert.equal(await readFile(installedComponents, 'utf8'), before)
+    for (const [filename, value] of markers) assert.equal(await readFile(filename, 'utf8'), value)
+    console.log('[upgrade-smoke] refused a mismatched core without changing the installation')
+    break upgrade
+  }
   const oldNode = path.join(destination, 'runtime', 'node', 'node.exe')
   const oldCli = path.join(destination, 'launcher', 'portable-cli.mjs')
   const oldEntry = await stat(path.join(destination, 'runtime-capsule.json')).then(

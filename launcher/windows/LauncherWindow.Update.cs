@@ -107,6 +107,14 @@ namespace DshPortable
                         L("离线更新", "Offline update"), MessageBoxButtons.OK, MessageBoxIcon.Information);
                     return;
                 }
+                if (updateStatus == "product-core-mismatch")
+                {
+                    MessageBox.Show(this,
+                        L("这个便携更新包内置 DSH " + engineLatest + "，无法保留当前 DSH " + engineCurrent + "。本次更新已停止。",
+                          "This Portable package bundles DSH " + engineLatest + " and cannot keep your current DSH " + engineCurrent + ". The update was blocked."),
+                        L("DSH-Portable 更新", "DSH-Portable update"), MessageBoxButtons.OK, MessageBoxIcon.Information);
+                    return;
+                }
                 if (updateStatus == "core-incompatible")
                 {
                     if (!manual) return;

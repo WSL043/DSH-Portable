@@ -153,7 +153,9 @@ function usesShellContract(manifest, updateKind) {
   return updateKind === 'engine' && manifest.requiredShellContract != null
 }
 
-export function evaluateUpdate(manifest, installed, platform, { allowEngineVersionChange = false, allowProductVersionChange = false } = {}) {
+export function evaluateUpdate(manifest, installed, platform, {
+  allowEngineVersionChange = false, allowProductVersionChange = false, forDownload = false, offline = false,
+} = {}) {
   assertManifestShape(manifest)
   const updateKind = manifest.updateKind || 'product'
   const installedReleaseChannel = normalizeReleaseChannel(installed.releaseChannel, installed.portableVersion)
@@ -211,6 +213,9 @@ export function evaluateUpdate(manifest, installed, platform, { allowEngineVersi
     }
   } else if (productComparison === 0 || (productComparison > 0 && !allowProductVersionChange)) {
     return describe('current', 'none')
+  } else if (!forDownload && engineCurrent !== engineLatest) {
+    if (platform === 'windows-x64' && !offline) return describe('full-package-required', 'full-package')
+    return { ...describe('product-core-mismatch', 'none'), message: productCoreMismatchMessage(engineCurrent, engineLatest) }
   }
   if (Number(manifest.minimumUpdaterSchema) > Number(installed.updaterSchema ?? 0)
     || !['dsh-app', 'dsh-runtime-capsule'].includes(manifest.component?.kind)) {
@@ -244,6 +249,10 @@ export function evaluateUpdate(manifest, installed, platform, { allowEngineVersi
     requiredShellContract: usesShellContract(manifest, updateKind) ? manifest.requiredShellContract : null,
     component,
   }
+}
+
+function productCoreMismatchMessage(current, bundled) {
+  return `This Portable package bundles DSH ${bundled} and cannot keep your current DSH ${current}. The update was blocked. To switch cores, use Core Updates.`
 }
 
 function updateCacheForScope(layout, scope) {
@@ -607,6 +616,10 @@ function localUpdatePlan(manifest, installed, platform, scope, manifestFile, for
       current: installed.portableVersion, latest: manifest.version, productCurrent: installed.portableVersion, productLatest: manifest.version,
       engineCurrent: installed.dshVersion, releaseChannel, fullPackageManifestFile: manifestFile }
     if (platform !== 'windows-x64') return { result: { ...result, status: 'wrong-platform', existingFullUpdater: false } }
+    if (!forDownload && manifest.dshVersion && manifest.dshVersion !== installed.dshVersion) {
+      return { result: { ...result, status: 'product-core-mismatch', delivery: 'none', existingFullUpdater: false,
+        engineLatest: manifest.dshVersion, message: productCoreMismatchMessage(installed.dshVersion, manifest.dshVersion) } }
+    }
     component = manifest.payloads.windowsX64
     if (!component || !Number.isSafeInteger(component.bytes) || component.bytes <= 0 || !/^[a-f0-9]{64}$/i.test(String(component.sha256 ?? ''))) {
       throw new Error('Complete Portable package metadata is invalid.')
@@ -616,7 +629,7 @@ function localUpdatePlan(manifest, installed, platform, scope, manifestFile, for
   } else {
     if ((manifest.updateKind || 'product') !== scope) throw localUpdateFailure('scope-mismatch', `Update kind mismatch: expected ${scope}.`)
     result = evaluateUpdate(manifest, installed, platform, {
-      allowEngineVersionChange: scope === 'engine', allowProductVersionChange: scope === 'product',
+      allowEngineVersionChange: scope === 'engine', allowProductVersionChange: scope === 'product', forDownload, offline: true,
     })
     if (result.status !== 'available' && !(forDownload && result.status === 'current')) return { result }
     component = result.component || manifest.component
@@ -1394,6 +1407,12 @@ export async function installAvailableAppUpdate({
       }
     } else if (update.requiredShellFingerprint && components.shellFingerprint !== update.requiredShellFingerprint) {
       throw new Error('Downloaded component shell fingerprint does not match its manifest.')
+    }
+    if ((update.updateKind || 'product') === 'product') {
+      const installed = await readInstalledUpdateState(layout)
+      if (metadata.dshVersion !== installed.dshVersion || components.dshVersion !== installed.dshVersion) {
+        throw new Error(productCoreMismatchMessage(installed.dshVersion, metadata.dshVersion))
+      }
     }
     if (typeof beforeApply === 'function') await beforeApply({ layout, stagedRoot, metadata })
     if (update.requiredShellContract != null) metadata.portableVersion = (await adoptInstalledShellIdentity(layout, stagedRoot)).portableVersion

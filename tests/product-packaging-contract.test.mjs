@@ -905,7 +905,7 @@ test('macOS package is a movable signed app shell for both supported architectur
   assert.match(app, /ignore-update/)
   assert.match(app, /Skip This Version|跳过此版本/)
   assert.match(app, /DSH-Portable update|DSH-Portable 更新/)
-  assert.match(app, /Bundled official DSH|内置官方 DSH/)
+  assert.match(app, /Keep current DSH|保留当前 DSH/)
   assert.match(app, /Delivery: component update|交付方式：轻量更新/)
   assert.match(app, /--progress-json/)
   assert.match(app, /presentUpdateProgress/)
