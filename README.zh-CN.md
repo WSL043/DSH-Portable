@@ -51,9 +51,7 @@
 
 ## 下载
 
-日常使用请选择稳定版 0.x（Native）。1.0 线有一个仅 Windows 的 [alpha 预览版](https://github.com/WSL043/DSH-Portable/releases/tag/v1.0.0-alpha.5)，供想尝鲜的用户试用，不是 0.x 的升级路径。
-
-1.x 正在维护验收，当前官方桌面底包的已知 MCP 安全债阻断新发布；旧 alpha 也不作安全晋级承诺。[当前进度、验收与限制](docs/one-x-maintenance-2026-10-23.md)。
+日常使用请选择稳定版 0.x（Native）。要试用可随文件夹携带的官方桌面应用，请下载 Windows x64 [1.0 候选版](https://github.com/WSL043/DSH-Portable/releases/tag/v1.0.0-rc.1)，解压到独立文件夹。
 
 ### Windows
 
@@ -138,10 +136,10 @@ macOS、Linux 解压后直接运行，首次打开的注意事项见[用户指�
 ## 路线
 
 - **稳定版 0.x（Native）**：当前公开下载；接下来聚焦打磨与稳定。
-- **1.0 线**：直接运行官方桌面应用，只把数据放进文件夹。目前是仅 Windows 的 [alpha 预览版](https://github.com/WSL043/DSH-Portable/releases/tag/v1.0.0-alpha.5)，不是 0.x 的升级路径：
+- **1.0 线**：运行官方桌面应用，将受管理的数据保存在便携文件夹中。[候选版](https://github.com/WSL043/DSH-Portable/releases/tag/v1.0.0-rc.1)适用于 Windows x64：
   - 官方文件保持原样；官方发布新版本后，在应用内“安装并重启”即可跟上，更新前会校验，新版本异常时自动回到上一版。
   - 会话、设置、插件和登录状态都在文件夹里，整夹复制到另一台 Windows 电脑即可接着用。
-  - **插件（会话管理、图片查看器）：** 现在公开的 alpha.5 自带这两个插件，默认关闭，要用时在官方“插件”页打开。**之后新发的 alpha 不再自带**（自带会让每次启动先多跑一步），要用时在官方“插件 → 添加插件”里安装：[会话管理 Chat Manager](https://github.com/WSL043/dsh-chat-manager#安装)、[图片查看器 Image Viewer](https://github.com/WSL043/dsh-image-viewer#安装)，按各自说明里的版本安装。新的 0.x 包也不再默认安装二者，已有安装保持不变。
+  - 在官方“插件”页面按需安装和管理插件。新的 1.x 包不预装社区插件。
   - 详细说明见[1.0 预览线指南](https://wsl043.github.io/DSH-Portable/guides/official-desktop-portable.html)。
 - 详见[1.0 路线图](docs/roadmap-toward-1.0.md)与[官方桌面成品实验线](experiments/official-payload/README.md)。
 

@@ -18,7 +18,6 @@ const sharedDesktopPackages = [
   'packages/client/ui-plugin-market/',
   'packages/api/gateway/',
   'packages/host/webserver/',
-  'packages/mcp/mcp-client/',
   'packages/experimental/plugin-market-bundle/',
 ];
 export function desktopFiles(tree) {

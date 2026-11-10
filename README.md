@@ -51,9 +51,7 @@
 
 ## Downloads
 
-For everyday use, choose the stable 0.x (Native) line. The 1.0 line has a Windows-only [alpha preview](https://github.com/WSL043/DSH-Portable/releases/tag/v1.0.0-alpha.5) for early adopters; it is not an upgrade path from 0.x.
-
-1.x maintenance and qualification are underway. Known MCP security debt in the official desktop payload blocks new publication; the older alpha is not a security-qualified upgrade. See [current progress, evidence and limitations](docs/one-x-maintenance-2026-10-23.md).
+For everyday use, choose the stable 0.x (Native) line. To try the official desktop in a portable folder, download the Windows x64 [1.0 release candidate](https://github.com/WSL043/DSH-Portable/releases/tag/v1.0.0-rc.1) and extract it into a separate folder.
 
 ### Windows
 
@@ -130,10 +128,10 @@ See the [updates and repair guide](docs/user-guide.en.md#updates-and-repair) for
 ## Roadmap
 
 - **Stable 0.x (Native):** The current public download; near-term work focuses on polish and stability.
-- **1.0 line:** Runs the official desktop app itself and only moves its data into the folder. Currently a Windows-only [alpha preview](https://github.com/WSL043/DSH-Portable/releases/tag/v1.0.0-alpha.5), not an upgrade path from 0.x:
+- **1.0 line:** Runs the official Desktop with its managed data in a portable folder. The [release candidate](https://github.com/WSL043/DSH-Portable/releases/tag/v1.0.0-rc.1) is for Windows x64:
   - Official files stay unchanged; when the official app ships a new version, "Install and Restart" inside the app follows it, with verification first and an automatic return to the previous version if the new one fails to start.
   - Sessions, settings, plugins, and sign-in live in the folder; copy it whole to another Windows PC and keep working.
-  - **Plugins (Chat Manager, Image Viewer):** the alpha.5 that is public today ships both, switched off by default; turn them on in the official Plugins page. **Alphas released after it will not ship them** (bundling made every start run an extra step first); install them when you need them from the official Plugins → Add plugin page: [Chat Manager](https://github.com/WSL043/dsh-chat-manager#install) and [Image Viewer](https://github.com/WSL043/dsh-image-viewer#install), using the version their pages list. New 0.x packages also omit both defaults; existing installations are preserved.
+  - Install and manage plugins in the official Desktop’s **Plugins** page. New 1.x packages ship with no preinstalled community plugins.
 - See the [1.0 roadmap](docs/roadmap-toward-1.0.md) and the [official desktop payload experiment](experiments/official-payload/README.md).
 
 ## Get help

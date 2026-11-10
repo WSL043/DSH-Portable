@@ -8,7 +8,6 @@ import path from 'node:path'
 import { pathToFileURL, fileURLToPath } from 'node:url'
 import { parseArgs } from 'node:util'
 import { classifyProductVersion } from './version-policy.mjs'
-import { ADVISORY, affectedClientVersion } from './check-official-payload-security.mjs'
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..')
 
@@ -128,6 +127,16 @@ export function productionPackageClosure(packages, entryName) {
   return [...selected.values()].sort((left, right) => left.name.localeCompare(right.name))
 }
 
+// Prereleases and malformed versions are unknown rather than an inferred pass.
+function affectedClientVersion(version) {
+  if (typeof version !== 'string') return null
+  const match = /^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)(?:\+[0-9A-Za-z-]+(?:\.[0-9A-Za-z-]+)*)?$/.exec(version)
+  if (!match) return null
+  const parts = match.slice(1, 4).map(Number)
+  if (!parts.every(Number.isSafeInteger)) return null
+  return parts[0] === 2 && parts[1] < 3
+}
+
 export async function verifyInstalledRuntimeDependencies(runtimeRoot, { sourceWorkspaceRoots = [] } = {}) {
   // Source-pack staging resolves a fresh graph, then discards its generated lock.
   // Check every matching lock location against installed manifests first, including
@@ -191,7 +200,7 @@ export async function verifyInstalledRuntimeDependencies(runtimeRoot, { sourceWo
     assert.ok(typeof installed.version === 'string' && installed.version.length > 0, `installed version at ${location} is missing`)
     if (name === '@modelcontextprotocol/client') {
       assert.equal(affectedClientVersion(installed.version), false,
-        `${ADVISORY.id}: affected or unknown MCP client version at ${location}@${installed.version}`)
+        `GHSA-6prh-2h8m-c8cw: affected or unknown MCP client version at ${location}@${installed.version}`)
     }
     const version = /^(\d+)\.(\d+)\.(\d+)(?:\+[0-9A-Za-z.-]+)?$/.exec(installed.version)
     const major = Number(installed.version.split('.')[0])

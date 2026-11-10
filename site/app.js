@@ -91,7 +91,7 @@ const copy = {
       "Fully exit, then copy the whole folder to a USB drive or a computer with the same OS and architecture. Sessions, settings, plugins, and the default workspace move together.",
     faqLineQ: "Stable 0.x or the 1.0 preview?",
     faqLineA:
-      'For everyday use, choose stable 0.x, available for Windows, macOS, and Linux. The 1.0 preview runs the official desktop app itself; it is Windows only, still an alpha, and can sit next to 0.x. <a href="../guides/official-desktop-portable.html">About the 1.0 preview</a> (in Chinese).',
+      'For everyday use, choose stable 0.x, available for Windows, macOS, and Linux. The 1.0 preview runs the official desktop app itself; it is a Windows x64 release candidate and can sit next to 0.x. <a href="../guides/official-desktop-portable.html">About the 1.0 preview</a> (in Chinese).',
     faqDefenderQ: "What if Windows Security removed the program?",
     faqDefenderA:
       'Release files are not digitally signed yet and are occasionally misjudged. Download only from GitHub Releases and compare the checksums; the <a href="https://github.com/WSL043/DSH-Portable/blob/main/docs/user-guide.en.md#windows-security-removed-the-program-or-blocked-it">user guide</a> covers restoring the file and reporting the false positive.',
@@ -150,10 +150,10 @@ const copy = {
     stableLineTitle: "Stable 0.x (Native)",
     stableLineText:
       '<ul class="line-points"><li>Recommended for everyday use on Windows, macOS, and Linux.</li><li>Portable and the core update separately; choose among up to five verified core versions.</li><li>No install and no system changes; copy the folder to take it with you.</li></ul><p><a href="#downloads">See downloads</a></p>',
-    developmentLineLabel: "ALPHA PREVIEW",
+    developmentLineLabel: "RELEASE CANDIDATE",
     developmentLineTitle: "1.0 line: runs the official desktop app itself",
     developmentLineText:
-      '<ul class="line-points"><li>Sessions, settings, plugins, and sign-in travel with the folder.</li><li>When the official app ships a new version, "Install and Restart" inside the app follows it.</li><li>Windows only, currently an alpha preview, not an upgrade path from 0.x.</li></ul><p><a href="https://github.com/WSL043/DSH-Portable/releases/tag/v1.0.0-alpha.5">Try the alpha</a> · <a href="../guides/official-desktop-portable.html">About the 1.0 preview</a></p>',
+      '<ul class="line-points"><li>Sessions, settings, plugins, and sign-in travel with the folder.</li><li>When the official app ships a new version, "Install and Restart" inside the app follows it.</li><li>Windows x64 release candidate. Extract it into a separate folder.</li></ul><p><a href="https://github.com/WSL043/DSH-Portable/releases/tag/v1.0.0-rc.1">Download the release candidate</a> · <a href="../guides/official-desktop-portable.html">About the 1.0 preview</a></p>',
     pluginsTitle: "Plugin tools,<br>kept in your folder.",
     managerText:
       "Organize and find sessions to pick up earlier work. Both default plugins are maintained and updated independently.",

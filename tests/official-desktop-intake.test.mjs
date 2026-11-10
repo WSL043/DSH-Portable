@@ -21,28 +21,25 @@ test('desktop intake follows reviewed shared packages and locked external depend
     'packages/client/ui-plugin-market/src/client/index.ts',
     'packages/api/gateway/src/access.ts',
     'packages/host/webserver/src/index.ts',
-    'packages/mcp/mcp-client/package.json',
     'packages/experimental/plugin-market-bundle/cordis.patch.yml',
     'pnpm-lock.yaml',
   ];
   const unrelated = ['packages/util/home-paths-extra/src/index.ts', 'packages/util/official-bundles-extra/src/index.ts', 'packages/boot/app-boot-other/package.json',
-    'packages/client/other/src/index.ts', 'packages/mcp/mcp-client-extra/package.json',
+    'packages/client/other/src/index.ts', 'packages/mcp/mcp-client/package.json',
     'examples/pnpm-lock.yaml', 'apps/web/index.ts'];
   const tree = { tree: [...included, ...unrelated].map(path => ({ path, type: 'blob', sha: 'a' })) };
   assert.deepEqual(Object.keys(desktopFiles(tree)), included);
 });
 
-test('shared path, official bundle lists, MCP and lock drift remains visible without desktop file changes', () => {
+test('shared path, official bundle lists and lock drift remains visible without desktop file changes', () => {
   const before = { tree: [
     { path: 'apps/desktop/src/main.ts', type: 'blob', sha: 'same' },
     { path: 'packages/util/home-paths/src/index.ts', type: 'blob', sha: 'old' },
     { path: 'packages/util/official-bundles/src/plugin-manager.ts', type: 'blob', sha: 'old' },
-    { path: 'packages/mcp/mcp-client/package.json', type: 'blob', sha: 'old' },
     { path: 'pnpm-lock.yaml', type: 'blob', sha: 'old' },
   ] };
   const after = { tree: before.tree.map(entry => ({ ...entry, sha: entry.sha === 'old' ? 'new' : entry.sha })) };
   assert.deepEqual(changesBetween(desktopFiles(before), desktopFiles(after)), [
-    { path: 'packages/mcp/mcp-client/package.json', status: 'modified' },
     { path: 'packages/util/home-paths/src/index.ts', status: 'modified' },
     { path: 'packages/util/official-bundles/src/plugin-manager.ts', status: 'modified' },
     { path: 'pnpm-lock.yaml', status: 'modified' },
