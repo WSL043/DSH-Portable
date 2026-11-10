@@ -18,9 +18,6 @@ const copy = {
     starProject: "GitHub ↗",
     starInvite: "Find it useful? Use the Star button at the top right of the GitHub repository, or share it with someone who needs a portable DSH workspace.",
     starAction: "View on GitHub ↗",
-    viewerTitle: "Give details a closer look.",
-    viewerText:
-      "Zoom in, download originals, and leave region notes. Image Viewer is included by default and can be removed independently.",
     nativeTitle: "Familiar controls. Consistent details.",
     nativeText:
       "Sidebar controls, back and forward, and keyboard shortcuts. Light or dark, the way you prefer.",
@@ -75,7 +72,7 @@ const copy = {
     allDownloads: "View Release",
     checksums: "Checksums",
     marketText:
-      "Use DSH plugin management to search, install, or update from Settings → Plugins → Plugin Market. Plugin state stays with the portable folder.",
+      "Portable ships without preinstalled community plugins. Install and manage them in DSH’s Plugins page.",
     repairTitle: "A clearer path to diagnosis.",
     repairText:
       "Startup records and support reports help trace problems. Repair tools rebuild reproducible components while keeping user data.",
@@ -155,8 +152,6 @@ const copy = {
     developmentLineText:
       '<ul class="line-points"><li>Sessions, settings, plugins, and sign-in travel with the folder.</li><li>When the official app ships a new version, "Install and Restart" inside the app follows it.</li><li>Windows x64 release candidate. Extract it into a separate folder.</li></ul><p><a href="https://github.com/WSL043/DSH-Portable/releases/tag/v1.0.0-rc.1">Download the release candidate</a> · <a href="../guides/official-desktop-portable.html">About the 1.0 preview</a></p>',
     pluginsTitle: "Plugin tools,<br>kept in your folder.",
-    managerText:
-      "Organize and find sessions to pick up earlier work. Both default plugins are maintained and updated independently.",
     desktopTitle: "Controlled updates. Your data stays put.",
     desktopIntro:
       "Portable and core can update separately, with compatible core versions to choose from. Rollback and recovery tools help preserve personal data.",
@@ -618,8 +613,6 @@ const revealSelector = [
   ".project-boundary",
   ".line-heading",
   ".line-card",
-  ".viewer-showcase .image-button",
-  ".viewer-copy > *",
   ".desktop-shot",
   ".desktop-notes article",
   ".guide-link-grid a",
@@ -729,7 +722,7 @@ if ("IntersectionObserver" in window) {
 }
 
 // Showcase surfaces tilt toward the pointer and catch a glare.
-document.querySelectorAll(".viewer-showcase .image-button, .folder-visual").forEach((surface) => {
+document.querySelectorAll(".folder-visual").forEach((surface) => {
   surface.classList.add("tilt");
   if (surface.matches(".image-button")) {
     const glare = document.createElement("span");

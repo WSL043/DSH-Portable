@@ -11,7 +11,7 @@ await rm(output, { recursive: true, force: true });
 await mkdir(path.join(output, "assets"), { recursive: true });
 await cp(path.join(root, "site"), output, { recursive: true });
 
-for (const asset of ["DSH-Portable.svg", "DSH-Portable-white.svg", "DSH-Portable-512.png", "dsh-interface-zh.png", "dsh-interface-en.png", "hero-atmosphere.png", "viewer-dark.png", "windows-navigation-dark.png", "dsh-workspace-0.6.4.png", "dsh-interface-zh-light.png"]) {
+for (const asset of ["DSH-Portable.svg", "DSH-Portable-white.svg", "DSH-Portable-512.png", "dsh-interface-zh.png", "dsh-interface-en.png", "hero-atmosphere.png", "windows-navigation-dark.png", "dsh-workspace-0.6.4.png", "dsh-interface-zh-light.png"]) {
   await cp(path.join(root, "assets", asset), path.join(output, "assets", asset));
 }
 

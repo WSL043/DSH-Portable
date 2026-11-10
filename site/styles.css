@@ -496,12 +496,7 @@ h1 {
   line-height: 1.75;
   color: var(--muted);
 }
-.viewer-showcase {
-  display: grid;
-  grid-template-columns: 1.55fr 1fr;
-  gap: 7%;
-  align-items: center;
-}
+
 .image-button {
   padding: 0;
   display: block;
@@ -521,23 +516,10 @@ h1 {
 .image-button:hover img {
   transform: scale(1.012);
 }
-.viewer-copy > .eyebrow {
-  display: block;
-  margin-bottom: 20px;
-  font-size: 9px;
-}
-.viewer-copy p {
-  font-size: 13px;
-  margin-top: 15px;
-}
-.plugin-companion {
-  border-top: 1px solid var(--line);
-  margin-top: 32px;
-  padding-top: 25px;
-}
-.plugin-companion .eyebrow {
-  font-size: 9px;
-}
+
+
+
+
 .shortcuts {
   display: flex;
   align-items: center;
@@ -819,9 +801,7 @@ footer > p {
     flex-direction: column;
     gap: 6px;
   }
-  .viewer-showcase {
-    gap: 5%;
-  }
+
 }
 @media (max-width: 760px) {
   .hero {
@@ -916,7 +896,6 @@ footer > p {
     font-size: 33px;
   }
   .folder-story,
-  .viewer-showcase,
   .desktop-layout,
   .faq {
     display: block;
@@ -949,15 +928,9 @@ footer > p {
   .portable-facts dt {
     font-size: 16px;
   }
-  .viewer-copy {
-    margin-top: 30px;
-  }
-  .viewer-copy p {
-    max-width: 540px;
-  }
-  .plugin-companion {
-    margin-top: 22px;
-  }
+
+
+
   .desktop-notes {
     margin-top: 25px;
   }
@@ -1146,14 +1119,10 @@ html, body { overflow-x: clip; }
 .section + .section:nth-of-type(even)::after { animation-delay: -4s; }
 @keyframes shore-glint { 0% { transform: translateX(-30%); opacity: 0; } 18% { opacity: 0.38; } 82% { opacity: 0.38; } 100% { transform: translateX(300%); opacity: 0; } }
 html[data-motion="reduced"] .section + .section::after { animation: none; opacity: 0; }
-.folder-visual, .viewer-showcase .image-button { -webkit-box-reflect: below 10px linear-gradient(to bottom, transparent 76%, rgba(255, 255, 255, 0.11)); margin-bottom: 56px; }
-[data-theme="light"] .folder-visual, [data-theme="light"] .viewer-showcase .image-button { -webkit-box-reflect: below 10px linear-gradient(to bottom, transparent 78%, rgba(0, 0, 0, 0.08)); }
-@media (max-width: 760px) { .folder-visual, .viewer-showcase .image-button { -webkit-box-reflect: none; margin-bottom: 0; } }
-/* The viewer screenshot has a flat grey backdrop; let its edges sink into the page so the photo carries the light. */
-.viewer-showcase .image-button { position: relative; }
-.viewer-showcase .image-button::after { content: ""; position: absolute; inset: 0; pointer-events: none; background: radial-gradient(ellipse 62% 74% at 50% 48%, transparent 42%, color-mix(in srgb, var(--paper) 58%, transparent) 100%); }
+.folder-visual { -webkit-box-reflect: below 10px linear-gradient(to bottom, transparent 76%, rgba(255, 255, 255, 0.11)); margin-bottom: 56px; }
+[data-theme="light"] .folder-visual { -webkit-box-reflect: below 10px linear-gradient(to bottom, transparent 78%, rgba(0, 0, 0, 0.08)); }
+@media (max-width: 760px) { .folder-visual { -webkit-box-reflect: none; margin-bottom: 0; } }
 @media (prefers-reduced-motion: reduce) { .section + .section::after { animation: none; opacity: 0; } }
-[data-theme="light"] .viewer-showcase .image-button::after { background: radial-gradient(ellipse 62% 74% at 50% 48%, transparent 46%, color-mix(in srgb, var(--paper) 38%, transparent) 100%); }
 
 /* Motion layer. Everything here is decoration: with reduced motion the page is complete and still. */
 html.lang-out :is([data-i18n], [data-language-switch], .theme-label, [data-motion-control]) { animation: lang-out 0.26s ease-in forwards; animation-delay: calc(var(--ld, 0ms) * 0.4); }

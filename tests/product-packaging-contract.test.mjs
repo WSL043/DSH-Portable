@@ -515,10 +515,10 @@ test('community plugins remain optional and market-discovered', async () => {
   }
   assert.equal(await exists('scripts/update-default-plugin.mjs'), false)
   assert.match(chinese, /新版本不再默认安装社区插件/)
-  assert.match(chinese, /其他社区插件仍按需从插件市场/)
+  assert.match(chinese, /社区插件仍按需从插件市场/)
   assert.match(chinese, /插件市场/)
   assert.match(english, /New packages do not install community plugins by default/i)
-  assert.match(english, /Other community plugins remain opt-in through the Plugin Market/i)
+  assert.match(english, /Community plugins remain opt-in through the Plugin Market/i)
   assert.match(english, /plugin market/i)
   assert.match(landingChinese, /不再默认安装社区插件/)
   assert.match(landingEnglish, /no longer install community plugins by default/i)
