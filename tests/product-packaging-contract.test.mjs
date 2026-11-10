@@ -358,6 +358,9 @@ test('prepare-only signs acceptance metadata without enabling publication', asyn
   }
   const curated = steps.find(step => step.includes('name: Publish curated user downloads'))
   assert.ok(curated.includes('upload-release-assets.mjs "$RELEASE_TAG" --mutable release-staging/update-assets/portable-manifest.json.sig'))
+  assert.match(curated, /if \[ "\$\{#VERIFY_FLAGS\[@\]\}" -eq 0 \]; then\s+gh release edit "\$RELEASE_TAG" --draft=false --prerelease=false --latest=false/)
+  const feed = steps.find(step => step.includes('name: Publish the stable update feed and legacy candidate mirror'))
+  assert.match(feed, /product-catalog\/candidate\/\*\s+fi[\s\S]*gh release edit "\$RELEASE_TAG" --latest\s*$/)
   const metadata = steps.find(step => step.includes('name: Retain signed metadata for final acceptance without publication'))
   assert.ok(metadata)
   assert.match(metadata, /^        if: \$\{\{ inputs\.prepare_only \}\}$/m)

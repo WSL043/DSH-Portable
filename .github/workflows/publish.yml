@@ -170,7 +170,9 @@ jobs:
           # Re-signing unchanged metadata can produce different valid signature bytes.
           # Keep the original manifest immutable and publish its verified sidecar on every release, including feed=false.
           node scripts/upload-release-assets.mjs "$RELEASE_TAG" --mutable release-staging/update-assets/portable-manifest.json.sig
-          gh release edit "$RELEASE_TAG" --draft=false --prerelease=false --latest
+          if [ "${#VERIFY_FLAGS[@]}" -eq 0 ]; then
+            gh release edit "$RELEASE_TAG" --draft=false --prerelease=false --latest=false
+          fi
       - name: Publish the stable update feed and legacy candidate mirror
         if: ${{ !inputs.prepare_only && inputs.publish_feed }}
         env:
@@ -205,3 +207,5 @@ jobs:
             node scripts/upload-release-assets.mjs update-channel-candidate --mutable product-catalog/latest/* release-staging/update-assets/portable-manifest.json release-staging/update-assets/portable-manifest.json.sig
             node scripts/upload-release-assets.mjs update-channel-candidate --mutable product-catalog/candidate/*
           fi
+          # The public Latest launcher reads the stable feed when it starts.
+          gh release edit "$RELEASE_TAG" --latest
