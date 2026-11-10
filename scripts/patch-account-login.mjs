@@ -1,22 +1,7 @@
 import { readFile, writeFile } from 'node:fs/promises'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
-
-const marker = 'dsh-portable-account-login-v1'
-
-// The official account plugin only registers its sign-in surfaces when the Electron preload API
-// (`dshDesktop`) exists. Portable renders the same web client in WebView2, so the guard hid the account menu
-// and the sign-in step. The server side (browser PKCE, loopback callback, credential store) already works for
-// any host, and the Electron-only onboarding block below the guard keeps its own `dshDesktop` check.
-export function patchAccountLogin(source) {
-  if (source.includes(marker)) return source
-  const guard = /(function apply\(ctx\) \{\r?\n)(\s*)if \(!\("dshDesktop" in globalThis\)\) return;/g
-  const matches = source.match(guard)?.length ?? 0
-  // Newer cores register the account UI in plain Web clients themselves and have no guard left to remove.
-  if (matches === 0 && /function apply\(ctx\) \{\r?\n\s*const desktop = "dshDesktop" in globalThis;/.test(source)) return source
-  if (matches !== 1) throw new Error(`account login guard seam changed upstream: expected 1 match, found ${matches}`)
-  return source.replace(guard, `$1$2/* ${marker}: Portable's WebView2 host has no dshDesktop, the Platform login does not need it. */`)
-}
+import { verifiedPackageFile } from './verified-package-file.mjs'
 
 const openMarker = 'dsh-portable-login-open-v1'
 
@@ -31,10 +16,10 @@ export function patchLoginBrowserOpen(source) {
   return source.replace(effect, (_, head, indent, body, tail) => `${head}${indent}${body}\n${indent}/* ${openMarker} */ if (attempt?.authorizeUrl && attempt.phase === "waiting-browser" && globalThis.__dshPortableLoginOpened !== attempt.id) { globalThis.__dshPortableLoginOpened = attempt.id; window.open(authorizeUrlWithTheme(attempt.authorizeUrl, colorScheme), "_blank"); }${tail}`)
 }
 
-export const patchAccountClient = source => patchLoginBrowserOpen(patchAccountLogin(source))
-
 if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
   if (!process.argv[2]) throw new Error('usage: patch-account-login.mjs <app-root>')
-  const filename = path.join(path.resolve(process.argv[2]), 'node_modules', '@deepseek-ai', 'dsh-client-ui-settings-account', 'lib', 'client.js')
-  await writeFile(filename, patchAccountClient(await readFile(filename, 'utf8')), 'utf8')
+  const filename = await verifiedPackageFile(process.argv[2], 'node_modules', '@deepseek-ai', 'dsh-client-ui-settings-account', 'lib', 'client.js')
+  const source = await readFile(filename, 'utf8')
+  const patched = patchLoginBrowserOpen(source)
+  if (patched !== source) await writeFile(filename, patched, 'utf8')
 }

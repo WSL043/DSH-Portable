@@ -248,7 +248,7 @@ try {
     & $NodeExe (Join-Path $ProjectRoot 'scripts\patch-session-export-ui.mjs') (Join-Path $Stage 'app')
     if ($LASTEXITCODE -ne 0) { throw "Session export UI adaptation failed with exit code $LASTEXITCODE" }
     & $NodeExe (Join-Path $ProjectRoot 'scripts\patch-permission-localization.mjs') (Join-Path $Stage 'app')
-    if ($LASTEXITCODE -ne 0) { throw "Permission localization adaptation failed with exit code $LASTEXITCODE" }
+    if ($LASTEXITCODE -ne 0) { throw "Official permission localization check failed with exit code $LASTEXITCODE" }
     & $NodeExe (Join-Path $ProjectRoot 'scripts\patch-theme-bootstrap.mjs') (Join-Path $Stage 'app')
     if ($LASTEXITCODE -ne 0) { throw 'Theme bootstrap patch failed.' }
     & $NodeExe (Join-Path $ProjectRoot 'scripts\patch-account-login.mjs') (Join-Path $Stage 'app')
@@ -266,7 +266,7 @@ try {
     & $NodeExe (Join-Path $ProjectRoot 'scripts\patch-client-module-startup.mjs') (Join-Path $Stage 'app')
     if ($LASTEXITCODE -ne 0) { throw 'Client module startup patch failed.' }
     & $NodeExe (Join-Path $ProjectRoot 'scripts\patch-windows-subprocess-hide.mjs') (Join-Path $Stage 'app')
-    if ($LASTEXITCODE -ne 0) { throw "Windows subprocess hiding adaptation failed with exit code $LASTEXITCODE" }
+    if ($LASTEXITCODE -ne 0) { throw "Official Windows subprocess hiding check failed with exit code $LASTEXITCODE" }
     [System.IO.Directory]::Delete((Join-Path $Stage 'desktop-bridge'), $true)
 
     $DefaultPluginComponentLock = Join-Path $ProjectRoot $(if ($UsePreviewLock) { 'upstream.preview.lock.json' } else { 'upstream.lock.json' })

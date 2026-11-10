@@ -4,10 +4,7 @@ import { existsSync, readFileSync, realpathSync } from 'node:fs'
 import path from 'node:path'
 import { pathToFileURL } from 'node:url'
 import { prepareHistoricalDescriptor } from './patch-historical-descriptor.mjs'
-import {
-  patchConversationPermissions,
-  hasPermissionSettingsLocalization,
-} from './patch-permission-localization.mjs'
+import { verifyPermissionLocalization } from './patch-permission-localization.mjs'
 
 const appDir = path.resolve(process.argv[2] ?? '')
 if (!appDir || !existsSync(path.join(appDir, 'package.json'))) {
@@ -160,14 +157,7 @@ assert.match(
   /dsh-portable-native-download-v1/,
   'Session export client is missing the native desktop download lifecycle adapter',
 )
-assert.ok(
-  hasPermissionSettingsLocalization(readFileSync(permissionSettingsClientPath, 'utf8')),
-  'Permission settings client is missing native localization or the locale adapter',
-)
-assert.ok(
-  patchConversationPermissions(readFileSync(conversationClientPath, 'utf8'), readFileSync(permissionSettingsClientPath, 'utf8')) === readFileSync(conversationClientPath, 'utf8'),
-  'Conversation permission client is missing native localization or the locale adapter',
-)
+verifyPermissionLocalization(readFileSync(permissionSettingsClientPath, 'utf8'), readFileSync(conversationClientPath, 'utf8'))
 
 await new Promise((resolve) => {
   process.stdout.write(`${JSON.stringify({ dshVersion: dshManifest.version, dshBin, marketVersion: marketManifest.version, pnpmVersion: pnpmManifest.version, pnpmBin, loaded })}\n`, resolve)
