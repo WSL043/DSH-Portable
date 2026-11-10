@@ -20,8 +20,8 @@ export function checkReleaseCoreWindow(rows, catalogs, { sourceSha, version, con
       return index.versions.some(({ version: offered, manifest }) =>
         offered === core && manifest?.platform === platform && manifest.updateKind === 'engine'
         && manifest.releaseChannel === 'stable' && manifest.component?.dshVersion === core
-        && manifest.component.requiredNodeVersion === nodeVersion
-        && (manifest.requiredShellContract === contract
+        && typeof nodeVersion === 'string' && manifest.component.requiredNodeVersion === nodeVersion
+        && ((Number.isSafeInteger(contract) && manifest.requiredShellContract === contract)
           || (manifest.requiredShellContract == null && manifest.portableVersion === version && row?.status === 'success')))
     })
     return [core, visible ? 'success' : 'pending']
@@ -44,12 +44,16 @@ async function fetchSignedCatalog(platform) {
   return [platform, JSON.parse(bytes)]
 }
 
+export async function readStableCoreCatalogs() {
+  return Object.fromEntries(await Promise.all(platforms.map(fetchSignedCatalog)))
+}
+
 if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
   const [sourceSha, version, contract, nodeVersion] = process.argv.slice(2)
   let input = ''
   for await (const chunk of process.stdin) input += chunk
   try {
-    const catalogs = Object.fromEntries(await Promise.all(platforms.map(fetchSignedCatalog)))
+    const catalogs = await readStableCoreCatalogs()
     const result = checkReleaseCoreWindow(JSON.parse(input), catalogs, { sourceSha, version, contract: Number(contract), nodeVersion })
     console.log(result.statuses.map(([core, status]) => `${core} ${status}`).join('; '))
     process.exitCode = result.exitCode

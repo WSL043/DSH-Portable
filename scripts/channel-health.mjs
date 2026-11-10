@@ -1,15 +1,14 @@
-// Decide whether the stable update channel is healthy: the in-app feed points at a published shell and the newest
-// three official cores are qualified on exactly that shell. Used by .github/workflows/channel-health.yml, which opens
-// an issue when this reports a problem, so a broken channel is noticed by us and not by a user (issue #163).
+// Verify the stable feed and use the same signed core window as the release gate.
 import { pathToFileURL } from 'node:url'
-import { comparePortableVersions, coreWindow } from '../launcher/update-core.mjs'
+import { comparePortableVersions } from '../launcher/update-core.mjs'
 import { verifyUpdateSignature } from '../launcher/update-signature.mjs'
+import { checkReleaseCoreWindow, readStableCoreCatalogs } from './check-release-core-window.mjs'
 
 const GRACE_MS = 3 * 60 * 60 * 1000
 // Shells from this version on publish signed update metadata, which mirrors depend on.
 const SIGNED_FROM = '0.8.13'
 
-export function evaluateChannelHealth({ latestRelease, feedVersion, state, signature = 'valid', now = Date.now() }) {
+export function evaluateChannelHealth({ latestRelease, feedVersion, state, catalogs, contract, nodeVersion, signature = 'valid', now = Date.now() }) {
   const problems = []
   if (!latestRelease?.tag || !latestRelease?.sha) return { healthy: false, problems: ['no published shell release was found'] }
   const latest = latestRelease.tag.replace(/^v/, '')
@@ -21,16 +20,14 @@ export function evaluateChannelHealth({ latestRelease, feedVersion, state, signa
   }
   if (signature === 'invalid') problems.push('the feed signature does not verify with the built-in public key, so mirrors cannot be used')
   else if (signature === 'missing' && comparePortableVersions(feedVersion, SIGNED_FROM) >= 0) problems.push(`the feed for ${feedVersion} has no signature`)
-  const allVersions = [...new Set((state ?? []).map(row => row.version))].sort((a, b) => comparePortableVersions(b, a))
-  const versions = coreWindow(allVersions)
-  const here = (state ?? []).filter(row => latestRelease.sha.startsWith(String(row.sourceSha).slice(0, 7)))
-  for (const version of versions) {
-    const row = here.find(item => item.version === version)
-    if (!row) problems.push(`core ${version} has no qualification result on shell ${latest}`)
-    else if (row.status === 'blocked' && !(state ?? []).some(item => item.version === version && item.status === 'success')) continue
-    else if (row.status !== 'success') problems.push(`core ${version} is ${row.status} on shell ${latest}`)
+  const { statuses, exitCode } = checkReleaseCoreWindow(state ?? [], catalogs ?? {}, {
+    sourceSha: latestRelease.sha, version: latest, contract, nodeVersion,
+  })
+  for (const [version, status] of statuses) {
+    if (status === 'pending') problems.push(`core ${version} is missing from one or more compatible signed catalogs for shell ${latest}`)
+    else if (status === 'failed' || status === 'blocked') problems.push(`core ${version} is ${status} on shell ${latest}`)
   }
-  if (!versions.length) problems.push('the qualification state is empty')
+  if (exitCode !== 0 && !problems.length) problems.push('the core window has no qualified version')
   return { healthy: problems.length === 0, problems }
 }
 
@@ -40,22 +37,36 @@ async function json(url) {
   return response.json()
 }
 
-if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
+async function readChannelHealth() {
   const release = await json('https://api.github.com/repos/WSL043/DSH-Portable/releases/latest')
   const commit = await json(`https://api.github.com/repos/WSL043/DSH-Portable/commits/${release.tag_name}`)
-  const feed = await json('https://github.com/WSL043/DSH-Portable/releases/download/update-channel-stable/portable-update-windows-x64.json')
-  const state = await json('https://github.com/WSL043/DSH-Portable-Updates/releases/download/update-channel-core/qualification-state.json')
   const feedUrl = 'https://github.com/WSL043/DSH-Portable/releases/download/update-channel-stable/portable-update-windows-x64.json'
-  const [feedBytes, feedSignature] = await Promise.all([fetch(feedUrl), fetch(`${feedUrl}.sig`)])
+  const [response, feedSignature] = await Promise.all([fetch(feedUrl), fetch(`${feedUrl}.sig`)])
+  if (!response.ok) throw new Error(`Stable product feed returned HTTP ${response.status}`)
+  const feedBytes = Buffer.from(await response.arrayBuffer())
+  const feed = JSON.parse(feedBytes)
   const signature = !feedSignature.ok
     ? 'missing'
-    : verifyUpdateSignature(Buffer.from(await feedBytes.arrayBuffer()), await feedSignature.text()) ? 'valid' : 'invalid'
-  const result = evaluateChannelHealth({
+    : verifyUpdateSignature(feedBytes, await feedSignature.text()) ? 'valid' : 'invalid'
+  const offered = {
     latestRelease: { tag: release.tag_name, publishedAt: release.published_at, sha: commit.sha },
     feedVersion: feed.portableVersion,
-    state,
     signature,
-  })
+  }
+  if (release.tag_name !== `v${feed.portableVersion}`) return evaluateChannelHealth(offered)
+  const [state, catalogs, shell] = await Promise.all([
+    json('https://github.com/WSL043/DSH-Portable-Updates/releases/download/update-channel-core/qualification-state.json'),
+    readStableCoreCatalogs(),
+    json(`https://raw.githubusercontent.com/WSL043/DSH-Portable/${commit.sha}/config/shell-contract.json`),
+  ])
+  if (!Number.isSafeInteger(shell.contract) || typeof feed.component?.requiredNodeVersion !== 'string') {
+    throw new Error('The published shell is missing its core contract or Node version')
+  }
+  return evaluateChannelHealth({ ...offered, state, catalogs, contract: shell.contract, nodeVersion: feed.component.requiredNodeVersion })
+}
+
+if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
+  const result = await readChannelHealth().catch(error => ({ healthy: false, problems: [error.message] }))
   console.log(JSON.stringify(result))
   process.exitCode = result.healthy ? 0 : 1
 }

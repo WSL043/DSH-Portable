@@ -4,20 +4,36 @@ import { evaluateChannelHealth } from '../scripts/channel-health.mjs'
 
 const sha = '4698325abcdef0123456789'
 const release = { tag: 'v0.8.11', sha, publishedAt: '2026-10-13T09:29:00Z' }
-const row = (version, status = 'success', source = '4698325') => ({ version, status, sourceSha: source })
+const row = (version, status = 'success', source = sha) => ({ version, status, sourceSha: source })
 const allGood = [row('0.2.1-alpha.2'), row('0.2.0-rc.2'), row('0.2.1-alpha.1')]
 const soon = Date.parse('2026-10-13T10:00:00Z')
+const contract = 4
+const nodeVersion = '24.22.1'
+const platforms = ['windows-x64', 'macos-arm64', 'macos-x64', 'linux-arm64', 'linux-x64']
+const makeCatalogs = (state = allGood) => Object.fromEntries(platforms.map(platform => [platform, {
+  schemaVersion: 1, channel: 'stable', platform,
+  versions: state.filter(row => row.status === 'success').map(({ version }) => ({
+    version, manifest: {
+      platform, updateKind: 'engine', releaseChannel: 'stable', requiredShellContract: contract,
+      component: { dshVersion: version, requiredNodeVersion: nodeVersion },
+    },
+  })),
+}]))
+const healthyInputs = { latestRelease: release, feedVersion: '0.8.11', state: allGood, catalogs: makeCatalogs(), contract, nodeVersion, now: soon }
 
-test('a feed on the latest shell with its three newest cores qualified is healthy', () => {
-  assert.deepEqual(evaluateChannelHealth({ latestRelease: release, feedVersion: '0.8.11', state: allGood, now: soon }), { healthy: true, problems: [] })
+test('a qualified signed core window stays healthy across shells with the same contract', () => {
+  const state = allGood.map(core => ({ ...core, sourceSha: 'previous-shell' }))
+  assert.deepEqual(evaluateChannelHealth({ ...healthyInputs, state }), { healthy: true, problems: [] })
 })
 
-test('a core that failed or has no result on the offered shell is a problem', () => {
-  const failed = evaluateChannelHealth({ latestRelease: release, feedVersion: '0.8.11', now: soon,
+test('a failed core or one missing from any platform catalog is a problem', () => {
+  const catalogs = makeCatalogs()
+  catalogs['macos-x64'].versions.pop()
+  const failed = evaluateChannelHealth({ ...healthyInputs, catalogs,
     state: [row('0.2.1-alpha.2'), row('0.2.0-rc.2', 'failed'), row('0.2.1-alpha.1', 'success', 'cce3165')] })
   assert.equal(failed.healthy, false)
   assert.match(failed.problems.join('\n'), /0\.2\.0-rc\.2 is failed/)
-  assert.match(failed.problems.join('\n'), /0\.2\.1-alpha\.1 has no qualification result/)
+  assert.match(failed.problems.join('\n'), /0\.2\.1-alpha\.1 is missing/)
 })
 
 test('a held feed is expected shortly after release and a problem once it overstays', () => {
@@ -42,7 +58,7 @@ test('the default-plugin UI verifier ships with the shell it verifies', async ()
 })
 
 test('a feed whose signature does not verify, or is missing on a signing release, is a problem', () => {
-  const base = { latestRelease: release, feedVersion: '0.8.11', state: allGood, now: soon }
+  const base = healthyInputs
   assert.equal(evaluateChannelHealth({ ...base, signature: 'invalid' }).healthy, false)
   assert.equal(evaluateChannelHealth({ ...base, signature: 'missing' }).healthy, true, 'releases before signing are fine')
   const signing = { ...base, feedVersion: '0.8.13', latestRelease: { ...release, tag: 'v0.8.13' } }
@@ -52,7 +68,7 @@ test('a feed whose signature does not verify, or is missing on a signing release
 
 test('a newest core that was blocked and never qualified anywhere does not hold the channel back', () => {
   const state = [row('0.2.1-alpha.3', 'blocked'), row('0.2.1-alpha.2'), row('0.2.0-rc.2')]
-  assert.deepEqual(evaluateChannelHealth({ latestRelease: release, feedVersion: '0.8.11', state, now: soon }), { healthy: true, problems: [] })
+  assert.deepEqual(evaluateChannelHealth({ ...healthyInputs, state, catalogs: makeCatalogs(state) }), { healthy: true, problems: [] })
   const lost = [row('0.2.1-alpha.3', 'blocked'), row('0.2.1-alpha.3', 'success', 'cce3165'), row('0.2.1-alpha.2'), row('0.2.0-rc.2')]
-  assert.equal(evaluateChannelHealth({ latestRelease: release, feedVersion: '0.8.11', state: lost, now: soon }).healthy, false, 'a core users could select must not be silently dropped')
+  assert.equal(evaluateChannelHealth({ ...healthyInputs, state: lost, catalogs: makeCatalogs(lost) }).healthy, false, 'a core users could select must not be silently dropped')
 })
