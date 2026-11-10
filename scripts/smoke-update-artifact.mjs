@@ -2,7 +2,7 @@ import assert from 'node:assert/strict'
 import { execFile } from 'node:child_process'
 import { createHash } from 'node:crypto'
 import { createReadStream } from 'node:fs'
-import { access, mkdir, mkdtemp, readFile, rm, stat, writeFile } from 'node:fs/promises'
+import { access, mkdir, mkdtemp, readFile, realpath, rm, stat, writeFile } from 'node:fs/promises'
 import http from 'node:http'
 import os from 'node:os'
 import path from 'node:path'
@@ -111,7 +111,9 @@ async function buildRollbackProbe(archive, manifest) {
       env: { ...process.env, DSH_PORTABLE_RUNTIME_CACHE: path.join(temporary, 'runtime-cache') },
     })).runtimeRoot : source
     const app = path.join(runtime, 'app')
-    const bin = path.join(app, 'node_modules', '@deepseek-ai', 'dsh', 'lib', 'bin.js')
+    const fixtureRoot = await realpath(temporary)
+    const bin = await realpath(path.join(app, 'node_modules', '@deepseek-ai', 'dsh', 'lib', 'bin.js'))
+    if (!bin.startsWith(fixtureRoot + path.sep)) throw new Error('Rollback fixture command escaped the temporary directory.')
     const code = await readFile(bin, 'utf8')
     const shebang = /^#![^\n]*\n/.exec(code)?.[0] ?? ''
     await writeFile(bin, shebang + "if (process.argv[2] === '--version') throw new Error('Rollback health probe');\n"
