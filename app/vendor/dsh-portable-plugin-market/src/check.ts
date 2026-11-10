@@ -29,6 +29,7 @@ import { createRequire } from 'node:module'
 import { homedir } from 'node:os'
 import { dirname, join, resolve } from 'node:path'
 import { JSON_SCHEMA, Type, load } from 'js-yaml'
+import semver from 'semver'
 import { INBOX_BUNDLES, readBundleRules, suggestOrder, validateOrder } from './order.ts'
 import { resolveBundlePatchPaths } from './package-path.ts'
 
@@ -293,13 +294,47 @@ export function findDshInstallDir(entry = process.argv[1]): string | null {
   return null
 }
 
+/** Version from one already-resolved package.json path, or null. */
+function readManifestVersion(filename: string): string | null {
+  try {
+    const manifest = JSON.parse(readFileSync(filename, 'utf8')) as { version?: unknown }
+    return typeof manifest.version === 'string' ? manifest.version : null
+  } catch {
+    return null
+  }
+}
+
 /** Version of `name` as physically resolved at `base`/node_modules, or null. */
 function readNodeModulesVersion(base: string, name: string): string | null {
+  return readManifestVersion(join(base, 'node_modules', name, 'package.json'))
+}
+
+/**
+ * Version of `name` as Node resolves it from `anchorPackageJson`. Node walks
+ * the node_modules ancestors, so this finds both nested packages and the
+ * hoisted layout used by the Portable runtime (`app/node_modules/<name>` when
+ * the anchor is `app/node_modules/@deepseek-ai/dsh/package.json`).
+ */
+export function readResolvedPackageVersion(anchorPackageJson: string, name: string): string | null {
   try {
-    const manifest = JSON.parse(
-      readFileSync(join(base, 'node_modules', name, 'package.json'), 'utf8'),
-    ) as { version?: unknown }
-    return typeof manifest.version === 'string' ? manifest.version : null
+    const req = createRequire(anchorPackageJson)
+    // Most packages expose ./package.json; prefer it because it does not
+    // depend on an entry file existing.
+    try {
+      return readManifestVersion(req.resolve(`${name}/package.json`))
+    } catch { /* fall back to the entry and walk up to its package root */ }
+    let dir = dirname(req.resolve(name))
+    for (let depth = 0; depth < 10; depth += 1) {
+      const filename = join(dir, 'package.json')
+      try {
+        const manifest = JSON.parse(readFileSync(filename, 'utf8')) as { name?: unknown; version?: unknown }
+        if (manifest.name === name) return typeof manifest.version === 'string' ? manifest.version : null
+      } catch { /* keep walking up */ }
+      const parent = dirname(dir)
+      if (parent === dir) return null
+      dir = parent
+    }
+    return null
   } catch {
     return null
   }
@@ -449,7 +484,16 @@ function semverStr(v: Semver): string {
  * `^0.1.0` never matches `0.2.0-rc.1` (nor `0.1.0-rc.5`), while
  * `>=1.2.3-rc.1 <2.0.0` does match `1.2.3-rc.2` (issue #98 analysis).
  */
-export function satisfiesRange(version: string, range: string): boolean | null {
+export interface SatisfiesRangeOptions {
+  /**
+   * Admit prereleases the way dsh-app-boot's admission gate does
+   * (`semver.satisfies(..., { includePrerelease: true })`). The default keeps
+   * npm's stricter comparator-set rule for advisory profile diagnostics.
+   */
+  includePrerelease?: boolean
+}
+
+export function satisfiesRange(version: string, range: string, options: SatisfiesRangeOptions = {}): boolean | null {
   const v = parseSemver(version)
   if (v === null) return null
   const versionHasPre = v.pre.length > 0
@@ -467,6 +511,12 @@ export function satisfiesRange(version: string, range: string): boolean | null {
       const operator = match[1] === '*' ? '' : (match[1] ?? '')
       normalizedRange = range.replace(workspaceSemver, `${operator}${semverStr(v)}`)
     }
+  }
+
+  if (options.includePrerelease) {
+    const hostOptions = { includePrerelease: true }
+    return semver.validRange(normalizedRange, hostOptions) === null
+      ? null : semver.satisfies(version, normalizedRange, hostOptions)
   }
 
   const single = (part: string): boolean | null => {
@@ -901,14 +951,18 @@ export function analyzeProfile(profileDirectory: string, options: CheckOptions =
       seenDeps.add(key)
       const hoisted = readProfileVisibleVersion(profileDirectory, name)
       const nested = readNodeModulesVersion(pluginDir, name)
-      const host = dshInstall !== null ? readNodeModulesVersion(dshInstall, name) : null
+      const host = dshInstall !== null
+        ? readResolvedPackageVersion(join(dshInstall, 'package.json'), name)
+        : null
       // Node resolves a plugin's peer from its OWN node_modules first
       // (nested), then the profile tree (hoisted), then the host install.
       const resolved = nested ?? hoisted ?? host
       // Peer checks cover EVERY declared peer, not just host core packages:
       // plugin-to-plugin peer mismatches break runtime registration just as
       // hard (issue #98 optimization round).
-      const satisfied = resolved !== null ? satisfiesRange(resolved, spec) : null
+      // Host admission evaluates ranges with includePrerelease: true; mirror
+      // it here so a plugin that installs is not reported as a risky peer.
+      const satisfied = resolved !== null ? satisfiesRange(resolved, spec, { includePrerelease: true }) : null
       peerMismatches.push({
         plugin, name, range: spec, resolved,
         satisfied: satisfied === null ? null : satisfied,

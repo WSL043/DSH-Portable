@@ -1,6 +1,6 @@
 import { readFileSync } from 'node:fs'
 import { join } from 'node:path'
-import { findDshInstallDir, satisfiesRange } from './check.ts'
+import { findDshInstallDir, readResolvedPackageVersion, satisfiesRange } from './check.ts'
 import { marketFetch } from './net.ts'
 
 export type Manifest = {
@@ -15,7 +15,7 @@ export type Manifest = {
 export function assessUpdateRequirements(manifest: Manifest, hostVersion: string | null, hostPeers: Record<string, string | null>) {
   const mismatches: Array<{ name: string; range: string; resolved: string }> = []
   const check = (name: string, range: unknown, resolved: string | null | undefined) => {
-    if (typeof range === 'string' && typeof resolved === 'string' && satisfiesRange(resolved, range) === false) {
+    if (typeof range === 'string' && typeof resolved === 'string' && satisfiesRange(resolved, range, { includePrerelease: true }) === false) {
       mismatches.push({ name, range, resolved })
     }
   }
@@ -40,12 +40,17 @@ function versionAt(filename: string): string | null {
   } catch { return null }
 }
 
+/** Resolve a host peer the way Node does, so hoisted packages are found too. */
+function resolvePeerVersion(host: string, peer: string): string | null {
+  return readResolvedPackageVersion(join(host, 'package.json'), peer)
+}
+
 /** Reuse metadata already fetched for a registry tag instead of fetching it again. */
 export function assessPublishedManifest(
   name: string,
   version: string,
   manifest: Manifest,
-  adapters = { findHost: findDshInstallDir, versionAt },
+  adapters = { findHost: findDshInstallDir, versionAt, resolvePeer: resolvePeerVersion },
 ) {
   if (!manifest || manifest.name !== name || manifest.version !== version) {
     return { status: 'unknown' as const, mismatches: [] }
@@ -55,7 +60,7 @@ export function assessPublishedManifest(
   const peers: Record<string, string | null> = {}
   for (const peer of Object.keys(manifest.peerDependencies ?? {})) {
     if (/^@deepseek-ai\/dsh-[a-z0-9._-]+$/.test(peer)) {
-      peers[peer] = adapters.versionAt(join(host, 'node_modules', peer, 'package.json'))
+      peers[peer] = adapters.resolvePeer(host, peer)
     }
   }
   const mismatches = assessUpdateRequirements(manifest, adapters.versionAt(join(host, 'package.json')), peers)
@@ -63,7 +68,11 @@ export function assessPublishedManifest(
 }
 
 /** Inspect the exact npm release about to be installed against this running capsule. */
-export async function preflightNpmUpdate(name: string, version: string, adapters = { findHost: findDshInstallDir, fetch: marketFetch, versionAt }) {
+export async function preflightNpmUpdate(
+  name: string,
+  version: string,
+  adapters = { findHost: findDshInstallDir, fetch: marketFetch, versionAt, resolvePeer: resolvePeerVersion },
+) {
   if (!adapters.findHost()) return { status: 'unknown' as const, mismatches: [] }
   try {
     const response = await adapters.fetch(`https://registry.npmjs.org/${encodeURIComponent(name)}/${encodeURIComponent(version)}`, {
