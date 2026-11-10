@@ -5,7 +5,7 @@
 ## 1. 新内核出现时先查三件事
 
 1. **补丁锚点**：`scripts/intake-upstream-core.mjs` 的接口与补丁检查会用真实官方包验证 `scripts/patch-native-settings-command.mjs` 的锚点。失败说明官方改了页面代码（例如 0.2.1-alpha.2 把卡片标签数组改成逐行排版），修补丁并补测试，用官方新旧两版真实文件各验证一次。
-2. **旧会话兼容名单**：`config/historical-descriptor-versions.json` 必须包含该内核版本，否则更新仓库会在 descriptor-v2 迁移检查处把它标为 `blocked`。比较官方 `session-format-v0-to-v1` 的实际文件、描述符兼容补丁身份与已验收版本；字节一致只能作为复核线索，仍须通过对应内核的真实旧格式 writer、官方续接、重开及中断恢复探针后才能加入名单。观察机器人的候选 PR（`automation/official-preview`）是审查入口；锁定版本、补丁身份、默认插件和验收证据须一起复核，通过完整资格后再合入 main，不只摘录名单。旧 preview 提案工作流 `official-preview-watch.yml` 仅手动运行；正式自动内核发现与资格仍由 `upstream-watch.yml` 和更新仓库的 `sync-core.yml` 负责。
+2. **旧会话兼容性**：自动内核资格使用真实旧格式 writer、官方续接、重开及中断恢复探针。已知的官方 descriptor-v2 限制单独记录为 `upstream-limitation`，不修改官方内核；出现其他失败时停止资格流程。锁定内核仍通过 `config/historical-descriptor-versions.json` 记录已验证的旧格式兼容范围。正式自动发现与资格由 `upstream-watch.yml` 和更新仓库的 `sync-core.yml` 负责。
 3. **插件声明**：默认插件的 peer 范围必须列出该内核。图片查看器和会话管理的定时任务会在官方 Release 发布后自动发新版；想提前可手动运行它们的 `upstream-compatibility.yml`。
 
 ## 2. 采纳插件并发版
@@ -65,8 +65,10 @@ FINAL_ACCEPTANCE_FILE=/path/to/final-acceptance.json scripts/ship-stable.sh x.y.
 
 1. 等 main 上对应提交的构建通过。失败先查原因，不能靠反复重跑掩盖产品失败。仅在确认 GitHub 终态延迟或 npm 新包元数据先于压缩包可用等外部故障、保留原日志并取得恢复证据后，允许一次不改输入的定向复验；npm 下载恢复还须核对完整性摘要。再次失败继续诊断，不扩大重跑或放宽断言。
 2. 触发“Publish tested release”，但 `publish_feed=false`：Release 和下载包已发布，应用内更新源**不翻**，已安装的用户还停在上一个版本。
-3. 检查**最新五个内核、至少两个 RC 或正式版**的窗口。同一 `requiredShellContract` 下 stable 目录已经提供的内核可沿用验收；其余触发更新仓库的“Sync verified DSH core”，在本次发布提交上验收。窗口内曾被 `blocked` 且从未在任何外壳验收成功的内核记为 `excused`，不会发布，也不阻挡外壳发布。其他 `failed`/`blocked` 会退出，更新源保持不变；仍有 `pending` 时继续等待。
+3. 检查**最新五个内核、至少两个 RC 或正式版**的窗口。脚本回读五个平台的签名目录；每个平台均已有同一 `requiredShellContract` 和 Node 版本的内核时可沿用验收。只绑定版本的内核需有本次完整发布提交的成功记录，且已出现在对应目录。其余触发更新仓库的“Sync verified DSH core”并等待自动队列。窗口内曾被 `blocked` 且从未在任何外壳验收成功的内核记为 `excused`。其他 `failed`/`blocked` 会退出，目录缺项仍为 `pending`。
 4. 全部通过后再用 `publish_feed=true` 翻更新源。
+
+Windows 首次从 0.9.10 或更早版本升级且需要保留已选内核时，应使用新发行页的 Windows 便携启动器。验收此路径时，让新版启动器更新隔离的旧版文件夹，核对外壳版本、同版本内核、实际启动和会话保留。旧版内置更新器仍按其原有流程运行。
 
 内核验收失败时：修原因（多半是更新仓库的验收脚本或补丁锚点），再运行 `scripts/ship-stable.sh x.y.z --resume`。常规维护不得用 `--skip-gate` 绕过内核窗口；它会立即发布并翻更新源，不属于本流程。
 

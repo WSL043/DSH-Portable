@@ -231,3 +231,30 @@ test('the publishing workflow cannot omit final-artifact acceptance outside prep
   assert.match(ship, /FINAL_ACCEPTANCE_FILE:\?/)
   assert.match(ship, /-f final_acceptance="\$FINAL_ACCEPTANCE_JSON"/)
 })
+
+test('core release gate waits for signed-catalog readback on every platform and the matching Node runtime', async () => {
+  const { checkReleaseCoreWindow } = await import('../scripts/check-release-core-window.mjs')
+  const target = { sourceSha: 'a'.repeat(40), version: '0.9.11', contract: 3, nodeVersion: '24.22.1' }
+  const core = '0.2.2-rc.1'
+  const rows = [{ sourceSha: 'b'.repeat(40), version: core, status: 'success' }]
+  const catalogs = Object.fromEntries(['windows-x64', 'macos-arm64', 'macos-x64', 'linux-arm64', 'linux-x64'].map(platform => [
+    platform, { schemaVersion: 1, channel: 'stable', platform, versions: [{
+      version: core, manifest: { updateKind: 'engine', platform, releaseChannel: 'stable', requiredShellContract: 3,
+        portableVersion: '0.9.10', component: { dshVersion: core, requiredNodeVersion: '24.22.1' } },
+    }] },
+  ]))
+  const check = () => checkReleaseCoreWindow(rows, catalogs, target).exitCode
+  assert.equal(check(), 0)
+  const mac = catalogs['macos-x64'].versions[0].manifest
+  mac.component.requiredNodeVersion = '25.0.0'
+  assert.equal(check(), 1)
+  mac.component.requiredNodeVersion = target.nodeVersion
+  delete mac.requiredShellContract
+  assert.equal(check(), 1, 'an exact-version envelope cannot carry forward')
+  mac.portableVersion = target.version
+  assert.equal(check(), 1, 'an exact-version envelope still needs its matching qualification')
+  rows.push({ sourceSha: target.sourceSha, version: core, status: 'success' })
+  assert.equal(check(), 0)
+  catalogs['linux-arm64'].versions = []
+  assert.equal(check(), 1, 'a recorded success alone cannot advance the update feed')
+})
