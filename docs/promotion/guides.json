@@ -7,7 +7,7 @@
     "body": [
       {
         "type": "p",
-        "text": "想试试 DeepSeek Harness，但不想先安装 Node.js、处理依赖，再记住启动命令？DSH-Portable 把运行环境和插件市场放进一个桌面工作目录。下面从第一次打开说起。"
+        "text": "DSH-Portable 将 DeepSeek Harness 和运行环境放在便携目录中。下面从第一次打开说起。"
       },
       {
         "type": "h2",
@@ -43,7 +43,7 @@
       {
         "type": "steps",
         "items": [
-          "打开设置 → 插件 → 插件市场。",
+          "打开插件页面。",
           "搜索需要的插件，查看说明后点击安装。",
           "按页面提示刷新或重启，再使用新功能。"
         ]
@@ -51,17 +51,6 @@
       {
         "type": "p",
         "text": "Portable 默认不预装社区插件。需要插件时，可在 DSH 的插件页面安装和管理。"
-      },
-      {
-        "type": "link",
-        "text": "了解上游 dsh-market",
-        "url": "https://github.com/dsh-market/dsh-market"
-      },
-      {
-        "type": "image",
-        "src": "viewer-dark.png",
-        "alt": "默认 Image Viewer 的图片查看和区域备注界面",
-        "caption": "默认图片查看器：缩放、原图下载与区域备注。"
       },
       {
         "type": "h2",

@@ -224,8 +224,12 @@ test("Star links point at the repository, and usage guides are crawlable HTML", 
   assert.match(html, /data-i18n="starAction"/);
   assert.doesNotMatch(html, /DSH-Portable\/stargazers/);
   assert.match(sitemap, /guides\/get-started\.html/);
-  const guide = await readFile(new URL("../build/site/guides/get-started.html", import.meta.url), "utf8");
+  const guideUrl = new URL("../build/site/guides/get-started.html", import.meta.url);
+  const guide = await readFile(guideUrl, "utf8");
   assert.match(guide, /<h1>[^<]+<\/h1>/);
   assert.match(guide, /<link rel="canonical" href="https:\/\/wsl043\.github\.io\/DSH-Portable\/guides\/get-started\.html">/);
   assert.doesNotMatch(guide, /<canvas/);
+  for (const [, image] of guide.matchAll(/<img\b[^>]*\bsrc="(\.\.\/assets\/[^"]+)"/g)) {
+    await access(new URL(image, guideUrl));
+  }
 });
