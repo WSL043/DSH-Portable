@@ -8,12 +8,12 @@
 
 <p align="center">
   <strong>Portable DeepSeek Harness: copy one folder to a USB drive and keep working on another computer.</strong><br>
-  Sessions, settings, plugins, and workspace live in the folder. No install, no system changes; Windows, macOS, Linux.
+  Stable 0.x runs on Windows, macOS, and Linux. The 1.x release candidate runs the official Desktop on Windows x64.
 </p>
 
 <p align="center">
   <a href="https://wsl043.github.io/DSH-Portable/"><strong>Website</strong></a>
-  · <a href="https://github.com/WSL043/DSH-Portable/releases/latest"><strong>Download</strong></a>
+  · <a href="#downloads"><strong>Downloads</strong></a>
   · <a href="#start-in-3-steps">Get started</a>
   · <a href="docs/user-guide.en.md">User guide</a>
   · <a href="#plugins">Plugins</a>
@@ -29,7 +29,8 @@
 </p>
 
 <p align="center">
-  <a href="https://github.com/WSL043/DSH-Portable/releases/latest/download/DSH-Portable-windows-x64.exe"><strong>Download Windows portable</strong></a>
+  <a href="https://github.com/WSL043/DSH-Portable/releases/latest/download/DSH-Portable-windows-x64.exe"><strong>Download 0.x for Windows</strong></a>
+  · <a href="#1x-for-windows-x64">Try 1.x on Windows x64</a>
 </p>
 
 <p align="center">
@@ -41,17 +42,14 @@
 
 ## Which should I choose?
 
-| | Official desktop app | DSH-Portable |
+| Edition | Platforms | Updates and recovery |
 | --- | --- | --- |
-| Installation and platforms | Installer; Windows and macOS | Portable; Windows, macOS, and Linux, with no installation or PATH changes |
-| Update cadence | Follows the official release schedule | Portable and core update separately; choose a core version |
-| Moving and maintenance | Standard desktop installation | After fully exiting, copy the whole folder to a USB drive or another computer with the same OS and architecture; data-preserving rollback and recovery tools are included |
-| Plugins | Official plugin management | The same official plugin management; More provides diagnostics and recovery, with community plugins installed on demand |
-| A good fit if… | You want an installed app on one computer | You want to carry it between devices or control updates |
+| **0.x stable** for everyday use | Windows x64, macOS, Linux | Update Portable and the DSH core separately in **Settings → Updates**. |
+| **1.x release candidate** for the official Desktop in a portable folder | Windows x64 | Use the Desktop’s **Install and Restart** prompt. Hold **Shift** when launching Portable for offline update, repair, and rollback. |
 
 ## Downloads
 
-For everyday use, choose the stable 0.x (Native) line. To try the official desktop in a portable folder, download the Windows x64 [1.0 release candidate](https://github.com/WSL043/DSH-Portable/releases/tag/v1.0.0-rc.1) and extract it into a separate folder.
+The Windows, macOS, and Linux downloads below are for **0.x stable**. The [1.x release candidate](#1x-for-windows-x64) has its own Windows ZIPs.
 
 ### Windows
 
@@ -76,9 +74,22 @@ Not sure? Use the online launcher with internet, or the standard ZIP for manual 
 
 See the [Linux guide](docs/user-guide.en.md#linux) for AppImage launch details, data location, and the complete folder.
 
-For an existing installation, see the [offline update guide](docs/offline-updates.md#download-files-english) for the source releases and matching JSON, signature, and ZIP.
+For an existing 0.x folder, see the [offline update guide](docs/offline-updates.md#download-files-english).
+
+### 1.x for Windows x64
+
+| Package | When to use it |
+| --- | --- |
+| [Full ZIP](https://github.com/WSL043/DSH-Portable/releases/download/v1.0.0-rc.1/DSH-Portable-1.0.0-rc.1-windows-x64.zip) | Includes the official Desktop and can start offline. |
+| [Lite ZIP](https://github.com/WSL043/DSH-Portable/releases/download/v1.0.0-rc.1/DSH-Portable-1.0.0-rc.1-windows-x64-lite.zip) | Downloads and verifies the official Desktop on first launch. |
+
+Extract [1.0.0-rc.1](https://github.com/WSL043/DSH-Portable/releases/tag/v1.0.0-rc.1) into a separate folder and run `DeepSeek Harness Portable.exe`. To bring supported 0.x data over, use the [migration guide](docs/pure-portable-operations.md#旧-native-数据迁入).
+
+The 1.x channel checks hourly for official Windows Desktop releases. It publishes them after signature, SHA-512, update, and recovery checks pass. When the app offers an update, choose **Install and Restart**. Portable rolls back if the new version fails its startup check. See the [1.x update and recovery guide](docs/pure-portable-operations.md).
 
 ## Start in 3 steps
+
+These steps use the **0.x Windows online launcher**.
 
 1. Download the [Windows portable launcher](https://github.com/WSL043/DSH-Portable/releases/latest/download/DSH-Portable-windows-x64.exe).
 2. Put it where you want the app to live and run it; it prepares the complete DSH-Portable folder beside it.
@@ -90,18 +101,28 @@ The close button sends the app to the tray, so tasks continue. To quit, use **Fi
 
 ## How portability works
 
-- **One folder:** Sessions, settings, plugins, and the default workspace stay together; see the [data guide](docs/user-guide.en.md#portable-data).
+- **0.x data** lives in the portable folder. See where sessions, settings, plugins, and the workspace are stored in the [data guide](docs/user-guide.en.md#portable-data).
 - **Move and resume:** Fully exit, then copy the entire folder to a USB drive or a computer with the same OS and architecture; see [migration steps](docs/user-guide.en.md#move-and-back-up).
-- **Updates keep data:** Portable and official-core updates are separate, with core version selection; see [updates and repair](docs/user-guide.en.md#updates-and-repair).
-- **Recovery when needed:** Checks, targeted repair, support reports, and DSH-Recovery.exe preserve personal data; see the [recovery guide](docs/user-guide.en.md#dsh-recoveryexe).
+- **0.x updates** preserve your data and let you choose a core version separately. See [updates and repair](docs/user-guide.en.md#updates-and-repair).
+- **0.x recovery** includes checks, targeted repair, support reports, and DSH-Recovery.exe. See the [recovery guide](docs/user-guide.en.md#dsh-recoveryexe).
 
 ## Plugins
 
-New packages no longer install community plugins by default. Existing installations and their enablement states are preserved. Install [Image Viewer](https://github.com/WSL043/dsh-image-viewer) or [Chat Manager](https://github.com/WSL043/dsh-chat-manager) through the official plugin manager when needed.
+New packages no longer install community plugins by default. Use **Plugins → Installed / Discover** to manage them.
 
-Use official **Plugins → Installed / Discover** for installation and updates. Portable does not add a Discover index automatically. If needed, add the optional [community index](https://cdn.jsdelivr.net/gh/WSL043/DSH-Portable-Updates@market-index/awesome-index.json) in **Discover → Manage index sources**. Existing plugins and index choices remain unchanged. See the [plugin guide](docs/user-guide.en.md#plugins).
+### Community index
+
+In **Plugins → Discover**, open the source selector and choose **Manage index sources**. Paste this URL and select **Add**.
+
+```text
+https://cdn.jsdelivr.net/gh/WSL043/DSH-Portable-Updates@market-index/awesome-index.json
+```
+
+For archived chats, see [Chat Manager](https://github.com/WSL043/dsh-chat-manager). For installation and updates, see the [plugin guide](docs/user-guide.en.md#plugins).
 
 ## Choose your core version
+
+Core selection applies to 0.x stable.
 
 <!-- core-support:start -->
 **Optional cores (up to 5 verified versions)** · Settings → Updates · Since 0.6.5 stable (first available in 0.6.5-rc.1).
@@ -127,12 +148,7 @@ See the [updates and repair guide](docs/user-guide.en.md#updates-and-repair) for
 
 ## Roadmap
 
-- **Stable 0.x (Native):** The current public download; near-term work focuses on polish and stability.
-- **1.0 line:** Runs the official Desktop with its managed data in a portable folder. The [release candidate](https://github.com/WSL043/DSH-Portable/releases/tag/v1.0.0-rc.1) is for Windows x64:
-  - The 1.x update channel checks hourly for official Windows Desktop releases and publishes them after signature, SHA-512, update, and recovery checks pass. Once an update appears, choose **Install and Restart** in the app. Portable rolls back to the previous version if the new version fails its startup check.
-  - Sessions, settings, plugins, and sign-in live in the folder; copy it whole to another Windows PC and keep working.
-  - Install and manage plugins in the official Desktop’s **Plugins** page. New 1.x packages ship with no preinstalled community plugins.
-- See the [1.0 roadmap](docs/roadmap-toward-1.0.md) and the [official desktop payload experiment](experiments/official-payload/README.md).
+0.x focuses on stability. 1.x packages the official Desktop with Portable’s launcher, data handling, and recovery. See the [1.0 roadmap](docs/roadmap-toward-1.0.md) and [official Desktop packaging](experiments/official-payload/README.md).
 
 ## Get help
 
@@ -167,6 +183,6 @@ If DSH-Portable helps, star the [GitHub repository](https://github.com/WSL043/DS
 
 DeepSeek Harness, the DeepSeek name, and its marks belong to DeepSeek. DSH-Portable is independently maintained by WSL043 and is not endorsed by DeepSeek.
 
-## Interface languages (unreleased main)
+## Interface languages
 
-Portable follows the official DSH language setting for native menus, tray, updates and maintenance, with English as the fallback. Additional languages need a compatible official core that provides them, such as DSH 0.2.2-rc.1. Main supports English, Simplified Chinese, Japanese, Spanish, French, German, Russian and Brazilian Portuguese. Third-party plugins supply their own translations. Already-published packages are unchanged.
+In 0.x, Portable’s menus, tray, and maintenance UI follow the DSH language setting, with English as the fallback. Supported languages are English, Simplified Chinese, Japanese, Spanish, French, German, Russian, and Brazilian Portuguese. The official Desktop supplies the 1.x app interface.

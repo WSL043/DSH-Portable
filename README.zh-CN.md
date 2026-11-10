@@ -8,12 +8,12 @@
 
 <p align="center">
   <strong>DeepSeek Harness 便携版：整个文件夹拷到 U 盘，换一台电脑接着用。</strong><br>
-  会话、设置、插件和工作区都在文件夹里；不安装、不改系统，Windows / macOS / Linux。
+  0.x 稳定版支持 Windows、macOS 和 Linux。1.x 候选版在 Windows x64 上运行官方桌面端。
 </p>
 
 <p align="center">
   <a href="https://wsl043.github.io/DSH-Portable/"><strong>官网</strong></a>
-  · <a href="https://github.com/WSL043/DSH-Portable/releases/latest"><strong>下载</strong></a>
+  · <a href="#下载"><strong>下载</strong></a>
   · <a href="#三步启动">开始使用</a>
   · <a href="docs/user-guide.zh-CN.md">用户指南</a>
   · <a href="#插件">插件</a>
@@ -29,7 +29,8 @@
 </p>
 
 <p align="center">
-  <a href="https://github.com/WSL043/DSH-Portable/releases/latest/download/DSH-Portable-windows-x64.exe"><strong>下载 Windows 便携版</strong></a>
+  <a href="https://github.com/WSL043/DSH-Portable/releases/latest/download/DSH-Portable-windows-x64.exe"><strong>下载 Windows 0.x 稳定版</strong></a>
+  · <a href="#1x-候选版">试用 Windows x64 1.x</a>
 </p>
 
 <p align="center">
@@ -41,17 +42,14 @@
 
 ## 该选哪个
 
-| | 官方桌面端 | DSH-Portable |
+| 版本 | 适用平台 | 更新与恢复 |
 | --- | --- | --- |
-| 安装与平台 | 安装式；Windows、macOS | 绿色便携；Windows、macOS、Linux，不安装、不改系统 PATH |
-| 更新节奏 | 跟随官方发布节奏 | Portable 与内核分开更新，可选内核版本 |
-| 携带与维护 | 常规桌面安装 | 完全退出后可把整个文件夹复制到 U 盘或另一台相同平台的电脑；提供保留数据的回滚与恢复工具 |
-| 插件 | 官方插件管理 | 同样的官方插件管理；“更多”仅兼容恢复旧插件配置，社区插件按需安装 |
-| 适合你，如果… | 想装进系统、主要使用一台电脑 | 想带走、多设备使用，或需要可控更新 |
+| **0.x 稳定版**，适合日常使用 | Windows x64、macOS、Linux | 在 **设置 → 更新** 分别更新 Portable 和 DSH 内核。 |
+| **1.x 候选版**，在便携文件夹中运行官方桌面端 | Windows x64 | 在官方桌面端选择 **安装并重启**。按住 **Shift** 启动 Portable 可进入离线更新、修复和回退。 |
 
 ## 下载
 
-日常使用请选择稳定版 0.x（Native）。要试用可随文件夹携带的官方桌面应用，请下载 Windows x64 [1.0 候选版](https://github.com/WSL043/DSH-Portable/releases/tag/v1.0.0-rc.1)，解压到独立文件夹。
+下方 Windows、macOS 和 Linux 下载均为 **0.x 稳定版**。[1.x 候选版](#1x-候选版)有独立的 Windows x64 ZIP。
 
 ### Windows
 
@@ -76,9 +74,22 @@
 
 AppImage 与完整目录的启动和数据位置见[Linux 使用说明](docs/user-guide.zh-CN.md#linux)。
 
-已有安装的文件更新见[离线更新指南](docs/offline-updates.md)，其中列出 Portable 与内核附件的来源及配套文件的获取步骤。
+已有 0.x 便携目录的文件更新见[离线更新指南](docs/offline-updates.md)。
+
+### 1.x 候选版
+
+| Windows x64 下载 | 适用情况 |
+| --- | --- |
+| [完整 ZIP](https://github.com/WSL043/DSH-Portable/releases/download/v1.0.0-rc.1/DSH-Portable-1.0.0-rc.1-windows-x64.zip) | 已包含官方桌面端，可离线启动。 |
+| [轻量 ZIP](https://github.com/WSL043/DSH-Portable/releases/download/v1.0.0-rc.1/DSH-Portable-1.0.0-rc.1-windows-x64-lite.zip) | 首次启动时联网下载并校验官方桌面端。 |
+
+将 [1.0.0-rc.1](https://github.com/WSL043/DSH-Portable/releases/tag/v1.0.0-rc.1) 解压到独立文件夹，然后运行 `DeepSeek Harness Portable.exe`。如需从 0.x 迁入数据，请查看[迁移指南](docs/pure-portable-operations.md#旧-native-数据迁入)。
+
+1.x 通道每小时检查官方 Windows 桌面版。新版本通过签名、SHA-512、更新和恢复检查后自动发布。应用提示有更新时，选择 **安装并重启**。如果新版本未通过启动检查，Portable 会自动回退。详见 [1.x 更新和恢复指南](docs/pure-portable-operations.md)。
 
 ## 三步启动
+
+以下步骤适用于 **0.x Windows 在线启动器**。
 
 1. 下载 [Windows 便携启动器](https://github.com/WSL043/DSH-Portable/releases/latest/download/DSH-Portable-windows-x64.exe)。
 2. 将它放到希望保存的位置并运行；它会在旁边准备完整的 DSH-Portable 文件夹。
@@ -90,26 +101,34 @@ macOS、Linux 解压后直接运行，首次打开的注意事项见[用户指�
 
 ## 它怎么做便携
 
-- **一个文件夹**：会话、设置、插件和默认工作区集中保存；目录与迁移细节见[用户指南](docs/user-guide.zh-CN.md#便携数据)。
+- **0.x 数据**保存在便携文件夹中。会话、设置、插件和工作区的位置见[用户指南](docs/user-guide.zh-CN.md#便携数据)。
 - **换位置继续**：完全退出后，可把整个文件夹复制到 U 盘或另一台相同系统和架构的电脑；见[迁移步骤](docs/user-guide.zh-CN.md#移动与备份)。
-- **更新不动数据**：Portable 与官方内核分别更新，内核版本可选；更新、跳过、回滚规则见[用户指南](docs/user-guide.zh-CN.md#更新与修复)。
-- **出问题可恢复**：检查、精准修复、支持报告和 DSH-Recovery.exe 保留个人数据；见[恢复说明](docs/user-guide.zh-CN.md#dsh-recoveryexe)。
+- **0.x 更新**会保留数据。Portable 和内核分别更新，内核版本可选。详见[更新与修复](docs/user-guide.zh-CN.md#更新与修复)。
+- **0.x 恢复工具**包括检查、修复、支持报告和 DSH-Recovery.exe。详见[恢复说明](docs/user-guide.zh-CN.md#dsh-recoveryexe)。
 
 ## 登录与账号
 
-首次启动会出现“开始使用”，可以**登录 DeepSeek 账号**，也可以**添加 API Key**。登录会在系统浏览器里打开官方授权页，点一次授权即可，不需要在软件里输入密码。登录后“设置”在左下角的账号菜单（登录前显示为“更多”）里。
+首次启动可登录 DeepSeek 账号或添加 API Key。账号登录通过系统浏览器中的官方授权页完成。
 
-- 登录凭据以文件形式保存在文件夹的 `data` 目录里，**没有额外加密**：拿到整个文件夹的人可能直接使用你的账号。借给别人或存进 U 盘前，请先退出登录，或清空 `data` 目录；U 盘丢失时，到 DeepSeek 官网撤销授权。
-- 导出“完整迁移”会带上登录信息和密钥，请只保存在你信任的地方。
-- 软件自己的更新和内核下载走 GitHub，插件下载走 npm。更新、内核下载和插件安装会跟随 Windows 或 macOS 的系统代理（也认 `HTTPS_PROXY` 环境变量），浏览器能上的地方它也能上；GitHub 连不上时，会自动改用公共镜像（版本信息必须带签名才采用，安装包用签名信息里的校验值核对）。想关闭或换成自己的镜像，设置环境变量 `DSH_PORTABLE_UPDATE_MIRRORS`（`off` 或逗号分隔的地址）。
+便携数据和未加密的迁移包可能含有 API 凭据和私人会话。分享文件夹前，请先核对[便携数据及备份说明](docs/user-guide.zh-CN.md#便携数据)。
 
 ## 插件
 
-新版本不再默认安装社区插件；已有安装及启停状态保持不变。[Image Viewer](https://github.com/WSL043/dsh-image-viewer) 和 [Chat Manager](https://github.com/WSL043/dsh-chat-manager) 可按需通过官方插件管理安装。
+新版本不再默认安装社区插件。在官方 **插件 → 已安装 / 发现** 页面按需管理。
 
-插件安装和更新使用官方“插件 → 已安装 / 发现”。Portable 不再自动添加发现索引；如有需要，可在“发现 → 管理索引源”手动添加[社区索引](https://cdn.jsdelivr.net/gh/WSL043/DSH-Portable-Updates@market-index/awesome-index.json)。现有插件和用户的索引选择保持不变。
+### 社区索引源
+
+在 **插件 → 发现** 打开索引源下拉菜单，选择 **管理索引源**，粘贴以下地址并点击 **添加**。
+
+```text
+https://cdn.jsdelivr.net/gh/WSL043/DSH-Portable-Updates@market-index/awesome-index.json
+```
+
+归档会话管理可参考 [Chat Manager](https://github.com/WSL043/dsh-chat-manager)。安装和更新步骤见[插件指南](docs/user-guide.zh-CN.md#插件)。
 
 ## 内核版本可选
+
+内核选择适用于 0.x 稳定版。
 
 <!-- core-support:start -->
 **可选内核（最多 5 个已验证版本）** · 设置 → 更新 · 正式版 0.6.5 起支持（首发 0.6.5-rc.1）。
@@ -135,18 +154,12 @@ macOS、Linux 解压后直接运行，首次打开的注意事项见[用户指�
 
 ## 路线
 
-- **稳定版 0.x（Native）**：当前公开下载；接下来聚焦打磨与稳定。
-- **1.0 线**：运行官方桌面应用，将受管理的数据保存在便携文件夹中。[候选版](https://github.com/WSL043/DSH-Portable/releases/tag/v1.0.0-rc.1)适用于 Windows x64：
-  - 1.x 更新通道每小时检查官方 Windows 桌面版。新版本通过签名、SHA-512、更新和恢复检查后自动发布。应用提示有更新时，选择 **安装并重启**。如果新版本未通过启动检查，Portable 会自动回退到上一版。
-  - 会话、设置、插件和登录状态都在文件夹里，整夹复制到另一台 Windows 电脑即可接着用。
-  - 在官方“插件”页面按需安装和管理插件。新的 1.x 包不预装社区插件。
-  - 详细说明见[1.0 预览线指南](https://wsl043.github.io/DSH-Portable/guides/official-desktop-portable.html)。
-- 详见[1.0 路线图](docs/roadmap-toward-1.0.md)与[官方桌面成品实验线](experiments/official-payload/README.md)。
+0.x 以稳定维护为主。1.x 使用官方桌面端，Portable 提供启动、数据携带和恢复能力。详见 [1.0 路线图](docs/roadmap-toward-1.0.md)和[官方桌面成品打包说明](experiments/official-payload/README.md)。
 
 ## 获取帮助
 
 - [提交 Bug 报告](https://github.com/WSL043/DSH-Portable/issues/new?template=bug-report.yml) · [提出功能建议](https://github.com/WSL043/DSH-Portable/issues/new?template=feature-request.yml) · [参与讨论](https://github.com/WSL043/DSH-Portable/discussions)
-- 刚升级后出现异常（对话空白、输入框在页面顶部）：先到 **设置 → 更新**，看“内核版本”是不是变成了自带版本；如果你之前用的是“官方测试版”，在同一页重新选它。仍然不行，再提交 Bug 报告，并写明升级前的版本。
+- 0.x 更新后若出现界面异常，请在 **设置 → 更新** 核对当前内核版本。反馈时附上 Portable 和内核在更新前后的版本号。
 - 网络兼容问题与限制见[上游说明](https://github.com/deepseek-ai/deepseek-harness/discussions/5202)；请勿在 Issue 中粘贴 API Key、登录凭据或私人会话。
 
 ## 安全
@@ -177,6 +190,6 @@ bash scripts/build-linux.sh x64     # 或 arm64
 
 DeepSeek Harness、DeepSeek 名称与标志归 DeepSeek 所有。DSH-Portable 由 WSL043 独立维护，未获 DeepSeek 背书。
 
-## 界面语言（未发布 main）
+## 界面语言
 
-Portable 的菜单、托盘、更新与维护界面跟随官方 DSH 语言设置，未支持的语言回退到英语，不增加另一套语言偏好。新增语言需要提供对应语言的兼容官方内核，例如 DSH 0.2.2-rc.1。main 支持英语、简体中文、日语、西班牙语、法语、德语、俄语与巴西葡萄牙语。第三方插件自行提供翻译；已发布成品不因此改变。
+0.x 的菜单、托盘和维护界面跟随 DSH 的语言设置，未支持的语言使用英语。支持英语、简体中文、日语、西班牙语、法语、德语、俄语和巴西葡萄牙语。1.x 的应用界面由官方桌面端提供。
