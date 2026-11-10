@@ -464,7 +464,10 @@ test('Portable update never changes the selected core, including when a full pac
     component: { ...updateManifest().component, dshVersion: '0.2.1-rc.5' } })
   for (const dshVersion of ['0.2.2-rc.1', '0.2.1-rc.4']) {
     const installed = { portableVersion: '0.9.9', dshVersion, updaterSchema: 1, shellSchema: 29, nodeVersion: '24.19.0' }
-    const result = evaluateUpdate(manifest, installed, 'windows-x64')
+    const online = evaluateUpdate(manifest, installed, 'windows-x64')
+    assert.equal(online.status, 'full-package-required')
+    assert.equal(online.delivery, 'full-package')
+    const result = evaluateUpdate(manifest, installed, 'windows-x64', { offline: true })
     assert.equal(result.status, 'product-core-mismatch')
     assert.equal(result.delivery, 'none')
     assert.equal(result.engineCurrent, dshVersion)

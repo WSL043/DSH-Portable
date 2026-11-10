@@ -241,6 +241,8 @@ async function makeFixture(root, { omitRuntime = false } = {}) {
   await writeFile(path.join(packageRoot, 'DeepSeek-Herness.exe'), 'fixture launcher')
   if (!omitRuntime) await writeFile(path.join(packageRoot, 'runtime', 'node', 'node.exe'), 'fixture node')
   await writeFile(path.join(packageRoot, 'app', 'package.json'), '{"name":"fixture"}\n')
+  await mkdir(path.join(packageRoot, 'licenses'), { recursive: true })
+  await writeFile(path.join(packageRoot, 'licenses', 'COMPONENTS.json'), '{"dshVersion":"0.2.1-rc.5"}\n')
   await mkdir(path.dirname(path.join(packageRoot, longRelative)), { recursive: true })
   await writeFile(path.join(packageRoot, longRelative), '{"longPath":true}\n')
   await writeFile(path.join(packageRoot, 'data', 'README.txt'), 'portable data')
@@ -376,7 +378,7 @@ test('bootstrap upgrades an existing portable folder in place without replacing 
     await writeFile(path.join(destination, 'DeepSeek-Herness.exe'), 'old launcher')
     await writeFile(path.join(destination, 'runtime', 'node', 'node.exe'), 'old node')
     await writeFile(path.join(destination, 'app', 'package.json'), '{"name":"old"}\n')
-    await writeFile(path.join(destination, 'licenses', 'COMPONENTS.json'), '{"portableVersion":"0.4.0"}\n')
+    await writeFile(path.join(destination, 'licenses', 'COMPONENTS.json'), '{"portableVersion":"0.4.0","dshVersion":"0.2.1-rc.5"}\n')
     await writeFile(path.join(destination, 'data', 'session.json'), '{"keep":true}\n')
     await writeFile(path.join(destination, 'workspace', 'project.txt'), 'keep workspace\n')
     await mkdir(path.join(destination, 'runtime', 'webview2', 'runtime'), { recursive: true })
@@ -438,7 +440,7 @@ test('a full-package update restores the prior program when the updated desktop 
     await compileHealthFixture(path.join(destination, 'DeepSeek-Herness.exe'), 'ready')
     await writeFile(path.join(destination, 'runtime', 'node', 'node.exe'), 'old node')
     await writeFile(path.join(destination, 'app', 'package.json'), '{"name":"old"}\n')
-    await writeFile(path.join(destination, 'licenses', 'COMPONENTS.json'), '{"portableVersion":"0.4.0"}\n')
+    await writeFile(path.join(destination, 'licenses', 'COMPONENTS.json'), '{"portableVersion":"0.4.0","dshVersion":"0.2.1-rc.5"}\n')
     await writeFile(path.join(destination, 'data', 'session.json'), '{"keep":true}\n')
 
     const environmentFiles = [
@@ -499,7 +501,7 @@ test('a failed staged compatibility preflight leaves the installed program untou
     await compileHealthFixture(path.join(destination, 'DeepSeek-Herness.exe'), 'ready')
     await writeFile(path.join(destination, 'runtime', 'node', 'node.exe'), 'old node')
     await writeFile(path.join(destination, 'app', 'package.json'), '{"name":"old"}\n')
-    await writeFile(path.join(destination, 'licenses', 'COMPONENTS.json'), '{"portableVersion":"0.5.2"}\n')
+    await writeFile(path.join(destination, 'licenses', 'COMPONENTS.json'), '{"portableVersion":"0.5.2","dshVersion":"0.2.1-rc.5"}\n')
     await writeFile(path.join(destination, 'data', 'session.json'), '{"keep":true}\n')
 
     await withFixtureServer(fixture, async ({ manifestUrl }) => {
@@ -556,6 +558,8 @@ test('a full-package update commits only after the updated desktop reports ready
     await compileHealthFixture(path.join(destination, 'DeepSeek-Herness.exe'), 'ready')
     await writeFile(path.join(destination, 'runtime', 'node', 'node.exe'), 'old node')
     await writeFile(path.join(destination, 'app', 'package.json'), '{"name":"old"}\n')
+    await mkdir(path.join(destination, 'licenses'), { recursive: true })
+    await writeFile(path.join(destination, 'licenses', 'COMPONENTS.json'), '{"portableVersion":"0.5.2","dshVersion":"0.2.1-rc.5"}\n')
     await writeFile(path.join(destination, 'data', 'session.json'), '{"keep":true}\n')
 
     const environmentFiles = [

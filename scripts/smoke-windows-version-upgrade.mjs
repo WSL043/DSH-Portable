@@ -199,13 +199,13 @@ upgrade: try {
   if (fullManifestSource.dshVersion && oldComponents.dshVersion !== fullManifestSource.dshVersion) {
     const installedComponents = path.join(destination, 'licenses', 'COMPONENTS.json')
     const before = await readFile(installedComponents, 'utf8')
-    await assert.rejects(execFileAsync(path.join(artifacts, 'DSH-Portable-windows-x64.exe'), [
+    await assert.rejects(execFileAsync(path.join(targetSourceRoot, 'DSH-Portable', 'launcher', 'DSH-FullUpdater.exe'), [
       '--upgrade-existing', '--manifest', `${origin}/portable-manifest.json`,
       '--destination', destination, '--allow-http', '--no-launch', '--result', resultPath,
-    ], { timeout: 60_000, windowsHide: true }), { code: 1 })
+    ], { timeout: 300_000, windowsHide: true }), { code: 1 })
     const refusal = JSON.parse(await readFile(resultPath, 'utf8'))
     assert.equal(refusal.status, 'failed')
-    assert.match(refusal.message, /cannot keep the current DSH core|无法保留当前 DSH 内核/)
+    assert.match(refusal.message, /Could not prepare the current DSH core|未能为新版便携包准备当前 DSH 内核/)
     assert.equal(await readFile(installedComponents, 'utf8'), before)
     for (const [filename, value] of markers) assert.equal(await readFile(filename, 'utf8'), value)
     console.log('[upgrade-smoke] refused a mismatched core without changing the installation')

@@ -119,7 +119,7 @@ test('update metadata and choices work without a capsule cache while runtime mut
     schemaVersion: 1, updateKind: scope, portableVersion: scope === 'product' ? '0.9.8' : '0.9.7',
     releaseChannel: 'stable', platform, minimumUpdaterSchema: 1, requiredShellSchema: 1, requiredShellContract: 1,
     targetRuntimeLayout: 'capsule-v1', component: {
-      kind: 'dsh-runtime-capsule', dshVersion: '0.2.1-rc.4', requiredNodeVersion: process.versions.node,
+      kind: 'dsh-runtime-capsule', dshVersion: scope === 'product' ? '0.2.1-rc.3' : '0.2.1-rc.4', requiredNodeVersion: process.versions.node,
       runtimeLayout: 'capsule-v1', bytes: 1, sha256: 'a'.repeat(64), urls: ['https://example.com/core.zip'],
     },
   }]))

@@ -153,7 +153,9 @@ function usesShellContract(manifest, updateKind) {
   return updateKind === 'engine' && manifest.requiredShellContract != null
 }
 
-export function evaluateUpdate(manifest, installed, platform, { allowEngineVersionChange = false, allowProductVersionChange = false, forDownload = false } = {}) {
+export function evaluateUpdate(manifest, installed, platform, {
+  allowEngineVersionChange = false, allowProductVersionChange = false, forDownload = false, offline = false,
+} = {}) {
   assertManifestShape(manifest)
   const updateKind = manifest.updateKind || 'product'
   const installedReleaseChannel = normalizeReleaseChannel(installed.releaseChannel, installed.portableVersion)
@@ -212,6 +214,7 @@ export function evaluateUpdate(manifest, installed, platform, { allowEngineVersi
   } else if (productComparison === 0 || (productComparison > 0 && !allowProductVersionChange)) {
     return describe('current', 'none')
   } else if (!forDownload && engineCurrent !== engineLatest) {
+    if (platform === 'windows-x64' && !offline) return describe('full-package-required', 'full-package')
     return { ...describe('product-core-mismatch', 'none'), message: productCoreMismatchMessage(engineCurrent, engineLatest) }
   }
   if (Number(manifest.minimumUpdaterSchema) > Number(installed.updaterSchema ?? 0)
@@ -626,7 +629,7 @@ function localUpdatePlan(manifest, installed, platform, scope, manifestFile, for
   } else {
     if ((manifest.updateKind || 'product') !== scope) throw localUpdateFailure('scope-mismatch', `Update kind mismatch: expected ${scope}.`)
     result = evaluateUpdate(manifest, installed, platform, {
-      allowEngineVersionChange: scope === 'engine', allowProductVersionChange: scope === 'product', forDownload,
+      allowEngineVersionChange: scope === 'engine', allowProductVersionChange: scope === 'product', forDownload, offline: true,
     })
     if (result.status !== 'available' && !(forDownload && result.status === 'current')) return { result }
     component = result.component || manifest.component

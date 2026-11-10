@@ -430,11 +430,13 @@ try {
     if ($LASTEXITCODE -ne 0 -or -not (Test-Path -LiteralPath $UpdateExtractor)) { throw 'Windows update extractor compilation failed.' }
 
     $FullUpdater = Join-Path $Stage 'launcher\DSH-FullUpdater.exe'
+    $CoreStagingResource = "/resource:$ProjectRoot\launcher\windows\stage-portable-core.mjs,DSH.Portable.StageCore"
     $FullUpdaterCompilerArgs = @(
         '/nologo', '/target:winexe', '/platform:x64', '/optimize+',
         "/win32icon:$ProjectRoot\assets\DSH-Portable.ico",
         "/win32manifest:$ProjectRoot\launcher\windows\DSH-Portable.manifest",
         "/resource:$NativeLocales,DSH.Portable.Locales",
+        $CoreStagingResource,
         '/reference:System.dll', '/reference:System.Core.dll', '/reference:System.Drawing.dll',
         '/reference:System.Windows.Forms.dll', '/reference:System.Net.Http.dll',
         '/reference:System.Runtime.Serialization.dll', '/reference:System.IO.Compression.dll',
@@ -624,6 +626,7 @@ try {
         "/win32icon:$ProjectRoot\assets\DSH-Portable.ico",
         "/win32manifest:$ProjectRoot\launcher\windows\DSH-Portable.manifest",
         "/resource:$NativeLocales,DSH.Portable.Locales",
+        $CoreStagingResource,
         '/reference:System.dll', '/reference:System.Core.dll', '/reference:System.Drawing.dll',
         '/reference:System.Windows.Forms.dll', '/reference:System.Net.Http.dll',
         '/reference:System.Runtime.Serialization.dll', '/reference:System.IO.Compression.dll',
