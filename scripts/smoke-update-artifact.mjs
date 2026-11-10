@@ -78,7 +78,7 @@ async function sha256(filename) {
 }
 
 async function buildRollbackProbe(archive, manifest) {
-  const temporary = await mkdtemp(path.join(os.tmpdir(), 'dsh-update-rollback-'))
+  const temporary = await realpath(await mkdtemp(path.join(os.tmpdir(), 'dsh-update-rollback-')))
   const source = path.join(temporary, 'component')
   const probeArchive = path.join(temporary, 'rollback-component.zip')
   await mkdir(source, { recursive: true })
@@ -111,11 +111,10 @@ async function buildRollbackProbe(archive, manifest) {
       env: { ...process.env, DSH_PORTABLE_RUNTIME_CACHE: path.join(temporary, 'runtime-cache') },
     })).runtimeRoot : source
     const app = path.join(runtime, 'app')
-    const fixtureRoot = await realpath(temporary)
     const commandPath = path.resolve(app, 'node_modules', '@deepseek-ai', 'dsh', 'lib', 'bin.js')
-    if (!commandPath.startsWith(fixtureRoot + path.sep)) throw new Error('Rollback fixture command escaped the temporary directory.')
+    if (!commandPath.startsWith(temporary + path.sep)) throw new Error('Rollback fixture command escaped the temporary directory.')
     const bin = await realpath(commandPath)
-    if (!bin.startsWith(fixtureRoot + path.sep)) throw new Error('Rollback fixture command escaped the temporary directory.')
+    if (!bin.startsWith(temporary + path.sep)) throw new Error('Rollback fixture command escaped the temporary directory.')
     const code = await readFile(bin, 'utf8')
     const shebang = /^#![^\n]*\n/.exec(code)?.[0] ?? ''
     await writeFile(bin, shebang + "if (process.argv[2] === '--version') throw new Error('Rollback health probe');\n"

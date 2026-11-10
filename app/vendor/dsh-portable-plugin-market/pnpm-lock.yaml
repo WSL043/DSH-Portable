@@ -17,6 +17,9 @@ importers:
       js-yaml:
         specifier: ^4.1.0
         version: 4.3.1
+      semver:
+        specifier: 7.8.5
+        version: 7.8.5
       undici:
         specifier: ^7.29.0
         version: 7.29.0
@@ -736,7 +739,14 @@ packages:
   yuku-parser@0.8.7:
     resolution: {integrity: sha512-vRD9nwt4L3aYpxNqeSC4WqLv58xrXef0Ong1Mc45CTXTIpvLafx7JO05sczmQZwdLEZvywrLOGdNC5+Rp5N1BQ==}
 
+  semver@7.8.5:
+    resolution: {integrity: sha512-Y7/KDsb8LjooZpwaqGyulO6DQlksgCncchHGk+sZIY4SBvUocMBEFH5Ur1fI4dV+Jvl0w6cjvucaIi40puRioA==}
+    engines: {node: '>=10'}
+    hasBin: true
+
 snapshots:
+
+  semver@7.8.5: {}
 
   '@deepseek-ai/cordis@4.0.1':
     dependencies:
