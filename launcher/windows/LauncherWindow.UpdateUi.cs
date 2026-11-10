@@ -38,30 +38,11 @@ namespace DshPortable
             }
             string product = "DSH-Portable" + (String.IsNullOrEmpty(current) ? "" : " " + current)
                 + (String.IsNullOrEmpty(latest) ? "" : "  →  " + latest);
-            string engine;
-            if (!String.IsNullOrEmpty(engineCurrent) && !String.IsNullOrEmpty(engineLatest))
-            {
-                engine = L("内置官方 DSH ", "Bundled official DSH ") + engineCurrent
-                    + (String.Equals(engineCurrent, engineLatest, StringComparison.Ordinal)
-                        ? L("（本次不变）", " (unchanged)")
-                        : "  →  " + engineLatest);
-            }
-            else if (!String.IsNullOrEmpty(engineLatest))
-                engine = L("内置官方 DSH ", "Bundled official DSH ") + engineLatest;
-            else
-                engine = L("当前 DSH ", "Current DSH ")
-                    + (String.IsNullOrEmpty(engineCurrent) ? L("待确认", "unconfirmed") : engineCurrent)
-                    + (fullPackage
-                        ? L("（目标以整包为准，可能改变）", " (package core unconfirmed; may change)")
-                        : L("（目标内核待确认）", " (target core unconfirmed)"));
+            string engine = L("保留当前 DSH ", "Keep current DSH ") + engineCurrent;
             string delivery = fullPackage
-                ? L("交付方式：完整更新（使用随包内核）", "Delivery: complete package (uses bundled core)")
+                ? L("交付方式：完整便携包（安装前核对内核）", "Delivery: complete Portable package (core verified before installation)")
                 : L("交付方式：轻量更新（仅下载已变更的 DSH 应用组件）", "Delivery: component update (only the changed DSH application component)");
-            string chosenEngine = fullPackage
-                ? "\r\n" + L("联网且通过新外壳验收时，仅尝试恢复较新的已选内核。",
-                    "Online: tries restoring a newer chosen core qualified for this shell.")
-                : "";
-            return product + "\r\n" + engine + "\r\n" + delivery + chosenEngine;
+            return product + "\r\n" + engine + "\r\n" + delivery;
         }
 
         private async Task<int> ShowUpdateChoiceOverlayAsync(string current, string latest, string engineCurrent, string engineLatest, bool fullPackage, string scope = "product")

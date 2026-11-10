@@ -29,6 +29,8 @@ Portable owns its desktop shell and integration: startup and exit, windows and t
 - **Market**：上游检查只把新版本放入人工审查 inbox。只有适用于 Portable 的改动才会在失败测试、兼容性检查和人工审查后移植到随附的 Market；Market 上游版本不会自动合并，也不会自动发布 Portable。
 - **Portable**：Portable 自己决定版本号和计划发布节奏。已接受的核心或 Market 修复通常累积到下一次计划中的 Portable 发布；上游检查、验收 PR 或合并都不会启动 Portable 发布。修复不会自动改变版本号，版本变更必须由人工在发布时决定。
 
+0.x 的 Portable 更新入口只更新 Portable 版本。若可用更新包无法保留当前 DSH 核心，在线和离线安装均停止；核心版本由独立的核心更新入口切换。
+
 如果出现阻断性的安全、安装或数据损坏修复，可以在计划之外手动发版。该例外仍需要人工决定、完整验收和明确的版本变更；任何修复都不会自行合并、发布或生成新的 Portable 版本。
 
 ## English
@@ -51,5 +53,7 @@ The official DSH core, dsh-market, and DSH-Portable are three independent releas
 - **Core (official DSH)**: scheduled checks verify the installable package, its integrity, and its corresponding commit. After the Windows, macOS, and Linux product gates pass, the core may enter its own update channel; an upstream core release does not trigger a Portable release.
 - **Market**: upstream checks add releases to a manual review inbox. Only changes that apply to Portable are ported into the bundled Market after a failing test, compatibility checks, and human review. A Market upstream release is never merged or published automatically and never publishes Portable automatically.
 - **Portable**: Portable owns its version and planned release cadence. Accepted core or Market fixes normally accumulate for the next planned Portable release; an upstream check, acceptance pull request, or merge never starts a Portable release. A fix never changes the version automatically; a human chooses version changes during release preparation.
+
+In 0.x, the Portable update action changes the Portable version. Online and offline installation stop when the available package cannot keep the current DSH core. Use the separate Core Updates action to switch core versions.
 
 An urgent security, installation, or data-corruption fix may justify a manual out-of-band release. The exception still requires a human decision, complete qualification, and an explicit version change; no fix automatically merges, publishes, or creates a new Portable version.

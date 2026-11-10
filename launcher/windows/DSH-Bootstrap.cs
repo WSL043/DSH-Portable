@@ -216,6 +216,9 @@ namespace DshPortableBootstrap
         [DataMember(Name = "version")]
         public string Version { get; set; }
 
+        [DataMember(Name = "dshVersion")]
+        public string DshVersion { get; set; }
+
         [DataMember(Name = "payloads")]
         public PortablePayloads Payloads { get; set; }
     }
@@ -248,6 +251,9 @@ namespace DshPortableBootstrap
     {
         [DataMember(Name = "portableVersion")]
         public string PortableVersion { get; set; }
+
+        [DataMember(Name = "dshVersion")]
+        public string DshVersion { get; set; }
     }
 
     [DataContract]
@@ -542,6 +548,9 @@ namespace DshPortableBootstrap
                     ValidateRemoteUri(payload.Url, !offline && options.AllowHttp, "payload");
                 }
 
+                if (upgradeExisting && !String.IsNullOrEmpty(manifest.DshVersion))
+                    RequireSameCore(options.Destination, manifest.DshVersion);
+
                 if (offline)
                 {
                     reportStatus(BootstrapText.L("正在读取本地更新包…", "Reading the local update package…"));
@@ -568,6 +577,8 @@ namespace DshPortableBootstrap
                 {
                     if (!IsCompletePortable(options.Destination))
                         throw new InvalidOperationException(BootstrapText.L("现有 DSH-Portable 目录不完整；没有修改任何文件。", "The existing DSH-Portable folder is incomplete. No files were changed."));
+                    InstalledComponents stagedComponents = ReadInstalledComponents(extracted);
+                    RequireSameCore(options.Destination, stagedComponents == null ? null : stagedComponents.DshVersion);
                     ValidatePreservedStateRoot();
                     PreserveBundledWebViewRuntime(extracted);
                     reportStatus(BootstrapText.L("正在停止当前版本…", "Stopping the current version…"));
@@ -665,6 +676,14 @@ namespace DshPortableBootstrap
 
         private static string ReadInstalledPortableVersion(string root)
         {
+            InstalledComponents components = ReadInstalledComponents(root);
+            return components == null || String.IsNullOrWhiteSpace(components.PortableVersion)
+                ? null
+                : components.PortableVersion.Trim();
+        }
+
+        private static InstalledComponents ReadInstalledComponents(string root)
+        {
             string filename = Path.Combine(root, "licenses", "COMPONENTS.json");
             if (!File.Exists(filename)) return null;
             try
@@ -672,13 +691,20 @@ namespace DshPortableBootstrap
                 using (FileStream stream = File.OpenRead(filename))
                 {
                     DataContractJsonSerializer serializer = new DataContractJsonSerializer(typeof(InstalledComponents));
-                    InstalledComponents components = (InstalledComponents)serializer.ReadObject(stream);
-                    return components == null || String.IsNullOrWhiteSpace(components.PortableVersion)
-                        ? null
-                        : components.PortableVersion.Trim();
+                    return (InstalledComponents)serializer.ReadObject(stream);
                 }
             }
             catch { return null; }
+        }
+
+        private static void RequireSameCore(string destination, string bundledCore)
+        {
+            InstalledComponents installed = ReadInstalledComponents(destination);
+            if (installed != null && !String.IsNullOrWhiteSpace(installed.DshVersion)
+                && String.Equals(installed.DshVersion, bundledCore, StringComparison.Ordinal)) return;
+            throw new InvalidOperationException(BootstrapText.L(
+                "此便携更新包无法保留当前 DSH 内核，更新已停止。请在内核更新中单独切换版本。",
+                "This Portable package cannot keep the current DSH core. The update was stopped. To switch cores, use Core Updates."));
         }
 
         private static SemanticVersion ParsePortableVersion(string value)

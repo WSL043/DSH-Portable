@@ -524,6 +524,20 @@ fn check_updates(_app: tauri::AppHandle, interactive: bool, scope: &'static str)
                 );
             }
             Ok(value)
+                if interactive
+                    && value.get("status").and_then(Value::as_str) == Some("product-core-mismatch") =>
+            {
+                dialog(
+                    PRODUCT_NAME,
+                    &text(
+                        &layout,
+                        "此便携更新包无法保留当前 DSH 内核，更新已停止。",
+                        "This Portable package cannot keep your current DSH core. The update was blocked.",
+                    ),
+                    MessageLevel::Info,
+                );
+            }
+            Ok(value)
                 if value.get("status").and_then(Value::as_str) == Some("full-package-required") =>
             {
                 let latest = value.get("latest").and_then(Value::as_str).unwrap_or("new");

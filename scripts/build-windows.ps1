@@ -593,6 +593,7 @@ try {
         # Full schema 2 prevents older updaters from discarding named environments.
         schemaVersion = 2
         version = $PortableVersion
+        dshVersion = [string]$DshLock.version
         releaseChannel = $ReleaseChannel
         payloads = [ordered]@{
             windowsX64 = [ordered]@{

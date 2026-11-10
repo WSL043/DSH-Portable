@@ -149,9 +149,9 @@ test('legacy candidate Portable upgrades to the stable app component, health-che
       await copyFile(path.join(projectRoot, 'launcher', name), path.join(root, 'launcher', name))
     }
     if (process.platform === 'win32') await compileUpdateExtractor(path.join(root, 'launcher', 'DSH-UpdateExtractor.exe'))
-    await writeFile(oldDsh, fakeDsh('0.1.0-rc.6'))
+    await writeFile(oldDsh, fakeDsh('0.1.0-rc.7'))
     await writeFile(path.join(path.dirname(path.dirname(oldDsh)), 'package.json'), JSON.stringify({
-      name: '@deepseek-ai/dsh', version: '0.1.0-rc.6', dependencies: {},
+      name: '@deepseek-ai/dsh', version: '0.1.0-rc.7', dependencies: {},
     }))
     await writeFile(oldBridgePatch, '- insert: []\n')
     await writeFile(path.join(path.dirname(oldBridgePatch), 'package.json'), '{"name":"@wsl043/dsh-portable-desktop-bridge"}\n')
@@ -161,7 +161,7 @@ test('legacy candidate Portable upgrades to the stable app component, health-che
       portableVersion: '0.1.0-rc.6-portable.5',
       releaseChannel: 'candidate',
       platform: platformUpdateKey(),
-      dshVersion: '0.1.0-rc.6',
+      dshVersion: '0.1.0-rc.7',
       dshCommit: 'a'.repeat(40),
       updaterSchema: 1,
       shellSchema: 1,
