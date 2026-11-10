@@ -5,7 +5,7 @@
 ## 1. 新内核出现时先查三件事
 
 1. **补丁锚点**：`scripts/intake-upstream-core.mjs` 的接口与补丁检查会用真实官方包验证 `scripts/patch-native-settings-command.mjs` 的锚点。失败说明官方改了页面代码（例如 0.2.1-alpha.2 把卡片标签数组改成逐行排版），修补丁并补测试，用官方新旧两版真实文件各验证一次。
-2. **旧会话兼容名单**：`config/historical-descriptor-versions.json` 必须包含该内核版本，否则更新仓库会在 descriptor-v2 迁移检查处把它标为 `blocked`。比较官方 `session-format-v0-to-v1` 的实际文件、描述符兼容补丁身份与已验收版本；字节一致只能作为复核线索，仍须通过对应内核的真实旧格式 writer、官方续接、重开及中断恢复探针后才能加入名单。观察机器人的候选 PR（`automation/official-preview`）是审查入口；锁定版本、补丁身份、默认插件和验收证据须一起复核，通过完整资格后再合入 main，不只摘录名单。旧 preview 提案工作流 `official-preview-watch.yml` 仅手动运行；正式自动内核发现与资格仍由 `upstream-watch.yml` 和更新仓库的 `sync-core.yml` 负责。
+2. **旧会话兼容性**：自动内核资格使用真实旧格式 writer、官方续接、重开及中断恢复探针。已知的官方 descriptor-v2 限制单独记录为 `upstream-limitation`，不修改官方内核；出现其他失败时停止资格流程。锁定内核仍通过 `config/historical-descriptor-versions.json` 记录已验证的旧格式兼容范围。正式自动发现与资格由 `upstream-watch.yml` 和更新仓库的 `sync-core.yml` 负责。
 3. **插件声明**：默认插件的 peer 范围必须列出该内核。图片查看器和会话管理的定时任务会在官方 Release 发布后自动发新版；想提前可手动运行它们的 `upstream-compatibility.yml`。
 
 ## 2. 采纳插件并发版
