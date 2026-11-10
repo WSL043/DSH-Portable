@@ -1,14 +1,32 @@
 import test from 'node:test'
 import { readFile } from 'node:fs/promises'
 import assert from 'node:assert/strict'
-import { supportedVersions, renderSupportSection, replaceSupport } from '../scripts/update-readme-core-support.mjs'
+import { publishedShellState, supportedVersions, renderSupportSection, replaceSupport } from '../scripts/update-readme-core-support.mjs'
 
-test('support list excludes other baselines and mismatched core manifests', () => {
-  const entry = (portableVersion, version = '0.1.5-rc.2') => ({ version, manifest: { updateKind: 'engine', portableVersion, platform: 'windows-x64', releaseChannel: 'stable', component: { dshVersion: version } } })
-  const index = { schemaVersion: 1, platform: 'windows-x64', channel: 'stable', versions: [entry('0.6.8'), entry('0.6.9'), { version: '0.1.6-alpha.1' }] }
-  assert.deepEqual(supportedVersions(index, '0.6.9', 'windows-x64'), ['0.1.5-rc.2'])
-  assert.throws(() => supportedVersions(index, '0.6.9', 'linux-x64'))
-  assert.throws(() => supportedVersions({ ...index, channel: 'candidate' }, '0.6.9', 'windows-x64'), /Invalid published core index/)
+test('support list uses the published shell and the same compatibility rules as the app', () => {
+  const platform = 'windows-x64'
+  const component = { kind: 'dsh-runtime-capsule', dshVersion: '0.2.1-rc.5', requiredNodeVersion: '24.22.1', runtimeLayout: 'capsule-v1', bytes: 42, sha256: 'a'.repeat(64), urls: ['https://example.test/core.zip'] }
+  const product = { schemaVersion: 1, portableVersion: '0.9.12', platform, releaseChannel: 'stable', minimumUpdaterSchema: 1, requiredShellSchema: 25, requiredShellFingerprint: 'a'.repeat(64), component }
+  const products = { schemaVersion: 1, releaseChannel: 'stable', versions: [{ version: '0.9.12', manifest: product }] }
+  const installed = publishedShellState(products, '0.9.12', platform, 4)
+  const entry = (version, manifest = {}, changes = {}) => ({ version, manifest: {
+    ...product, portableVersion: '0.9.11', updateKind: 'engine', requiredShellContract: 4,
+    requiredShellFingerprint: 'b'.repeat(64), ...manifest, component: { ...component, dshVersion: version, ...changes },
+  } })
+  const index = { schemaVersion: 1, platform, channel: 'stable', versions: [
+    entry('0.2.2-rc.1'),
+    entry('0.2.1-rc.5'),
+    entry('0.2.2-alpha.3', { requiredShellContract: 5 }),
+    entry('0.2.2-alpha.2', {}, { requiredNodeVersion: '24.19.0' }),
+    entry('0.2.2-alpha.1', { targetRuntimeLayout: 'expanded-v1' }),
+    entry('0.2.1-rc.4', { requiredShellContract: undefined }),
+    entry('0.2.1-rc.3', { portableVersion: '0.9.12', requiredShellContract: undefined, requiredShellFingerprint: 'a'.repeat(64) }),
+    entry('0.2.1-rc.2', {}, { dshVersion: '0.2.1-rc.1' }),
+  ] }
+  assert.deepEqual(supportedVersions(index, installed, platform), ['0.2.2-rc.1', '0.2.1-rc.5', '0.2.1-rc.3'])
+  assert.throws(() => publishedShellState(products, '0.9.13', platform, 4), /Missing compatibility metadata/)
+  assert.throws(() => supportedVersions(index, installed, 'linux-x64'), /Invalid published core index/)
+  assert.throws(() => supportedVersions({ ...index, channel: 'candidate' }, installed, platform), /Invalid published core index/)
 })
 test('README support output distinguishes the five-core window from qualified availability', () => {
   const rows = ['| Windows x64 | [0.2.0-rc.2](stable-index) |']

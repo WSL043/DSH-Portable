@@ -1,16 +1,41 @@
 import { readFile, writeFile } from 'node:fs/promises'
 import { fileURLToPath, pathToFileURL } from 'node:url'
-import { comparePortableVersions, coreWindow, defaultEngineUpdateIndexUrl, platformUpdateKey } from '../launcher/update-core.mjs'
+import { comparePortableVersions, coreWindow, defaultEngineUpdateIndexUrl, defaultProductUpdateIndexUrl, evaluateUpdate, platformUpdateKey } from '../launcher/update-core.mjs'
 
-export function supportedVersions(index, baseline, platform) {
+export function supportedVersions(index, installed, platform) {
   if (index.schemaVersion !== 1 || index.platform !== platform || index.channel !== 'stable' || !Array.isArray(index.versions)) throw new Error('Invalid published core index')
   return coreWindow([...new Set(index.versions.filter(entry => {
     const m = entry.manifest
-    return m?.updateKind === 'engine' && m.portableVersion === baseline && m.platform === platform && m.releaseChannel === 'stable' && m.component?.dshVersion === entry.version
+    if (m?.updateKind !== 'engine' || m.platform !== platform || m.releaseChannel !== 'stable' || m.component?.dshVersion !== entry.version) return false
+    const { status } = evaluateUpdate(m, installed, platform, { allowEngineVersionChange: true })
+    return status === 'available' || status === 'current'
   }).map(entry => {
     if (!/^\d+\.\d+\.\d+(?:-[a-z]+\.\d+)?$/.test(entry.version)) throw new Error('Invalid core version')
     return entry.version
   }))].sort((left, right) => comparePortableVersions(right, left)))
+}
+
+export function publishedShellState(index, baseline, platform, shellContract) {
+  if (index.schemaVersion !== 1 || index.releaseChannel !== 'stable' || !Array.isArray(index.versions)) throw new Error('Invalid published Portable index')
+  const manifest = index.versions.find(entry => entry.version === baseline)?.manifest
+  const component = manifest?.component
+  if (manifest?.portableVersion !== baseline || manifest.platform !== platform || manifest.releaseChannel !== 'stable'
+    || !component?.requiredNodeVersion || !component.dshVersion
+    || !Number.isSafeInteger(manifest.minimumUpdaterSchema) || manifest.minimumUpdaterSchema < 1
+    || !Number.isSafeInteger(manifest.requiredShellSchema) || manifest.requiredShellSchema < 1) {
+    throw new Error(`Missing compatibility metadata for Portable ${baseline} (${platform})`)
+  }
+  return {
+    portableVersion: baseline,
+    releaseChannel: manifest.releaseChannel,
+    dshVersion: component.dshVersion,
+    nodeVersion: component.requiredNodeVersion,
+    runtimeLayout: component.runtimeLayout || manifest.targetRuntimeLayout || 'expanded-v1',
+    updaterSchema: manifest.minimumUpdaterSchema,
+    shellSchema: manifest.requiredShellSchema,
+    shellFingerprint: manifest.requiredShellFingerprint,
+    shellContract,
+  }
 }
 
 export function renderSupportSection(baseline, rows, zh) {
@@ -19,7 +44,9 @@ export function renderSupportSection(baseline, rows, zh) {
     : '**Optional cores (up to 5 verified versions)** · Settings → Updates · Since 0.6.5 stable (first available in 0.6.5-rc.1).'
   const summary = zh ? `查看 Portable ${baseline} 的可选内核` : `View available cores for Portable ${baseline}`
   const table = zh ? '| 平台 | 可选内核 |' : '| Platform | Available cores |'
-  const note = zh ? '候选窗口为最新 5 个版本，至少保留 2 个 RC 或正式版。下表每小时同步 stable 目录中已通过验收的版本，可能少于 5 个；— 表示暂无匹配版本。' : 'The window covers the newest five versions, retaining at least two release candidates or finals. The table syncs qualified stable-catalog entries hourly and may contain fewer than five; — means no matching version.'
+  const note = zh
+    ? '候选窗口为最新 5 个版本，至少保留 2 个 RC 或正式版。上表定期同步 stable 目录中与此版 Portable 兼容的版本，可能少于 5 个。'
+    : 'The window covers the newest five versions, retaining at least two release candidates or finals. The table syncs compatible versions from the stable catalog and may contain fewer than five.'
   return `${intro}\n\n<details>\n<summary>${summary}</summary>\n\n${table}\n| --- | --- |\n${rows.join('\n')}\n\n${note}\n\n</details>\n`
 }
 
@@ -42,16 +69,25 @@ export async function updateReadmes() {
   const release = await json('https://api.github.com/repos/WSL043/DSH-Portable/releases/latest')
   if (!/^v\d+\.\d+\.\d+$/.test(release.tag_name) || release.draft || release.prerelease) throw new Error('Invalid stable baseline')
   const baseline = release.tag_name.slice(1)
+  const { contract } = await json(`https://raw.githubusercontent.com/WSL043/DSH-Portable/${release.tag_name}/config/shell-contract.json`)
+  if (!Number.isSafeInteger(contract) || contract < 1) throw new Error('Invalid published shell contract')
   const platforms = [['Windows x64', 'win32', 'x64'], ['macOS arm64', 'darwin', 'arm64'], ['macOS x64', 'darwin', 'x64'], ['Linux x64', 'linux', 'x64'], ['Linux arm64', 'linux', 'arm64']]
   const rows = await Promise.all(platforms.map(async ([label, platform, arch]) => {
     const url = defaultEngineUpdateIndexUrl('stable', platform, arch, baseline)
-    const versions = supportedVersions(await json(url), baseline, platformUpdateKey(platform, arch))
-    return `| ${label} | ${versions.length ? versions.map(v => `[${v}](${url})`).join(', ') : '—'} |`
+    const key = platformUpdateKey(platform, arch)
+    const [cores, products] = await Promise.all([json(url), json(defaultProductUpdateIndexUrl('stable', platform, arch))])
+    const installed = publishedShellState(products, baseline, key, contract)
+    const versions = supportedVersions(cores, installed, key)
+    return { label, versions, url }
   }))
   // Fetch and validate every platform before touching either document.
   const updates = await Promise.all(['README.zh-CN.md', 'README.md'].map(async (name, i) => {
     const zh = i === 0
-    const content = renderSupportSection(baseline, rows, zh)
+    const tableRows = rows.map(({ label, versions, url }) => {
+      const names = versions.map(v => `[${v}](${url})`).join(', ')
+      return `| ${label} | ${names || (zh ? '暂无兼容内核' : 'No compatible core listed')} |`
+    })
+    const content = renderSupportSection(baseline, tableRows, zh)
     const url = new URL(`../${name}`, import.meta.url)
     const original = await readFile(url, 'utf8')
     return { url, original, next: replaceSupport(original, content) }
