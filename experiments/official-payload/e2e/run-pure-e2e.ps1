@@ -1,4 +1,4 @@
-# Starts the official desktop, rewrites HKCU\Software\Classes\dsh while running, and writes a unique updater cache under LocalAppData; restores and removes those changes in finally.
+﻿# Starts the official desktop, rewrites HKCU\Software\Classes\dsh while running, and writes a unique updater cache under LocalAppData; restores and removes those changes in finally.
 [CmdletBinding()]
 param(
     [Parameter(Mandatory=$true)][string]$InstallerOld,

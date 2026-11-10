@@ -1,6 +1,7 @@
 import { readFile, writeFile } from 'node:fs/promises'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
+import { safeDataTarget } from '../launcher/data-paths.mjs'
 
 const MARKER = 'dsh-portable-native-settings-command-v3'
 const STORE_MARKER = 'dsh-portable-native-settings-store-command-v1'
@@ -289,21 +290,23 @@ export function patchWorkspaceHeaderActions(source) {
 
 async function main() {
   if (!process.argv[2]) throw new Error('usage: node patch-native-settings-command.mjs <app-root>')
-  const appRoot = path.resolve(process.argv[2])
-  const filename = path.join(appRoot, 'node_modules', '@deepseek-ai', 'dsh-client-ui-settings-general', 'lib', 'client.js')
-  const source = await readFile(filename, 'utf8')
-  await writeFile(filename, patchPortableUpdatesIcon(patchNativeSettingsCommand(source)), 'utf8')
-  const pluginsFile = path.join(appRoot, 'node_modules', '@deepseek-ai', 'dsh-client-ui-settings-plugins', 'lib', 'client.js')
-  await writeFile(pluginsFile, patchPluginSettingsNavigation(await readFile(pluginsFile, 'utf8')), 'utf8')
-  const managerFile = path.join(appRoot, 'node_modules', '@deepseek-ai', 'dsh-client-ui-plugin-manager', 'lib', 'client.js')
-  let manager
-  try { manager = await readFile(managerFile, 'utf8') } catch (error) {
-    if (error.code !== 'ENOENT') throw error
+  process.chdir(process.argv[2])
+  const targets = [
+    ['dsh-client-ui-settings-general', source => patchPortableUpdatesIcon(patchNativeSettingsCommand(source))],
+    ['dsh-client-ui-settings-plugins', patchPluginSettingsNavigation],
+    ['dsh-client-ui-plugin-manager', patchPluginManagerActions, true],
+    ['dsh-client-ui-workspace', patchWorkspaceHeaderActions],
+  ]
+  for (const [name, patch, optional] of targets) {
+    const file = await safeDataTarget(process.cwd(), `node_modules/@deepseek-ai/${name}/lib/client.js`, { createParents: false })
+    if (!file) {
+      if (optional) continue
+      throw new Error(`Staged official client is missing: ${name}`)
+    }
+    const source = await readFile(file, 'utf8')
+    const patched = patch(source)
+    if (patched !== source) await writeFile(file, patched, 'utf8')
   }
-  if (manager !== undefined) await writeFile(managerFile, patchPluginManagerActions(manager), 'utf8')
-  const workspaceFile = path.join(appRoot, 'node_modules', '@deepseek-ai', 'dsh-client-ui-workspace', 'lib', 'client.js')
-  await writeFile(workspaceFile, patchWorkspaceHeaderActions(await readFile(workspaceFile, 'utf8')), 'utf8')
-  console.log(filename)
 }
 
 if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url)) await main()
