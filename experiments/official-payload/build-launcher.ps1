@@ -1,6 +1,6 @@
 param(
     [Parameter(Mandatory=$true)][string]$Output,
-    [ValidatePattern('\A1\.0\.0(?:-alpha\.(?:0|[1-9][0-9]{0,2}))?\z')]
+    [ValidatePattern('\A1\.0\.0(?:-alpha\.(?:0|[1-9][0-9]{0,2})|-rc\.1)?\z')]
     [string]$PortableVersion='1.0.0-alpha.5'
 )
 $ErrorActionPreference = 'Stop'
@@ -9,7 +9,7 @@ if (Test-Path -LiteralPath $Output) { throw 'Use a fresh output executable' }
 New-Item -ItemType Directory -Path (Split-Path -Parent $Output) -Force | Out-Null
 $compiler = Join-Path $env:WINDIR 'Microsoft.NET/Framework64/v4.0.30319/csc.exe'
 $icon = [IO.Path]::GetFullPath((Join-Path $PSScriptRoot '../../assets/DSH-Portable.ico'))
-$revision = if ($PortableVersion -eq '1.0.0') { 65534 } else { ($PortableVersion -split '\.')[-1] }
+$revision = if ($PortableVersion -eq '1.0.0') { 65534 } elseif ($PortableVersion -eq '1.0.0-rc.1') { 65001 } else { ($PortableVersion -split '\.')[-1] }
 $windowsVersion = "1.0.0.$revision"
 $assemblyInfo = Join-Path (Split-Path -Parent $Output) ('launcher-version-' + [Guid]::NewGuid().ToString('N') + '.cs')
 try {

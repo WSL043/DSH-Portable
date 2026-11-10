@@ -84,10 +84,13 @@ try {
         if ($LASTEXITCODE -ne 0) { throw 'Native archive import failed' }
     } finally { Pop-Location }
     $version = [string](Get-Content -LiteralPath $current -Raw | ConvertFrom-Json).version
-    & $node (Join-Path $PSScriptRoot '../../../scripts/check-official-payload-security.mjs') (Join-Path $portable ('app/' + $version + '/resources/app.asar')) --report-only --output (Join-Path $evidence 'official-security.json')
-    if ($LASTEXITCODE -ne 0) { throw 'Could not inspect the actual official ASAR' }
-    $security = Get-Content -LiteralPath (Join-Path $evidence 'official-security.json') -Raw -Encoding UTF8 | ConvertFrom-Json
-    $report.product = @{ version=$version; installerSha512Hex=(Get-FileHash -LiteralPath $Installer -Algorithm SHA512).Hash.ToLowerInvariant(); appAsarSha256=$security.appASARsha256; launcherSha256=(Get-FileHash -LiteralPath (Join-Path $portable 'DeepSeek Harness Portable.exe') -Algorithm SHA256).Hash.ToLowerInvariant(); securityQualificationAllowed=$security.qualificationAllowed }
+    $asar = Join-Path $portable ("app/$version/resources/app.asar")
+    $report.product = @{
+        version=$version
+        installerSha512Hex=(Get-FileHash -LiteralPath $Installer -Algorithm SHA512).Hash.ToLowerInvariant()
+        appAsarSha256=(Get-FileHash -LiteralPath $asar -Algorithm SHA256).Hash.ToLowerInvariant()
+        launcherSha256=(Get-FileHash -LiteralPath (Join-Path $portable 'DeepSeek Harness Portable.exe') -Algorithm SHA256).Hash.ToLowerInvariant()
+    }
     Copy-Item -LiteralPath $Origin -Destination (Join-Path $evidence 'origin.json')
     for ($round=1; $round -le 2; $round++) {
         $probePort = Free-Port

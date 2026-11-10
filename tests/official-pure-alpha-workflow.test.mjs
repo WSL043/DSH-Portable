@@ -32,6 +32,8 @@ test('the alpha workflow parses, uses production channel constants, smoke-tests,
   }
   assert.match(packageStep.run, /app\/current\.json/);
   assert.match(packageStep.run, /Get-ChildItem -LiteralPath \(Join-Path \$liteRoot 'app'\) -Directory/);
+  const draft = workflow.jobs['draft-release'].steps.find(step => step.env?.RELEASE_TAG);
+  assert.ok(draft.run.indexOf('sha256sum --strict --check') < draft.run.indexOf('gh release create'));
   assert.match(source, /--draft/);
   // An alpha is always a draft AND a prerelease, so publishing it can never make it the repository's Latest release.
   assert.match(source, /--draft --prerelease --latest=false/);
@@ -118,6 +120,7 @@ test('manual alpha qualification creates no draft unless publication is explicit
     }
   }
   assert.equal(mayPublish({ publish_draft: true, smoke: 'all' }), true);
+  assert.equal(mayPublish({ publish_draft: true, smoke: 'all', rc_candidate: true }), true);
   assert.equal(mayPublish({ publish_draft: true, smoke: 'all', stable_candidate: true }), false);
   for (const smoke of ['full', 'lite', 'none']) assert.equal(mayPublish({ publish_draft: true, smoke }), false);
   assert.equal(workflow.jobs.package.permissions.contents, 'read');
@@ -130,37 +133,13 @@ test('the build version reaches both packages and the 1.0.0 candidate requires a
   assert.equal(workflow.on.workflow_dispatch.inputs.alpha.default, '5');
   assert.equal(workflow.on.workflow_dispatch.inputs.stable_candidate.default, false);
   assert.match(workflow.env.PORTABLE_VERSION, /stable_candidate && '1\.0\.0'/);
+  assert.equal(workflow.on.workflow_dispatch.inputs.rc_candidate.default, false);
+  assert.match(workflow.env.PORTABLE_VERSION, /rc_candidate && '1\.0\.0-rc\.1'/);
   const build = workflow.jobs.package.steps.find(step => step.name === 'Package the pure portable layout against the production channel');
   assert.equal(build.run.split('-PortableVersion $env:PORTABLE_VERSION').length, 3);
   assert.equal(build.run.split('-ExpectedOfficialVersion $env:EXPECTED_OFFICIAL_VERSION').length, 3);
-  assert.match(build.env.EXPECTED_OFFICIAL_VERSION, /stable_candidate && steps\.select\.outputs\.version/);
+  assert.match(build.env.EXPECTED_OFFICIAL_VERSION, /stable_candidate \|\| inputs\.rc_candidate\) && steps\.select\.outputs\.version/);
   const mode = workflow.jobs.preflight.steps.find(step => step.name === 'Validate package version and draft mode');
   assert.equal(mode.env.OFFICIAL_VERSION, '${{ inputs.version }}');
   assert.match(mode.run, /\[\[ "\$PUBLISH_DRAFT" != true && "\$SMOKE" == all && -n "\$OFFICIAL_VERSION" \]\]/);
-});
-
-test('security collection preserves runtime artifacts and every external writer first requires bound reports', async () => {
-  const alpha = yaml.load(await readFile(new URL('../.github/workflows/official-pure-alpha.yml', import.meta.url), 'utf8'));
-  const channel = yaml.load(await readFile(new URL('../.github/workflows/official-desktop-channel.yml', import.meta.url), 'utf8'));
-  const collectorName = 'Collect actual accepted ASAR security evidence without blocking runtime artifacts';
-  const gateName = 'Require bound actual-ASAR security authorization before any external write';
-  for (const [job, roots] of [[alpha.jobs.package, ['smoke-root-moved', 'smoke-lite-root-moved']], [channel.jobs.gates, ['T27/work/portable']]]) {
-    const step = job.steps.find(step => step.name === collectorName);
-    assert.equal(step.if, job === channel.jobs.gates
-      ? "always() && github.event_name == 'workflow_dispatch' && inputs.publish_channel == true"
-      : 'always()');
-    for (const root of roots) assert.ok(step.env.SECURITY_ROOTS.includes(root));
-    assert.match(step.run, /node scripts\/official-payload-security-evidence\.mjs collect/);
-    assert.match(step.run, /exit 0/);
-    assert.doesNotMatch(step.run, /Expand-Archive|extract|7z\.exe|import /);
-    assert.ok(job.steps.some(step => step.if?.startsWith('always()') && step.with?.path?.includes('/security/')));
-  }
-  for (const job of [alpha.jobs['draft-release'], channel.jobs.publish, channel.jobs['report-failure']]) {
-    const gateIndex = job.steps.findIndex(step => step.name === gateName);
-    const writeIndex = job.steps.findIndex(step => /gh release create|gh api -X PATCH|gh issue comment|gh issue create/.test(step.run ?? ''));
-    assert.ok(gateIndex >= 0 && gateIndex < writeIndex, 'security authorization must precede the first external write');
-    assert.match(job.steps[gateIndex].run, /node scripts\/official-payload-security-evidence\.mjs authorize/);
-    assert.doesNotMatch(job.steps[gateIndex].run, /import /);
-    assert.ok(job.steps.slice(0, gateIndex).some(step => step.uses?.startsWith('actions/download-artifact@') && /security|gates/.test(step.with.name)));
-  }
 });

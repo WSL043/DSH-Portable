@@ -5,7 +5,7 @@
     [Parameter(Mandatory=$true)][string]$FeedUrl,
     [Parameter(Mandatory=$true)][string]$IndexUrl,
     [string]$CacheDirName='@deepseek-aidsh-desktop-updater-portable',
-    [ValidatePattern('\A1\.0\.0(?:-alpha\.(?:0|[1-9][0-9]{0,2}))?\z')]
+    [ValidatePattern('\A1\.0\.0(?:-alpha\.(?:0|[1-9][0-9]{0,2})|-rc\.1)?\z')]
     [string]$PortableVersion='1.0.0-alpha.5',
     [string]$ExpectedOfficialVersion,
     [switch]$Bootstrap
@@ -28,8 +28,8 @@ if ($Bootstrap) {
     $candidate = Get-AcceptedInstallerCandidate $index $Installer
     Assert-Installer $Installer $candidate
 }
-if ($PortableVersion -eq '1.0.0' -and (!$ExpectedOfficialVersion -or $candidate.version -cne $ExpectedOfficialVersion)) {
-    throw 'The 1.0.0 package requires the selected official version to match its accepted installer'
+if ($PortableVersion -in @('1.0.0', '1.0.0-rc.1') -and (!$ExpectedOfficialVersion -or $candidate.version -cne $ExpectedOfficialVersion)) {
+    throw "The $PortableVersion package requires the selected official version to match its accepted installer"
 }
 $appRoot = Join-Path $Output 'app'; $launcherRoot = Join-Path $Output 'launcher'; $dataRoot = Join-Path $Output 'data'
 New-Item -ItemType Directory -Path $appRoot, $launcherRoot, (Join-Path $launcherRoot 'receipts'), (Join-Path $dataRoot 'dsh-home'), (Join-Path $dataRoot 'electron'), (Join-Path $dataRoot 'launcher') -Force | Out-Null

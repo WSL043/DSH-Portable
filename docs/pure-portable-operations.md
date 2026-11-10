@@ -1,6 +1,6 @@
 # 纯便携版通道运维
 
-2026-10-28 更新。适用于 `experiments/official-payload/` 当前开发代码；旧 alpha 保留各自日期。当前范围见 [1.x 路线](roadmap-toward-1.0.md#2026-10-28-维护批次)，历史证据见 [10-23 维护记录](one-x-maintenance-2026-10-23.md)。
+2026-11-11 更新。适用于 `experiments/official-payload/` 当前开发代码；旧 alpha 保留各自日期。当前范围见 [1.x 路线](roadmap-toward-1.0.md#2026-11-11-发布边界)，历史证据见 [10-23 维护记录](one-x-maintenance-2026-10-23.md)。
 
 ## 先验收，发布另行授权
 
@@ -20,6 +20,8 @@ gh workflow run official-pure-e2e.yml --ref <branch> -f scenario=data-transfer -
 
 `stable_candidate=true` 生成 Windows x64 `1.0.0` 完整包和轻量包。指定的官方版本必须与两种包实际选中的最新已接纳版本一致。它要求全部启动检查，输出仅保存在 Actions，供正式发布前核对版本和成品摘要。
 
+`rc_candidate=true` 生成 Windows x64 `1.0.0-rc.1` 的完整包和轻量包，使用显式指定的已接纳官方版本并完成全部冒烟。授权发布时加 `publish_draft=true`，核对成品、摘要和验收后再将草稿公开为预发布。
+
 `candidate.json` 的旧版本是跨版本 E2E 输入，不是过时的生产版本锁，不能随源码基线刷新一起覆盖。
 
 数据迁移场景验证独立 Linux 源归档到 Windows 桌面的迁移：2022 使用明文、2025 使用加密密码文件，各做两轮真实 UI，不创建发布。离线入口、默认排除与故障注入边界见 [数据和恢复验收](one-x-data-recovery-2026-10-23.md)。
@@ -28,17 +30,8 @@ gh workflow run official-pure-e2e.yml --ref <branch> -f scenario=data-transfer -
 
 1. 下载前核对官方候选来源；下载后验证完整大小、SHA-512、有效 Authenticode 与 DeepSeek 发布者，安全展开 NSIS。
 2. 更新契约哨兵用真实官方界面验证 updater 交接；完整 E2E 验证旧到新、离线修复、保留版本及健康回退、真实窗口、退出、协议恢复和写入边界。完整包与轻量包还须各自首启、二启和搬迁后的官方 CLI 配置检查；跨机真实 UI 另走 data-transfer 场景。
-3. 从实际冒烟根的 ASAR 收集安全报告。此前验收的签名 Windows `0.2.1-rc.3` 的 MCP client/core 仍为 2.2.0，三份相关清单完整性通过，但命中 GHSA-6prh-2h8m-c8cw；运行成功仍为 security blocked。
-4. 发布入口先验证共享 CLI 的报告绑定：同一 repository/run/attempt/source/candidate、实际 ASAR 大小/摘要、原报告与复核报告摘要、包摘要以及严格布尔资格。`--report-only` 返回 0 不授予发布资格。
-5. 历史版本的启动器资产不可重建覆盖。只生成本次候选的副本；已有同名不同摘要资产必须拒绝，禁止用 mutable 模式绕过。
-
-检查安全债的只读命令：
-
-```powershell
-node scripts/check-official-payload-security.mjs '<portable-root>/app/<version>/resources/app.asar' --output security.json
-```
-
-已知受影响、未知版本、缺清单、完整性错误均非零退出。诊断时可加 `--report-only` 保留 JSON，报告仍为 blocked。此工具只覆盖报告所列公告，不替代其他发布验收。
+3. 通道发布与候选身份、同次运行的更新及恢复结果绑定；打包草稿上传前校验同次构建产物的 ZIP 摘要。官方应用内部依赖由上游维护，Portable 核验来源、签名、完整性和便携行为。
+4. 历史版本的启动器资产不可重建覆盖。只生成本次候选的副本；已有同名不同摘要资产必须拒绝，禁止用 mutable 模式绕过。
 
 ## 程序、数据与清理
 
@@ -62,7 +55,7 @@ node scripts/check-official-payload-security.mjs '<portable-root>/app/<version>/
 | 修复官方程序 | 同版本的官方安装包；修复 `app/<当前版本>/`，数据原样保留。旧程序和收据放在固定 `.repair-backup` 槽；整个便携根只允许新增一组修复保全槽，任何版本已有槽时停止，核实后移回收站再修复。 |
 | 回退 | 只接受 current 中记录、完整树收据仍匹配的 previous。保留退下的程序，清空 previous，记录 rejected；不支持任意历史版本。 |
 
-GUI 优先读取安装包同目录的 `accepted-index.json`，否则使用随包快照；CLI 可用 `--index-file` 指定。随包 `launcher/accepted-index.json` 是打包时已验收目录的快照；在线更新成功读取的新目录也会刷新该快照。联网机器从索引条目的 `url` 下载官方安装包，将安装包和该快照一同带到离线机器。目录不包含的未来版本不能凭文件名强行接纳；需先取得维护方验收后的新快照。当前发布阻断仍生效，不能把测试专用候选索引当公开接纳。
+GUI 优先读取安装包同目录的 `accepted-index.json`，否则使用随包快照；CLI 可用 `--index-file` 指定。随包 `launcher/accepted-index.json` 是打包时已验收目录的快照；在线更新成功读取的新目录也会刷新该快照。联网机器从索引条目的 `url` 下载官方安装包，将安装包和该快照一同带到离线机器。目录不包含的未来版本不能凭文件名强行接纳；需先取得维护方验收后的新快照。测试专用候选索引不属于公开目录。
 
 自动化维护可使用同一启动器参数，无需第二套安装器：
 

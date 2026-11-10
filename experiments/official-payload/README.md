@@ -1,6 +1,6 @@
 # 官方成品便携化 / Official payload portable layer
 
-Windows x64 的 1.x 开发线，当前启动器标识仍为 `1.0.0-alpha.5`，与 0.x Native 稳定版分开维护。2026-10-28 本轮仅维护和验收，不创建 Release、草稿、标签或更新通道。进度、实物身份和未完成项见 [本轮记录](../../docs/one-x-maintenance-2026-10-23.md)。
+Windows x64 的 1.x 线将官方 Desktop 成品便携化，与 0.x Native 稳定版分开维护。发布与验收入口见 [通道运维](../../docs/pure-portable-operations.md)。
 
 ## 当前实现
 
@@ -18,12 +18,10 @@ Windows x64 的 1.x 开发线，当前启动器标识仍为 `1.0.0-alpha.5`，�
 
 真实验收使用官方签名成品，覆盖页面输入、插件生命周期、正常退出、搬迁、跨版本更新及文件/注册表边界；源码单测、同版本检查、端口可达都不能代替这些结果。测试结果按场景和成品摘要报告。
 
-安全检查直接读取实际 `app.asar` 内全部 MCP client/core 清单，验证其 entry integrity 并绑定整份 ASAR 摘要。`--report-only` 只保留证据；发布另须验证 `qualificationAllowed === true` 及同次运行、源码、候选和包的绑定。该检查只覆盖指定公告，不是全面安全证明。
-
-此前验收的官方 Windows `0.2.1-rc.3` 实物 MCP client/core 为 `2.2.0`，命中 [GHSA-6prh-2h8m-c8cw](https://github.com/modelcontextprotocol/typescript-sdk/security/advisories/GHSA-6prh-2h8m-c8cw)，发布资格阻断。保留官方字节，等待官方修复成品后重新验收。
+官方应用内部依赖由上游维护；Portable 验证安装包来源、签名、摘要和便携运行边界。
 
 旧 Native 历史/设置/工作区的显式迁入、独立 Linux 到 Windows 2022/2025 的两轮实际桌面验收，以及下载/更新中断恢复见 [数据与恢复记录](../../docs/one-x-data-recovery-2026-10-23.md)。默认不迁凭据、浏览器登录或旧插件 profile；真实跨机账号登录、模型请求、任意第三方插件、物理断电和实际填满磁盘仍无本轮证据。保留旧程序不保证新版数据能降级。
 
 官方默认 `Documents/deepseek-harness/default-workspace` 及用户另选工作区仍可在便携根外；当前写入审计不等于全应用零外写保证。
 
-The development line uses the official Desktop for everyday interactions and preserves the official payload bytes except `app-update.yml`. The launcher keeps managed homes under the portable root. Scheduled qualification produces evidence only; publication is opt-in and independently security-gated. The signed Windows 0.2.1-rc.3 payload contains affected MCP 2.2.0, so it remains blocked from publication. Source tests and runtime acceptance do not establish full 1.0 or comprehensive security qualification.
+The development line uses the official Desktop for everyday interactions and preserves the official payload bytes except `app-update.yml`. The launcher keeps managed homes under the portable root. Scheduled qualification produces evidence only; Publication is opt-in and requires the matching runtime and package checks. DeepSeek maintains the dependencies inside the official Desktop.

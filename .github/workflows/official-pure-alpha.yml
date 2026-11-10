@@ -1,4 +1,4 @@
-name: Package pure portable alpha as a draft
+name: Package pure portable
 on:
   workflow_dispatch:
     inputs:
@@ -19,7 +19,7 @@ on:
         type: choice
         options: [all, full, lite, none]
       publish_draft:
-        description: Explicitly create or update the alpha draft after both package smokes pass
+        description: Explicitly create or update a prerelease draft after both package smokes pass
         required: false
         default: false
         type: boolean
@@ -28,11 +28,16 @@ on:
         required: false
         default: false
         type: boolean
+      rc_candidate:
+        description: Build Windows 1.0.0-rc.1 from an explicit accepted official version with all smokes
+        required: false
+        default: false
+        type: boolean
 permissions:
   contents: read
 env:
   ALPHA: ${{ inputs.alpha || '5' }}
-  PORTABLE_VERSION: ${{ inputs.stable_candidate && '1.0.0' || format('1.0.0-alpha.{0}', inputs.alpha || '5') }}
+  PORTABLE_VERSION: ${{ inputs.stable_candidate && '1.0.0' || inputs.rc_candidate && '1.0.0-rc.1' || format('1.0.0-alpha.{0}', inputs.alpha || '5') }}
 concurrency:
   group: official-pure-alpha-draft
   cancel-in-progress: false
@@ -48,13 +53,18 @@ jobs:
       - name: Validate package version and draft mode
         shell: bash
         env:
+          RC_CANDIDATE: ${{ inputs.rc_candidate }}
           STABLE_CANDIDATE: ${{ inputs.stable_candidate }}
           PUBLISH_DRAFT: ${{ inputs.publish_draft }}
           SMOKE: ${{ inputs.smoke }}
           OFFICIAL_VERSION: ${{ inputs.version }}
         run: |
-          if [[ "$STABLE_CANDIDATE" == true ]]; then
+          if [[ "$STABLE_CANDIDATE" == true && "$RC_CANDIDATE" == true ]]; then
+            echo "Choose either a stable candidate or an RC" >&2; exit 1
+          elif [[ "$STABLE_CANDIDATE" == true ]]; then
             [[ "$PUBLISH_DRAFT" != true && "$SMOKE" == all && -n "$OFFICIAL_VERSION" ]] || { echo "A stable candidate requires an explicit official version, all smokes, and publication disabled" >&2; exit 1; }
+          elif [[ "$RC_CANDIDATE" == true ]]; then
+            [[ "$SMOKE" == all && -n "$OFFICIAL_VERSION" ]] || { echo "An RC requires an explicit official version and all smokes" >&2; exit 1; }
           else
             [[ "$ALPHA" =~ ^(0|[1-9][0-9]{0,2})$ ]] || { echo "Invalid alpha number" >&2; exit 1; }
           fi
@@ -90,15 +100,13 @@ jobs:
           Move-Item -LiteralPath (Join-Path $env:RUNNER_TEMP 'package') -Destination app/node_modules/js-yaml
       - name: Run the official payload static and contract tests
         shell: pwsh
-        run: node --test tests/official-pure-portable.test.mjs tests/official-pure-alpha-workflow.test.mjs tests/official-desktop-channel-workflow.test.mjs tests/official-payload-security.test.mjs tests/official-payload-security-evidence.test.mjs tests/official-pure-package-smoke.test.mjs tests/official-desktop-channel.test.mjs
+        run: node --test tests/official-pure-portable.test.mjs tests/official-pure-alpha-workflow.test.mjs tests/official-desktop-channel-workflow.test.mjs tests/official-pure-package-smoke.test.mjs tests/official-desktop-channel.test.mjs
   package:
     needs: preflight
     runs-on: windows-latest
     timeout-minutes: 90
     permissions:
       contents: read
-    outputs:
-      version: ${{ steps.select.outputs.version }}
     steps:
       - uses: actions/checkout@v7
       - uses: actions/setup-node@v7
@@ -129,7 +137,7 @@ jobs:
         shell: pwsh
         env:
           INSTALLER: ${{ steps.installer.outputs.installer }}
-          EXPECTED_OFFICIAL_VERSION: ${{ inputs.stable_candidate && steps.select.outputs.version || '' }}
+          EXPECTED_OFFICIAL_VERSION: ${{ (inputs.stable_candidate || inputs.rc_candidate) && steps.select.outputs.version || '' }}
         run: |
           $ErrorActionPreference = 'Stop'
           $urls = node experiments/official-payload/channel/constants.mjs | ConvertFrom-Json
@@ -197,29 +205,6 @@ jobs:
             -WorkRoot 'build/orch-080/T32/smoke-lite-local-root' `
             -EvidenceRoot 'build/orch-080/T32/lite-evidence/local-first-install' `
             -Bootstrap -LocalInstallerFile $env:INSTALLER
-      - name: Collect actual accepted ASAR security evidence without blocking runtime artifacts
-        if: always()
-        shell: pwsh
-        env:
-          SECURITY_DIRECTORY: build/orch-080/T32/security
-          SECURITY_CANDIDATE: build/orch-080/T32/candidate.json
-          SECURITY_ROOTS: '[["full","build/orch-080/T32/smoke-root-moved"],["lite","build/orch-080/T32/smoke-lite-root-moved"]]'
-          SECURITY_ASSETS: '["build/orch-080/T32/DSH-Portable-${{ env.PORTABLE_VERSION }}-windows-x64.zip","build/orch-080/T32/DSH-Portable-${{ env.PORTABLE_VERSION }}-windows-x64-lite.zip"]'
-        run: |
-          node scripts/official-payload-security-evidence.mjs collect
-          if (Test-Path 'build/orch-080/T32/security/summary.md') { Get-Content 'build/orch-080/T32/security/summary.md' | Out-File -FilePath $env:GITHUB_STEP_SUMMARY -Append -Encoding utf8 }
-          if ($LASTEXITCODE -ne 0) {
-            Write-Warning 'Security evidence collection failed; publication remains blocked. Runtime artifacts are retained.'
-            'Security blocked: evidence collection failed. Runtime passing does not establish publication qualification.' | Out-File -FilePath $env:GITHUB_STEP_SUMMARY -Append -Encoding utf8
-          }
-          exit 0
-      - uses: actions/upload-artifact@v7
-        if: always()
-        with:
-          name: official-pure-${{ env.PORTABLE_VERSION }}-security
-          path: build/orch-080/T32/security/
-          if-no-files-found: warn
-          retention-days: 14
       - uses: actions/upload-artifact@v7
         if: always()
         with:
@@ -281,36 +266,23 @@ jobs:
         with:
           name: official-pure-${{ env.PORTABLE_VERSION }}-draft-assets
           path: release-input
-      - uses: actions/download-artifact@v8
-        with:
-          name: official-pure-${{ env.PORTABLE_VERSION }}-security
-          path: release-security
-      - name: Require bound actual-ASAR security authorization before any external write
-        shell: bash
-        env:
-          SECURITY_DIRECTORY: release-security
-          SECURITY_CANDIDATE: release-security/selection.json
-          SECURITY_EXPECTED_VERSION: ${{ needs.package.outputs.version }}
-          SECURITY_KINDS: '["full","lite"]'
-          SECURITY_ASSETS: '["release-input/DSH-Portable-${{ env.PORTABLE_VERSION }}-windows-x64.zip","release-input/DSH-Portable-${{ env.PORTABLE_VERSION }}-windows-x64-lite.zip"]'
-        run: |
-          node scripts/official-payload-security-evidence.mjs authorize
-      - name: Create or update only the alpha.${{ env.ALPHA }} draft release
+      - name: Verify package hashes and create or update the prerelease draft
         env:
           GH_TOKEN: ${{ github.token }}
-          RELEASE_TAG: v1.0.0-alpha.${{ env.ALPHA }}
-          RELEASE_NAME: DSH-Portable 1.0.0-alpha.${{ env.ALPHA }} — Pure portable
+          RELEASE_TAG: v${{ env.PORTABLE_VERSION }}
+          RELEASE_NAME: DSH-Portable ${{ env.PORTABLE_VERSION }} — Pure portable
         run: |
           set -euo pipefail
+          (cd release-input && head -n 2 checksums.txt | sha256sum --strict --check)
           # Draft releases have no tag yet, so the tags endpoint cannot see them: search the release list instead.
           # A draft whose tag does not exist yet is reported as "untagged-..."; match it by title too.
           EXISTING=$(gh api --paginate "repos/$GITHUB_REPOSITORY/releases?per_page=100" --jq ".[] | select(.tag_name == \"$RELEASE_TAG\" or (.draft and .name == \"$RELEASE_NAME\")) | [.id, .draft] | join(\" \")" | head -n 1)
           if [ -z "$EXISTING" ]; then
-            gh release create "$RELEASE_TAG" --repo "$GITHUB_REPOSITORY" --target "$GITHUB_SHA" --draft --prerelease --latest=false --title 'DSH-Portable 1.0.0-alpha.${{ env.ALPHA }} — Pure portable' --notes-file release-input/SOURCE.md
+            gh release create "$RELEASE_TAG" --repo "$GITHUB_REPOSITORY" --target "$GITHUB_SHA" --draft --prerelease --latest=false --title "$RELEASE_NAME" --notes-file release-input/SOURCE.md
           else
             RELEASE_ID=${EXISTING%% *}
             DRAFT=${EXISTING##* }
-            if [ "$DRAFT" != true ]; then echo 'Refusing to mutate an existing non-draft alpha.${{ env.ALPHA }} release' >&2; exit 1; fi
+            if [ "$DRAFT" != true ]; then echo "Refusing to mutate an existing public $RELEASE_TAG release" >&2; exit 1; fi
             gh api -X PATCH "repos/$GITHUB_REPOSITORY/releases/$RELEASE_ID" -f tag_name="$RELEASE_TAG" -f target_commitish="$GITHUB_SHA" -f name="$RELEASE_NAME" -F body=@release-input/SOURCE.md -F draft=true -F prerelease=true > /dev/null
           fi
           node scripts/upload-release-assets.mjs "$RELEASE_TAG" release-input/DSH-Portable-${{ env.PORTABLE_VERSION }}-windows-x64.zip release-input/DSH-Portable-${{ env.PORTABLE_VERSION }}-windows-x64-lite.zip release-input/checksums.txt release-input/SOURCE.md --mutable

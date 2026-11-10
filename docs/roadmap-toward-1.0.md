@@ -2,6 +2,10 @@
 
 2026-09-29，用户确定方向。本文记录决定和可度量的现状，具体批次开工前仍以 [验收标准](native-release-exit-criteria.md) 与各任务记录为准。
 
+## 2026-11-11 发布边界
+
+1.x 验证官方签名安装包的来源、大小与摘要，并实测便携启动、更新、修复和回退。官方应用内部依赖由上游维护。当前流程见 [通道运维](pure-portable-operations.md)。以下日期段落保留当时的验收与决策记录。
+
 ## 2026-10-28 维护批次
 
 继续维护 Portable 自身边界，不发布、不启用停用通道、不修改公开索引或用户本地包。[Windows nightly](https://download.deepseek.com/dsh-desk/feeds/win-x64/nightly.yml) 为 0.2.1-rc.3；下载的 289,415,960 B 安装包大小、SHA-512 与官方 feed 一致，Authenticode 及发布者有效。实际 ASAR 为 182,434,783 B，SHA-256 `04b32e3a872826ba15cfb2081c6a929a8d4ecaa65e09a2543e5a6b30e2eff1f0`；desktop/client/core 三份清单完整性核对通过，MCP client/core 仍为 2.2.0，命中[官方公告](https://github.com/modelcontextprotocol/typescript-sdk/security/advisories/GHSA-6prh-2h8m-c8cw)，发布资格继续 blocked。签名包依赖由官方修复，Portable 保持原始 EXE/ASAR。
