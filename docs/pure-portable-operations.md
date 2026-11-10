@@ -39,7 +39,7 @@ node scripts/check-official-payload-security.mjs '<portable-root>/app/<version>/
 
 ## 程序、数据与清理
 
-完整包包含官方 `app/<version>/`；轻量包无应用版本目录和 `current.json`，解压后上限 40 MiB；首次可联网安装，也可由维护入口使用本地官方安装包。默认不播种 Portable 插件；可选种子实现保留供显式配置使用。
+完整包包含官方 `app/<version>/`；轻量包无应用版本目录和 `current.json`，解压后上限 40 MiB；首次可联网安装，也可由维护入口使用本地官方安装包。Portable 不预装插件，安装与管理使用官方 Desktop 的插件页面。
 
 应用状态位于 `data/dsh-home`、`data/agents`、`data/electron` 和 `data/cache/native-addons`。官方默认 `Documents/deepseek-harness/default-workspace` 及用户另选工作区仍可位于根外。官方 updater 的专用缓存和运行期间临时 `HKCU\Software\Classes\dsh` 注册是已知根外边界；退出须核对注册表恢复。当前 E2E 在官方程序及实际观察到的子进程链内，对全局 `.dsh`、`.agents` 和默认 Electron profile 的写入作失败判定；其他官方自身写入记录但未全部收窄为允许清单，不能把该门槛描述为全应用零外写证明。
 

@@ -5,7 +5,6 @@
     [Parameter(Mandatory=$true)][string]$FeedUrl,
     [Parameter(Mandatory=$true)][string]$IndexUrl,
     [string]$CacheDirName='@deepseek-aidsh-desktop-updater-portable',
-    [string[]]$SeedPlugin=@(),
     [switch]$Bootstrap
 )
 $ErrorActionPreference = 'Stop'
@@ -15,15 +14,6 @@ Assert-PlainPath $Output
 if (Test-Path -LiteralPath $Output) { throw 'Pure packaging requires a fresh output directory' }
 Assert-FeedUrl $FeedUrl; Assert-FeedUrl $IndexUrl
 if ($CacheDirName -notmatch '^[A-Za-z0-9._@-]{1,100}$' -or $CacheDirName -in @('.', '..')) { throw 'Invalid updater cache directory name' }
-if ($SeedPlugin.Count -gt 32) { throw 'At most 32 seed plugins may be included' }
-$seedManifest = $null
-$seedScriptSource = Join-Path $PSScriptRoot '../../launcher/seed-plugins.ps1'
-$seedModuleSource = Join-Path $PSScriptRoot 'seed-plugins-core.psm1'
-if ($SeedPlugin.Count -gt 0) {
-    if (-not (Test-Path -LiteralPath $seedScriptSource -PathType Leaf) -or -not (Test-Path -LiteralPath $seedModuleSource -PathType Leaf)) { throw 'Seed launcher script or module is missing' }
-    Import-Module (Join-Path $PSScriptRoot 'SeedPluginPackaging.psm1') -Force
-    $seedManifest = New-SeedManifest -ArchivePath $SeedPlugin
-}
 $indexText = Read-BoundedHttpText $IndexUrl
 $index = $indexText | ConvertFrom-Json
 if ($null -eq $index.versions -or $index.versions.Count -gt 100) { throw 'Accepted index has an invalid versions list' }
@@ -47,14 +37,6 @@ try {
     }
     & (Join-Path $PSScriptRoot 'build-launcher.ps1') -Output (Join-Path $Output 'DeepSeek Harness Portable.exe')
     foreach ($file in @('apply-update.ps1', 'Payload.psm1')) { Copy-Item -LiteralPath (Join-Path $PSScriptRoot $file) -Destination (Join-Path $launcherRoot $file) }
-    if ($null -ne $seedManifest) {
-        $seedDirectory = Join-Path $launcherRoot 'seed'
-        New-Item -ItemType Directory -Path $seedDirectory -Force | Out-Null
-        for ($i = 0; $i -lt $SeedPlugin.Count; $i++) { Copy-Item -LiteralPath $SeedPlugin[$i] -Destination (Join-Path $seedDirectory $seedManifest.plugins[$i].file) }
-        [IO.File]::WriteAllText((Join-Path $seedDirectory 'seed.json'), (($seedManifest | ConvertTo-Json -Depth 8) + "`n"), (New-Object Text.UTF8Encoding($false)))
-        Copy-Item -LiteralPath $seedScriptSource -Destination (Join-Path $launcherRoot 'seed-plugins.ps1')
-        Copy-Item -LiteralPath $seedModuleSource -Destination (Join-Path $launcherRoot 'seed-plugins-core.psm1')
-    }
     foreach ($file in @('7z.exe', '7z.dll', 'License.txt')) {
         $source = Join-Path (Split-Path -Parent $SevenZip) $file
         if (-not (Test-Path -LiteralPath $source -PathType Leaf)) { throw "Required 7-Zip component is missing: $file" }
@@ -99,12 +81,6 @@ try {
 
 **Runtime limits:** Older official packages use fixed port 19387; newer packages can use dynamic ports. Close other DeepSeek Harness desktop instances first. A conflict produces a bilingual message; no process is terminated. The official default workspace is created in your system Documents folder (`Documents\deepseek-harness`), as with the installed app, and does not move with this folder; your own projects can live anywhere. The launcher does not patch the official EXE, ASAR or runtime and ships no adapters, default plugins or marketplace files.
 '@
-    if ($null -ne $seedManifest) {
-        $readme = $readme.Replace('不预装插件、不带市场。', '预装的插件默认关闭，不带市场。首次启动创建官方 profile 后，第二次启动前完成播种。')
-        $readme = $readme.Replace('No plugins or marketplace are bundled.', 'Seed plugins are preinstalled but disabled by default; the first launch creates the official profile and the seed step runs before the second launch. No marketplace is bundled.')
-        $readme = $readme.Replace('也不包含适配器、默认插件或市场文件。', '也不包含适配器或市场文件。')
-        $readme = $readme.Replace('and ships no adapters, default plugins or marketplace files.', 'and ships no adapters or marketplace files.')
-    }
     if ($Bootstrap) {
         $readme = $readme.Replace('本包使用官方桌面安装包的原始文件；唯一允许的官方文件差异是 `app/<版本>/resources/app-update.yml`。', '轻量包不含官方桌面文件。首次启动从已验收索引选择最新版本，从官方 CDN 下载并校验安装包，再使用随包更新引擎完成解包与切换。')
         $readme = $readme.Replace('Official desktop files are preserved byte-for-byte except `app/<version>/resources/app-update.yml`.', 'This lite package excludes the official desktop payload. On first launch it selects the newest accepted version, downloads and verifies the installer from the official CDN, then installs it with the bundled update engine.')

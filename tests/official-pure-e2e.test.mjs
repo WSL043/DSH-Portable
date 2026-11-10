@@ -343,18 +343,21 @@ test('Procmon streaming findings retain raw counts and exact system feature-usag
   const row = (pid, name, operation, path, detail = '') => ({ 'Time of Day': '16:30:00.0000000', 'Process Name': name, PID: String(pid), Operation: operation, Path: path, Result: 'SUCCESS', Detail: detail });
   const binary = 'Type: REG_BINARY, Length: 930, Data: 01 02 03 04';
   const rows = [row(100, 'DeepSeek Harness.exe', 'Process Start', String.raw`D:\portable\DeepSeek Harness.exe`, 'Parent PID: 4')];
-  for (const [pid, name, image] of [[200, 'powershell.exe', '@SYSTEM_PS@'], [201, 'powershell.exe', String.raw`D:\unrelated\powershell.exe`], [202, 'cmd.exe', String.raw`D:\unrelated\cmd.exe`]]) {
+  for (const [pid, name, image] of [[200, 'powershell.exe', '@SYSTEM_PS@'], [201, 'powershell.exe', String.raw`D:\unrelated\powershell.exe`], [202, 'cmd.exe', String.raw`D:\unrelated\cmd.exe`],
+    [204, 'DeepSeek Harness Portable.exe', String.raw`D:\portable\DeepSeek Harness Portable.exe`], [205, 'DeepSeek Harness Portable.exe', String.raw`D:\unrelated\DeepSeek Harness Portable.exe`]]) {
     rows.push(row(100, 'DeepSeek Harness.exe', 'Process Create', image, 'PID: ' + pid));
     rows.push(row(pid, name, 'Process Start', image, 'Parent PID: 100, Command line: fixture, Environment: SYNTHETIC_TRACE_SECRET=must-not-upload'));
   }
   const repeated = 1000;
   for (let index = 0; index < repeated; index++) rows.push(row(200, 'powershell.exe', 'RegSetValue', stateKey, binary));
+  rows.push(row(204, 'DeepSeek Harness Portable.exe', 'RegSetValue', stateKey, binary));
   const negatives = [
     row(201, 'powershell.exe', 'RegSetValue', stateKey, binary),
     row(200, 'powershell.exe', 'RegSetValue', stateKey.slice(0, -1) + '6', binary),
     row(200, 'powershell.exe', 'RegDeleteValue', stateKey, binary),
     row(200, 'powershell.exe', 'RegSetValue', stateKey, 'Type: REG_SZ, Length: 4, Data: text'),
     row(202, 'cmd.exe', 'RegSetValue', stateKey, binary),
+    row(205, 'DeepSeek Harness Portable.exe', 'RegSetValue', stateKey, binary),
     row(100, 'DeepSeek Harness.exe', 'RegSetValue', stateKey, binary),
     row(200, 'powershell.exe', 'RegSetValue', stateKey + String.raw`\child`, binary),
     row(200, 'powershell.exe', 'RegCreateKey', stateKey, binary),
@@ -364,13 +367,13 @@ test('Procmon streaming findings retain raw counts and exact system feature-usag
   rows.push(row(203, 'powershell.exe', 'RegSetValue', stateKey, binary));
   const { observed, output, trace } = await runTraceParserFixture(rows, 'dsh-trace-streaming-', t);
   assert.equal(observed.rows, rows.length);
-  assert.equal(observed.summary.outsideWriteEvents, repeated + negatives.length);
+  assert.equal(observed.summary.outsideWriteEvents, repeated + 1 + negatives.length);
   assert.equal(observed.summary.unclassifiedEvents, negatives.length);
-  assert.equal(observed.summary.ownedProcesses, 4);
+  assert.equal(observed.summary.ownedProcesses, 6);
   assert.equal(observed.summary.contextTruncated, false);
   assert.equal(observed.storedFindings, observed.outside.length);
   assert.ok(observed.storedFindings < 12, 'repeated identical findings must not accumulate objects');
-  assert.equal(observed.outside.filter(item => item.category === 'reviewed-windows-feature-usage').length, 1);
+  assert.deepEqual(observed.outside.filter(item => item.category === 'reviewed-windows-feature-usage').map(item => item.pid).sort(), ['200', '204']);
   const samePath = observed.outside.filter(item => item.process === 'powershell.exe' && item.operation === 'RegSetValue' && item.path === stateKey);
   assert.deepEqual(samePath.map(item => item.category).sort(), ['needs-review', 'reviewed-windows-feature-usage']);
   assert.ok(observed.outside.every(item => item.pid !== '203'), 'unknown ownership must never gain the reviewed classification');

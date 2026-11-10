@@ -18,7 +18,7 @@ test('the alpha workflow parses, uses production channel constants, smoke-tests,
   const selector = await readFile(new URL('../experiments/official-payload/channel/select-candidate.mjs', import.meta.url), 'utf8');
   assert.match(selector, /redirect:\s*'follow'/);
   assert.match(source, /-FeedUrl \$urls\.channelBaseUrl[\s\S]*-IndexUrl \$urls\.indexUrl/);
-  assert.match(source, /smoke-alpha-seeded\.ps1/);
+  assert.match(source, /smoke-portable-package\.ps1/);
   assert.match(source, /DSH-Portable-1\.0\.0-alpha\.\$\{\{ env\.ALPHA \}\}-windows-x64-lite\.zip/);
   assert.match(source, /\$liteBytes -ge 40MB/);
   assert.match(source, /launcher\/bootstrap\.json/);
@@ -49,16 +49,19 @@ test('the 1.0 alpha preinstalls no plugins: no plugin sources, no seed packaging
   assert.equal(workflow.env.IMAGE_VIEWER_COMMIT, undefined);
   const pluginCheckouts = workflow.jobs.package.steps.filter(step => step.uses === 'actions/checkout@v7' && step.with?.repository);
   assert.deepEqual(pluginCheckouts, []);
-  const smokes = workflow.jobs.package.steps.filter(step => /smoke-alpha-seeded\.ps1/.test(step.run ?? ''));
+  const smokes = workflow.jobs.package.steps.filter(step => /smoke-portable-package\.ps1/.test(step.run ?? ''));
   assert.equal(smokes.length, 3);
-  for (const step of smokes) assert.match(step.run, /-NoSeed/);
+  const packager = await readFile(new URL('../experiments/official-payload/package-pure.ps1', import.meta.url), 'utf8');
+  const launcher = await readFile(new URL('../experiments/official-payload/Launcher.cs', import.meta.url), 'utf8');
+  assert.doesNotMatch(packager, /SeedPlugin|seed-plugins/);
+  assert.doesNotMatch(launcher, /RunSeedPlugins|seed-plugins/);
 });
 
 test('the alpha failure evidence upload excludes the official payload', async () => {
   const file = new URL('../.github/workflows/official-pure-alpha.yml', import.meta.url);
   const workflow = yaml.load(await readFile(file, 'utf8'));
   const steps = workflow.jobs.package.steps;
-  const evidence = steps.find(step => step.with?.name === 'official-pure-alpha-${{ env.ALPHA }}-seed-smoke-evidence');
+  const evidence = steps.find(step => step.with?.name === 'official-pure-alpha-${{ env.ALPHA }}-package-smoke-evidence');
   assert.ok(evidence);
   assert.equal(evidence.if, 'always()');
   assert.equal(evidence.with.path, 'build/orch-080/T32/evidence/');
