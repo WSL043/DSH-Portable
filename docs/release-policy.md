@@ -25,7 +25,7 @@ Portable owns its desktop shell and integration: startup and exit, windows and t
 
 官方 DSH 核心、dsh-market 和 DSH-Portable 是三个独立的发布对象：
 
-- **核心（官方 DSH）**：定期检查只验证官方可安装包、完整性和对应提交。通过 Windows、macOS、Linux 的成品验收后，核心可以独立进入自己的更新通道；核心上游有新版本不会触发 Portable 发布。
+- **核心（官方 DSH）**：定期检查只验证官方可安装包、完整性和对应提交。通过 Windows、macOS、Linux 的成品验收后，核心可以独立进入自己的更新通道；核心上游有新版本不会触发 Portable 发布。1.x Windows 官方桌面通道每小时检测新版本，验签、核对 SHA-512 并通过更新与恢复试验后自动配信。
 - **Market**：上游检查只把新版本放入人工审查 inbox。只有适用于 Portable 的改动才会在失败测试、兼容性检查和人工审查后移植到随附的 Market；Market 上游版本不会自动合并，也不会自动发布 Portable。
 - **Portable**：Portable 自己决定版本号和计划发布节奏。已接受的核心或 Market 修复通常累积到下一次计划中的 Portable 发布；上游检查、验收 PR 或合并都不会启动 Portable 发布。修复不会自动改变版本号，版本变更必须由人工在发布时决定。
 
@@ -50,7 +50,7 @@ Historical version names predate this policy and are not precedent for future re
 
 The official DSH core, dsh-market, and DSH-Portable are three independent release objects:
 
-- **Core (official DSH)**: scheduled checks verify the installable package, its integrity, and its corresponding commit. After the Windows, macOS, and Linux product gates pass, the core may enter its own update channel; an upstream core release does not trigger a Portable release.
+- **Core (official DSH)**: scheduled checks verify the installable package, its integrity, and its corresponding commit. After the Windows, macOS, and Linux product gates pass, the core may enter its own update channel; an upstream core release does not trigger a Portable release. The separate 1.x Windows Desktop channel checks hourly and publishes after signature, SHA-512, update and recovery checks pass.
 - **Market**: upstream checks add releases to a manual review inbox. Only changes that apply to Portable are ported into the bundled Market after a failing test, compatibility checks, and human review. A Market upstream release is never merged or published automatically and never publishes Portable automatically.
 - **Portable**: Portable owns its version and planned release cadence. Accepted core or Market fixes normally accumulate for the next planned Portable release; an upstream check, acceptance pull request, or merge never starts a Portable release. A fix never changes the version automatically; a human chooses version changes during release preparation.
 

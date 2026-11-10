@@ -2,9 +2,9 @@
 
 2026-11-11 更新。适用于 `experiments/official-payload/` 当前开发代码；旧 alpha 保留各自日期。当前范围见 [1.x 路线](roadmap-toward-1.0.md#2026-11-11-发布边界)，历史证据见 [10-23 维护记录](one-x-maintenance-2026-10-23.md)。
 
-## 先验收，发布另行授权
+## 定时验收与通道发布
 
-GitHub Actions 按每小时计划检查官方 Windows Desktop feed。main 中的验收流程或验收源码有改动时，也自动运行同一套检查。核验签名和 SHA-512，运行真实更新、离线修复、回退和健康恢复。候选身份与验收源码均相同时复用已记录的结果。自动流程只生成运行验收证据。发布通道时手动指定 `publish_channel=true`，重新执行本轮验收和发布检查。
+GitHub Actions 每小时检查官方 Windows Desktop feed。新候选通过签名、SHA-512、实际更新、离线修复、回退和健康恢复后，自动发布到 1.x 的 Windows 桌面通道并回读公开下载。已发布版本跳过；若目录已有候选但 feed 尚未切换，重新验收后补齐。main 中验收源码的变更触发只读检查。手动运行默认只验收，也可显式指定 `publish_channel=true` 补跑通道发布。
 
 仅验收的示例（先提交并推送待验分支，`<branch>` 替换为实际分支）：
 
@@ -16,7 +16,7 @@ gh workflow run official-pure-e2e.yml --ref <branch> -f candidate_version=0.2.1-
 gh workflow run official-pure-e2e.yml --ref <branch> -f scenario=data-transfer -f candidate_version=0.2.1-rc.3
 ```
 
-第一条执行与定时任务相同的 Windows Desktop 完整资格检查。打包流程使用生产目录中已接纳的版本，生成完整包与 Bootstrap 包并实际冒烟，不创建 alpha.99 草稿或标签；不表示最新 nightly 已被接纳。更新 E2E 由受控旧候选 `candidate.json` 的 `0.1.7-rc.2` 升级至官方 feed 当前版本；参数只断言新版身份，不改写生产目录。feed 版本改变后应先核实身份再调整断言。
+第一条对指定官方版本执行 Windows Desktop 完整资格检查。打包流程使用生产目录中已接纳的版本，生成完整包与 Bootstrap 包并实际冒烟，不创建 alpha.99 草稿或标签；不表示最新 nightly 已被接纳。更新 E2E 由受控旧候选 `candidate.json` 的 `0.1.7-rc.2` 升级至官方 feed 当前版本；参数只断言新版身份，不改写生产目录。feed 版本改变后应先核实身份再调整断言。
 
 `stable_candidate=true` 生成 Windows x64 `1.0.0` 完整包和轻量包。指定的官方版本必须与两种包实际选中的最新已接纳版本一致。它要求全部启动检查，输出仅保存在 Actions，供正式发布前核对版本和成品摘要。
 

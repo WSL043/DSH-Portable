@@ -14,7 +14,7 @@ Windows x64 的 1.x 线将官方 Desktop 成品便携化，与 0.x Native 稳定
 
 ## 验收与发布边界
 
-桌面通道定时发现官方候选并自动验证签名、哈希、更新和恢复。main 的验收流程或验收源码变更时，也会运行同一套检查。发布通道需手动指定 `publish_channel=true`。手动打包默认只生成 Actions 产物（`publish_draft=false`）。具体操作见 [通道运维](../../docs/pure-portable-operations.md)。
+桌面通道定时发现官方候选并自动验证签名、哈希、更新和恢复。新版本通过验收后自动发布到 1.x Windows 更新通道并回读公开下载。main 的验收流程或源码变更时运行只读检查。手动打包默认只生成 Actions 产物（`publish_draft=false`）。具体操作见 [通道运维](../../docs/pure-portable-operations.md)。
 
 真实验收使用官方签名成品，覆盖页面输入、插件生命周期、正常退出、搬迁、跨版本更新及文件/注册表边界；源码单测、同版本检查、端口可达都不能代替这些结果。测试结果按场景和成品摘要报告。
 
@@ -24,4 +24,4 @@ Windows x64 的 1.x 线将官方 Desktop 成品便携化，与 0.x Native 稳定
 
 官方默认 `Documents/deepseek-harness/default-workspace` 及用户另选工作区仍可在便携根外；当前写入审计不等于全应用零外写保证。
 
-The development line uses the official Desktop for everyday interactions and preserves the official payload bytes except `app-update.yml`. The launcher keeps managed homes under the portable root. Scheduled qualification produces evidence only; Publication is opt-in and requires the matching runtime and package checks. DeepSeek maintains the dependencies inside the official Desktop.
+The development line uses the official Desktop for everyday interactions and preserves the official payload bytes except `app-update.yml`. The launcher keeps managed homes under the portable root. The hourly workflow publishes new Windows Desktop versions to the 1.x update channel after verifying the signed installer, testing update and recovery, and confirming the public assets. DeepSeek maintains the dependencies inside the official Desktop.

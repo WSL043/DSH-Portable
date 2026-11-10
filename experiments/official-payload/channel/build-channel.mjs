@@ -48,6 +48,15 @@ function assertChannelBase(value) {
   return url.href;
 }
 
+export function needsChannelPublication(index, candidate, feed) {
+  if (index.schemaVersion !== 1 || !Array.isArray(index.versions) || index.versions.length > 100) throw new Error('Existing channel index is invalid');
+  const same = index.versions.find(entry => entry.version === candidate.version);
+  if (same && (same.sha512 !== candidate.sha512 || same.size !== candidate.size)) throw new Error(`Official same-version identity changed: ${candidate.version}`);
+  if (index.versions.some(entry => compareVersions(entry.version, candidate.version) > 0)) return false;
+  const expectedUrl = `${CHANNEL_BASE_URL}deepseek-harness-${candidate.version}-win-x64.exe`;
+  return !same || feed?.version !== candidate.version || feed.url !== expectedUrl;
+}
+
 export function generateChannel({ existingIndex = null, candidate, launcherBytes, channelBaseUrl = CHANNEL_BASE_URL, qualifiedAt = new Date().toISOString() }) {
   if (!Buffer.isBuffer(launcherBytes) || launcherBytes.length === 0) throw new Error('Launcher file is empty');
   const channelBase = assertChannelBase(channelBaseUrl);
@@ -64,7 +73,7 @@ export function generateChannel({ existingIndex = null, candidate, launcherBytes
   const incoming = normalizeEntry(candidate, qualifiedAt);
   const prior = byVersion.get(incoming.version);
   if (prior && (prior.sha512 !== incoming.sha512 || prior.size !== incoming.size)) throw new Error(`Official version identity changed: ${incoming.version}`);
-  byVersion.set(incoming.version, incoming);
+  byVersion.set(incoming.version, prior ?? incoming);
 
   const versions = [...byVersion.values()].sort((a, b) => compareVersions(a.version, b.version)).slice(-MAX_VERSIONS);
   if (versions.length === 0) throw new Error('No qualified official versions');
@@ -74,7 +83,7 @@ export function generateChannel({ existingIndex = null, candidate, launcherBytes
   if (latest.version !== incoming.version) throw new Error('Candidate is older than the latest qualified version');
   const filename = `deepseek-harness-${latest.version}-win-x64.exe`;
   const launcherSha512 = createHash('sha512').update(launcherBytes).digest('base64');
-  const releaseDate = new Date(qualifiedAt).toISOString();
+  const releaseDate = new Date(latest.qualifiedAt).toISOString();
   const feed = [
     `version: ${latest.version}`,
     'files:',

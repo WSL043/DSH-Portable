@@ -5,7 +5,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { createRequire } from 'node:module';
-import { generateChannel } from '../experiments/official-payload/channel/build-channel.mjs';
+import { generateChannel, needsChannelPublication } from '../experiments/official-payload/channel/build-channel.mjs';
 import { CHANNEL_BASE_URL, CHANNEL_INDEX_URL } from '../experiments/official-payload/channel/constants.mjs';
 
 const requireApp = createRequire(new URL('../app/package.json', import.meta.url));
@@ -40,6 +40,22 @@ test('same-version identity changes are rejected, while an empty missing index i
   assert.deepEqual(empty.index.versions.map(item => item.version), ['0.2.0-rc.2']);
 });
 
+test('publication skips an already served or older version and resumes an incomplete channel', () => {
+  const candidate = entry('0.2.2-rc.1');
+  const index = { schemaVersion: 1, versions: [candidate] };
+  const feed = { version: candidate.version, url: CHANNEL_BASE_URL + 'deepseek-harness-0.2.2-rc.1-win-x64.exe' };
+  assert.equal(needsChannelPublication(index, candidate, feed), false);
+  assert.equal(needsChannelPublication(index, entry('0.2.1'), feed), false);
+  assert.equal(needsChannelPublication(index, entry('0.2.2'), feed), true);
+  assert.equal(needsChannelPublication(index, candidate), true);
+  assert.equal(needsChannelPublication(index, candidate, { ...feed, version: '0.2.1' }), true);
+  assert.equal(needsChannelPublication(index, candidate, { ...feed, url: installer(candidate.version) }), true);
+  assert.throws(() => needsChannelPublication(index, { ...candidate, size: candidate.size + 1 }, feed), /identity changed/);
+  const launcherBytes = Buffer.from('immutable launcher');
+  assert.deepEqual(generateChannel({ existingIndex: index, candidate, launcherBytes, qualifiedAt: '2026-11-11T00:00:00Z' }),
+    generateChannel({ existingIndex: index, candidate, launcherBytes, qualifiedAt: '2026-11-12T00:00:00Z' }));
+});
+
 test('installer URL host and path exactly match the PowerShell official payload allowlist', async () => {
   const payload = await readFile(new URL('../experiments/official-payload/Payload.psm1', import.meta.url), 'utf8');
   assert.match(payload, /\$script:OfficialInstallerPrefix\s*=\s*'([^']+)'/);
@@ -56,7 +72,7 @@ test('installer URL host and path exactly match the PowerShell official payload 
 
 test('generated generic feed parses, includes required fields, and names a launcher-recognized update copy', async () => {
   const launcherBytes = Buffer.from('mock launcher bytes');
-  const result = generateChannel({ candidate: entry('0.2.0-rc.2'), launcherBytes, qualifiedAt: '2026-09-30T00:00:00.000Z' });
+  const result = generateChannel({ candidate: entry('0.2.0-rc.2', { qualifiedAt: '2026-09-30T00:00:00.000Z' }), launcherBytes });
   const feed = yaml.load(result.feed);
   const expectedName = 'deepseek-harness-0.2.0-rc.2-win-x64.exe';
   assert.equal(feed.version, '0.2.0-rc.2');

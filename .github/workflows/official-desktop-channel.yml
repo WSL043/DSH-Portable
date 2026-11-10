@@ -36,6 +36,7 @@ jobs:
       no_op: ${{ steps.identity.outputs.no_op }}
       version: ${{ steps.identity.outputs.version }}
       identity: ${{ steps.identity.outputs.identity }}
+      publish: ${{ steps.identity.outputs.publish }}
     steps:
       - uses: actions/checkout@v7
       - uses: actions/setup-node@v7
@@ -46,7 +47,7 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
           FORCE_VERSION: ${{ inputs.force_version }}
-          PUBLISH_CHANNEL: ${{ github.event_name == 'workflow_dispatch' && inputs.publish_channel == true }}
+          PUBLISH_CHANNEL: ${{ github.event_name == 'schedule' || (github.event_name == 'workflow_dispatch' && inputs.publish_channel == true) }}
         run: |
           set -euo pipefail
           node experiments/official-payload/resolve-candidate.mjs
@@ -54,8 +55,10 @@ jobs:
           cp experiments/official-payload/candidate.json build/orch-080/T28/input/candidate.json
           node --input-type=module <<'NODE'
           import { createHash } from 'node:crypto';
-          import { mkdir, readFile, writeFile } from 'node:fs/promises';
-          import { CHANNEL_INDEX_URL } from './experiments/official-payload/channel/constants.mjs';
+          import { readFile, writeFile } from 'node:fs/promises';
+          import { CHANNEL_BASE_URL, CHANNEL_INDEX_URL } from './experiments/official-payload/channel/constants.mjs';
+          import { needsChannelPublication } from './experiments/official-payload/channel/build-channel.mjs';
+          import { parseDesktopFeed } from './experiments/official-payload/feed.mjs';
           const candidateBytes = await readFile('build/orch-080/T28/input/candidate.json');
           const candidate = JSON.parse(candidateBytes);
           const identity = createHash('sha256').update(candidateBytes).digest('hex');
@@ -70,16 +73,25 @@ jobs:
             if (text.length > 1_048_576) throw new Error('Channel index is too large');
             index = JSON.parse(text);
           }
-          if (index.schemaVersion !== 1 || !Array.isArray(index.versions)) throw new Error('Existing channel index is invalid');
-          const same = index.versions.find(item => item.version === candidate.version);
-          if (same && (same.sha512 !== candidate.sha512 || same.size !== candidate.size)) throw new Error(`Official same-version identity changed: ${candidate.version}`);
-          await mkdir('build/orch-080/T28/input', { recursive: true });
+          const publicationRequested = process.env.PUBLISH_CHANNEL === 'true';
+          let feed;
+          if (publicationRequested) {
+            const response = await fetch(`${CHANNEL_BASE_URL}nightly.yml`, { redirect: 'follow', signal: AbortSignal.timeout(15000) });
+            if (response.status !== 404) {
+              if (!response.ok) throw new Error(`Channel feed request failed: ${response.status}`);
+              if (!index.versions?.length) throw new Error('Existing channel feed has no index; refusing to discard channel history');
+              feed = parseDesktopFeed(await response.text());
+            }
+          }
+          const needsPublication = needsChannelPublication(index, candidate, feed);
+          const publish = publicationRequested && needsPublication;
+          const noOp = publicationRequested && !needsPublication && !requested;
           await writeFile('build/orch-080/T28/input/index.json', JSON.stringify(index, null, 2) + '\n');
-          const noOp = process.env.PUBLISH_CHANNEL === 'true' && Boolean(same) && !requested;
-          await writeFile(process.env.GITHUB_OUTPUT, `no_op=${noOp}\nversion=${candidate.version}\nidentity=${identity}\n`, { flag: 'a' });
-          console.log(JSON.stringify({ version: candidate.version, noOp, indexedVersions: index.versions.length, indexUrl: CHANNEL_INDEX_URL }));
+          await writeFile(process.env.GITHUB_OUTPUT, `no_op=${noOp}\npublish=${publish}\nversion=${candidate.version}\nidentity=${identity}\n`, { flag: 'a' });
+          console.log(JSON.stringify({ version: candidate.version, noOp, publish, indexedVersions: index.versions.length, indexUrl: CHANNEL_INDEX_URL }));
           NODE
       - uses: actions/upload-artifact@v7
+        if: steps.identity.outputs.no_op == 'false'
         with:
           name: official-desktop-channel-input
           path: build/orch-080/T28/input/
@@ -98,7 +110,7 @@ jobs:
         with:
           node-version: 24.22.1
       - id: qualification-cache
-        if: github.event_name == 'schedule' || github.event_name == 'push'
+        if: github.event_name == 'push'
         uses: actions/cache@v4
         with:
           path: build/official-desktop-qualification
@@ -213,7 +225,7 @@ jobs:
 
   publish:
     needs: [resolve, gates]
-    if: github.event_name == 'workflow_dispatch' && inputs.publish_channel == true && needs.resolve.outputs.no_op == 'false' && needs.gates.result == 'success'
+    if: needs.resolve.outputs.publish == 'true' && needs.gates.result == 'success'
     runs-on: windows-latest
     timeout-minutes: 20
     permissions:
@@ -227,61 +239,58 @@ jobs:
         with:
           name: official-desktop-channel-input
           path: build/orch-080/T28/input
-      - name: Build the channel with the established csc launcher command
+      - name: Build and publish qualified assets, then verify public downloads
         shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+          CHANNEL_TAG: update-channel-desktop
+          VERSION: ${{ needs.resolve.outputs.version }}
         run: |
           $ErrorActionPreference = 'Stop'
+          $tag = $env:CHANNEL_TAG
+          gh release view $tag --repo $env:GITHUB_REPOSITORY --json isPrerelease *> $null
+          $releaseExists = $LASTEXITCODE -eq 0
+          $assetName = "deepseek-harness-$($env:VERSION)-win-x64.exe"
+          $assets = @()
+          if ($releaseExists) {
+            $assets = gh api "repos/$env:GITHUB_REPOSITORY/releases/tags/$tag" --jq '.assets[] | select(.state == "uploaded") | .name'
+            if ($LASTEXITCODE -ne 0) { throw 'Could not inspect existing channel assets' }
+          }
           $launcher = Join-Path $env:RUNNER_TEMP 'DeepSeek Harness Portable.exe'
-          ./experiments/official-payload/build-launcher.ps1 -Output $launcher
-          if ($LASTEXITCODE -ne 0) { throw 'Launcher csc build failed' }
+          if ($assets -contains $assetName) {
+            # Resume partial publication with the immutable asset from the previous attempt.
+            $launcher = Join-Path $env:RUNNER_TEMP $assetName
+            gh release download $tag --repo $env:GITHUB_REPOSITORY --pattern $assetName --dir $env:RUNNER_TEMP
+            if ($LASTEXITCODE -ne 0) { throw 'Could not retrieve the existing updater' }
+            node scripts/upload-release-assets.mjs $tag $launcher --verify-only
+            if ($LASTEXITCODE -ne 0) { throw 'Existing updater failed digest verification' }
+          } else {
+            ./experiments/official-payload/build-launcher.ps1 -Output $launcher
+            if ($LASTEXITCODE -ne 0) { throw 'Launcher csc build failed' }
+          }
           node experiments/official-payload/channel/build-channel.mjs `
             --candidate 'build/orch-080/T28/input/candidate.json' `
             --index 'build/orch-080/T28/input/index.json' `
             --launcher $launcher `
             --output 'build/orch-080/T28/channel-output'
           if ($LASTEXITCODE -ne 0) { throw 'Qualified channel generation failed' }
-      - name: Publish qualified assets and verify exact readback
-        shell: pwsh
-        env:
-          GH_TOKEN: ${{ github.token }}
-          CHANNEL_TAG: update-channel-desktop
-        run: |
-          $ErrorActionPreference = 'Stop'
-          $tag = $env:CHANNEL_TAG
-          gh release view $tag --repo $env:GITHUB_REPOSITORY --json isPrerelease *> $null
-          if ($LASTEXITCODE -ne 0) {
-            gh release create $tag --repo $env:GITHUB_REPOSITORY --target $env:GITHUB_SHA --title 'Qualified official desktop update channel' --notes 'Automatically updated only after official desktop qualification.' --prerelease
-            if ($LASTEXITCODE -ne 0) { throw 'Could not create the update-channel Release' }
-          }
           $output = 'build/orch-080/T28/channel-output'
           $exeFiles = @(Get-ChildItem -LiteralPath $output -Filter 'deepseek-harness-*-win-x64.exe' -File | ForEach-Object { $_.FullName })
-          $expectedLauncher = 'deepseek-harness-${{ needs.resolve.outputs.version }}-win-x64.exe'
-          if ($exeFiles.Count -ne 1 -or [IO.Path]::GetFileName($exeFiles[0]) -cne $expectedLauncher) { throw 'Channel builder must emit only the qualified candidate launcher' }
-          $assetLines = gh api "repos/$env:GITHUB_REPOSITORY/releases/tags/$tag" --jq '.assets[].name'
-          if ($LASTEXITCODE -ne 0) { throw 'Could not inspect existing channel assets' }
-          foreach ($file in $exeFiles) {
-            $name = [IO.Path]::GetFileName($file)
-            if ($assetLines -contains $name) {
-              $existingDir = Join-Path $env:RUNNER_TEMP ('existing-' + [Guid]::NewGuid().ToString('N'))
-              New-Item -ItemType Directory -Path $existingDir | Out-Null
-              gh release download $tag --repo $env:GITHUB_REPOSITORY --pattern $name --dir $existingDir
-              if ($LASTEXITCODE -ne 0) { throw "Could not verify immutable existing launcher asset $name" }
-              $existing = Join-Path $existingDir $name
-              $expectedHash = (Get-FileHash -LiteralPath $file -Algorithm SHA256).Hash
-              $existingHash = (Get-FileHash -LiteralPath $existing -Algorithm SHA256).Hash
-              if ((Get-Item -LiteralPath $file).Length -ne (Get-Item -LiteralPath $existing).Length -or $expectedHash -cne $existingHash) { throw "Immutable launcher asset differs: $name" }
-            }
-          }
+          if ($exeFiles.Count -ne 1 -or [IO.Path]::GetFileName($exeFiles[0]) -cne $assetName) { throw 'Channel builder must emit only the qualified candidate launcher' }
           $exeArgs = @('scripts/upload-release-assets.mjs', $tag) + $exeFiles
+          if (-not $releaseExists) {
+            gh release create $tag --repo $env:GITHUB_REPOSITORY --target $env:GITHUB_SHA --title 'Qualified official desktop update channel' --notes 'Automatically updated only after official desktop qualification.' --prerelease --latest=false
+            if ($LASTEXITCODE -ne 0) { throw 'Could not create the update-channel Release' }
+          }
           node @exeArgs
           if ($LASTEXITCODE -ne 0) { throw 'Immutable launcher asset upload failed' }
           node scripts/upload-release-assets.mjs $tag "$output/index.json" "$output/nightly.yml" --mutable
           if ($LASTEXITCODE -ne 0) { throw 'Mutable channel metadata upload failed' }
           $readback = Join-Path $env:RUNNER_TEMP 'channel-readback'
           New-Item -ItemType Directory -Path $readback -Force | Out-Null
-          gh release download $tag --repo $env:GITHUB_REPOSITORY --pattern index.json --pattern nightly.yml --dir $readback
-          if ($LASTEXITCODE -ne 0) { throw 'Channel metadata readback failed' }
-          foreach ($name in @('index.json', 'nightly.yml')) {
+          $urls = node experiments/official-payload/channel/constants.mjs | ConvertFrom-Json
+          foreach ($name in @($assetName, 'index.json', 'nightly.yml')) {
+            Invoke-WebRequest -Uri ($urls.channelBaseUrl + $name) -OutFile (Join-Path $readback $name) -TimeoutSec 20 -MaximumRetryCount 3 -RetryIntervalSec 3
             $expected = (Get-FileHash -LiteralPath (Join-Path $output $name) -Algorithm SHA256).Hash
             $actual = (Get-FileHash -LiteralPath (Join-Path $readback $name) -Algorithm SHA256).Hash
             if ($expected -cne $actual) { throw "Channel readback differs from generated $name" }
