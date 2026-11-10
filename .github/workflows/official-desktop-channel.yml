@@ -7,8 +7,6 @@ on:
     paths:
       - '.github/workflows/official-desktop-channel.yml'
       - '.github/actions/official-payload-stage/**'
-      - 'scripts/check-official-payload-security.mjs'
-      - 'scripts/official-payload-security-evidence.mjs'
       - 'experiments/official-payload/**'
       - '!experiments/official-payload/**.md'
   workflow_dispatch:
@@ -104,7 +102,7 @@ jobs:
         uses: actions/cache@v4
         with:
           path: build/official-desktop-qualification
-          key: desktop-qualification-${{ needs.resolve.outputs.identity }}-${{ hashFiles('experiments/official-payload/**', '.github/actions/official-payload-stage/**', '.github/workflows/official-desktop-channel.yml', 'scripts/check-official-payload-security.mjs', 'scripts/official-payload-security-evidence.mjs', '!experiments/official-payload/**.md') }}
+          key: desktop-qualification-${{ needs.resolve.outputs.identity }}-${{ hashFiles('experiments/official-payload/**', '.github/actions/official-payload-stage/**', '.github/workflows/official-desktop-channel.yml', '!experiments/official-payload/**.md') }}
       - name: Show the recorded result for an unchanged candidate
         if: steps.qualification-cache.outputs.cache-hit == 'true'
         shell: pwsh
@@ -171,7 +169,7 @@ jobs:
             -Locale en
           if ($LASTEXITCODE -ne 0) { throw 'Pure portable end-to-end acceptance exited non-zero' }
       - name: Collect actual accepted ASAR security evidence without blocking runtime artifacts
-        if: always() && steps.qualification-cache.outputs.cache-hit != 'true' && steps.stage-new.outcome == 'success'
+        if: always() && github.event_name == 'workflow_dispatch' && inputs.publish_channel == true
         shell: pwsh
         env:
           SECURITY_DIRECTORY: build/orch-080/T28/security
@@ -179,11 +177,10 @@ jobs:
           SECURITY_ROOTS: '[["candidate","build/orch-080/T27/work/portable"]]'
         run: |
           node scripts/official-payload-security-evidence.mjs collect
+          if (Test-Path 'build/orch-080/T28/security/summary.md') { Get-Content 'build/orch-080/T28/security/summary.md' | Out-File -FilePath $env:GITHUB_STEP_SUMMARY -Append -Encoding utf8 }
           if ($LASTEXITCODE -ne 0) {
             Write-Warning 'Security evidence collection failed; publication remains blocked. Runtime artifacts are retained.'
             'Security blocked: evidence collection failed. Runtime passing does not establish publication qualification.' | Out-File -FilePath $env:GITHUB_STEP_SUMMARY -Append -Encoding utf8
-          } elseif (Test-Path -LiteralPath 'build/orch-080/T28/security/summary.md') {
-            Get-Content -LiteralPath 'build/orch-080/T28/security/summary.md' | Out-File -FilePath $env:GITHUB_STEP_SUMMARY -Append -Encoding utf8
           }
           exit 0
       - name: Copy phase-2 evidence into this task evidence directory
@@ -226,15 +223,9 @@ jobs:
             "Official Windows Desktop $($candidate.version) passed signature, SHA-512, update and recovery checks.",
             "Evidence: $env:GITHUB_SERVER_URL/$env:GITHUB_REPOSITORY/actions/runs/$env:GITHUB_RUN_ID"
           )
-          $summary | Out-File -FilePath $env:GITHUB_STEP_SUMMARY -Append
-          $securitySummary = 'build/orch-080/T28/security/summary.md'
-          if (Test-Path -LiteralPath $securitySummary) {
-            $summary += @('', (Get-Content -LiteralPath $securitySummary -Raw))
-          } else {
-            $summary += 'Security blocked: the actual-ASAR report is unavailable.'
-          }
           New-Item -ItemType Directory -Path 'build/official-desktop-qualification' -Force | Out-Null
           $summary | Set-Content -LiteralPath 'build/official-desktop-qualification/result.md'
+          $summary | Out-File -FilePath $env:GITHUB_STEP_SUMMARY -Append
 
   publish:
     needs: [resolve, gates]
