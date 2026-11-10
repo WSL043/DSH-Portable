@@ -2,7 +2,7 @@ import assert from 'node:assert/strict'
 import { readFile } from 'node:fs/promises'
 import test from 'node:test'
 import vm from 'node:vm'
-import { patchNativeSettingsCommand, patchPortableUpdatesIcon, patchPluginSettingsNavigation, patchPluginInstallationGuidance, hasOfficialPluginManagement, patchPluginManagerActions, patchWorkspaceHeaderActions } from '../scripts/patch-native-settings-command.mjs'
+import { patchNativeSettingsCommand, patchPortableUpdatesIcon, patchPluginSettingsNavigation, hasOfficialPluginManagement, patchPluginManagerActions, patchWorkspaceHeaderActions } from '../scripts/patch-native-settings-command.mjs'
 
 function workspaceHeaderFixture() {
   return 'function WorkspaceBrowser({ renderSlot, wide }) { return { children: [wide && (0, react_jsx_runtime.jsx)(ViewOptionsMenu, { original: true })] }; }\n'
@@ -97,20 +97,6 @@ test('official 0.2.1-alpha.2 plugin card keeps the update summary slot with its 
   assert.match(patched, /renderSlot\("plugins\.portable\.update", \{ name: pkg\.name, busy, view: "action" \}\)/)
   assert.equal(patchPluginManagerActions(patched), patched)
   assert.throws(() => patchPluginManagerActions(source.replace('beta ?', 'preview ?')), /plugin version summary: expected 1 match, found 0/)
-})
-
-test('official plugin management retires only the recognized legacy installation copy', () => {
-  const modern = 'Inspect the plugins this deployment ships.\n查看内置部署的插件列表'
-  assert.equal(patchPluginInstallationGuidance(modern), modern)
-  const legacy = 'Configure and inspect the plugins installed in this deployment.\n配置和查看本部署已安装的插件。'
-  const patched = patchPluginInstallationGuidance(legacy)
-  assert.match(patched, /Install plugins in Plugin Market/)
-  assert.equal(patchPluginInstallationGuidance(patched), patched)
-  for (const source of ['unexpected upstream change', modern + modern, legacy + legacy, legacy.split('\n')[0]]) {
-    const reports = []
-    assert.equal(patchPluginInstallationGuidance(source, status => reports.push(status)), source)
-    assert.deepEqual(reports, ['skipped-unrecognized-copy'])
-  }
 })
 
 const upstream = `\t\tfunction SettingsRoot(props) {

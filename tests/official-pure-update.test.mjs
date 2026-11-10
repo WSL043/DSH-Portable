@@ -309,9 +309,23 @@ test('offline repair and retained rollback recover a failed atomic activation wi
       "[IO.File]::WriteAllText((Join-Path $root 'launcher/follow.json'),'{\"indexUrl\":\"https://example.invalid/index.json\",\"feedUrl\":\"https://example.invalid/\",\"cacheDirName\":\"fixture\"}')",
       "[IO.File]::WriteAllText((Join-Path $root 'DeepSeek Harness Portable.exe'),'fixture launcher')",
       "[IO.File]::WriteAllText((Join-Path $root 'data/draft.txt'),'user data stays')",
+      "$call=@('-NoProfile','-NonInteractive','-OutputFormat','Text','-ExecutionPolicy','Bypass','-File'," + quote(join(fixture, 'apply-update.ps1')) + ",'-Root',$root,'-SelfPath',(Join-Path $root 'DeepSeek Harness Portable.exe'))",
+      '$installer=' + quote(join(fixture, 'installer.exe')),
+      '$sameIndex=' + quote(join(fixture, 'index.json')),
+      "$currentFile=Join-Path $root 'app/current.json'; $initial=[IO.File]::ReadAllText($currentFile)",
+      "$offlineGuard=@(); foreach($target in @('0.9.0','1.0.0','1.0.1')) {",
+      " $entry=(Read-LocalAcceptedIndex $sameIndex).versions[0]; $entry.version=$target",
+      " $targetIndex=Join-Path $root ('accepted-'+$target+'.json')",
+      " @{schemaVersion=1;versions=@($entry)}|ConvertTo-Json -Depth 5|Set-Content -LiteralPath $targetIndex",
+      " if($target -eq '1.0.1') { $withRejection=$initial|ConvertFrom-Json; $withRejection|Add-Member rejected @{version=$target;at=[DateTime]::UtcNow.ToString('o')}; [IO.File]::WriteAllText($currentFile,($withRejection|ConvertTo-Json -Depth 6)) }",
+      " $before=[IO.File]::ReadAllText($currentFile); $ErrorActionPreference='Continue'; & " + quote(powershell) + " @call -InstallerFile $installer -IndexFile $targetIndex *> (Join-Path $root 'guard.log'); $code=$LASTEXITCODE; $ErrorActionPreference='Stop'",
+      " $guard=Get-Content (Join-Path $root 'data/launcher/update-status.json') -Raw|ConvertFrom-Json",
+      " $offlineGuard+=@{code=$code;version=$guard.version;error=$guard.error;noTransition=($null -eq $guard.transition);currentUnchanged=([IO.File]::ReadAllText($currentFile) -ceq $before)}",
+      '}',
+      '[IO.File]::WriteAllText($currentFile,$initial)',
+      "$ordering=@((Compare-OfficialVersion '0.2.2-rc.10' '0.2.2-rc.9'),(Compare-OfficialVersion '0.2.2' '0.2.2-rc.10'),(Compare-OfficialVersion '0.2.2-alpha.3' '0.2.2-rc.1'))",
       "Remove-Item -LiteralPath (Join-Path $root 'app/1.0.0/DeepSeek Harness.exe')",
       "[IO.File]::WriteAllText((Join-Path $root 'app/1.0.0/unknown.txt'),'unknown user content')",
-      "$call=@('-NoProfile','-NonInteractive','-OutputFormat','Text','-ExecutionPolicy','Bypass','-File'," + quote(join(fixture, 'apply-update.ps1')) + ",'-Root',$root,'-SelfPath',(Join-Path $root 'DeepSeek Harness Portable.exe'))",
       "$operation=@('-Repair','-InstallerFile'," + quote(join(fixture, 'installer.exe')) + ",'-IndexFile'," + quote(join(fixture, 'index.json')) + ')',
       '$index=Read-LocalAcceptedIndex ' + quote(join(fixture, 'index.json')),
       '$installer=' + quote(join(fixture, 'installer.exe')),
@@ -336,8 +350,15 @@ test('offline repair and retained rollback recover a failed atomic activation wi
       "[IO.File]::WriteAllText((Join-Path $root 'app/0.9.0/resources/app.asar'),'original asar')",
       "$ErrorActionPreference='Continue'; & " + quote(powershell) + " @call -Rollback *> (Join-Path $root 'rollback.log'); $rollbackCode=$LASTEXITCODE; $ErrorActionPreference='Stop'",
       "$current=Get-Content (Join-Path $root 'app/current.json') -Raw|ConvertFrom-Json",
-      "@{identity=$identity;ambiguous=$ambiguous;duplicate=$duplicate;signatureCode=$signatureCode;signature=$signature;corruptRollbackCode=$corruptRollbackCode;corruptRollback=$corruptRollback;firstCode=$firstCode;first=$first;recoverCode=$recoverCode;recovered=$recovered;repeatCode=$repeatCode;repeat=$repeat;rollbackCode=$rollbackCode;current=$current;backup=[IO.File]::ReadAllText((Join-Path $root 'app/1.0.0.repair-backup/unknown.txt'));draft=[IO.File]::ReadAllText((Join-Path $root 'data/draft.txt'))}|ConvertTo-Json -Depth 12 -Compress",
+      "@{offlineGuard=$offlineGuard;ordering=$ordering;identity=$identity;ambiguous=$ambiguous;duplicate=$duplicate;signatureCode=$signatureCode;signature=$signature;corruptRollbackCode=$corruptRollbackCode;corruptRollback=$corruptRollback;firstCode=$firstCode;first=$first;recoverCode=$recoverCode;recovered=$recovered;repeatCode=$repeatCode;repeat=$repeat;rollbackCode=$rollbackCode;current=$current;backup=[IO.File]::ReadAllText((Join-Path $root 'app/1.0.0.repair-backup/unknown.txt'));draft=[IO.File]::ReadAllText((Join-Path $root 'data/draft.txt'))}|ConvertTo-Json -Depth 12 -Compress",
     ].join('\n')));
+    assert.deepEqual(result.offlineGuard.map(({ code, version, noTransition, currentUnchanged }) => [code, version, noTransition, currentUnchanged]), [
+      [1, '0.9.0', true, true], [1, '1.0.0', true, true], [1, '1.0.1', true, true],
+    ]);
+    assert.match(result.offlineGuard[0].error, /require a newer application version/);
+    assert.match(result.offlineGuard[1].error, /use repair/);
+    assert.match(result.offlineGuard[2].error, /rolled back within the last 24 hours/);
+    assert.deepEqual(result.ordering.map(Math.sign), [1, 1, -1]);
     assert.equal(result.identity, '1.0.0');
     assert.match(result.ambiguous, /identity is ambiguous/);
     assert.match(result.duplicate, /duplicate versions/);

@@ -654,6 +654,24 @@ try {
     $oldReceiptPath = Join-Path $script:PortableRoot ('launcher/receipts/' + $script:OldVersion + '.json')
     Assert-ReceiptedPayload $newTree (Read-JsonFile $newReceiptPath) $script:NewVersion
     Assert-ReceiptedPayload $oldTree (Read-JsonFile $oldReceiptPath) $script:OldVersion
+    $currentFile = Join-Path $script:PortableRoot 'app/current.json'
+    $currentBeforeGuard = (Get-FileHash -LiteralPath $currentFile -Algorithm SHA256).Hash
+    $guardRequests = Get-MaintenanceRequestSnapshot
+    $offlineGuard = @()
+    foreach ($source in @(@{file=$script:InstallerOldPath; version=$script:OldVersion}, @{file=$script:InstallerNewPath; version=$script:NewVersion})) {
+        & $engine -Root $script:PortableRoot -SelfPath $self -InstallerFile $source.file -IndexFile $localIndex
+        $code = $LASTEXITCODE
+        $rejected = Read-JsonFile (Join-Path $script:PortableRoot 'data/launcher/update-status.json')
+        if ($code -ne 1 -or $rejected.version -cne $source.version -or $rejected.error -notmatch 'Updates require a newer application version' -or $null -ne $rejected.transition) {
+            throw ('Offline update did not refuse version ' + $source.version + ' before preparation')
+        }
+        $offlineGuard += [pscustomobject]@{version=$source.version; operation=$rejected.operation; status=$rejected.status}
+    }
+    $afterGuard = Get-MaintenanceRequestSnapshot
+    if ((Get-FileHash -LiteralPath $currentFile -Algorithm SHA256).Hash -cne $currentBeforeGuard -or $afterGuard.index -cne $guardRequests.index -or $afterGuard.feed -cne $guardRequests.feed) {
+        throw 'Refused offline update changed the current pointer or used the network'
+    }
+    Write-Stage 'Offline update refused the older and same-version signed installers without changing the current pointer'
     $originalNewReceiptHash = (Get-FileHash -LiteralPath $newReceiptPath -Algorithm SHA256).Hash
     [IO.File]::Move((Join-Path $newTree 'resources/app-update.yml'), (Join-Path $script:EvidenceRoot 'repair-missing-app-update-yml.txt'))
     $brokenTreeHash = Get-PortablePayloadTreeHash $newTree
@@ -671,6 +689,7 @@ try {
     $repairLaunch = Test-MaintainedOfficialVersion $script:NewVersion 'offline-repair'
     Assert-ReceiptedPayload $newTree (Read-JsonFile $newReceiptPath) $script:NewVersion
     $repairEvidence = [pscustomobject]@{
+        refusedOfflineUpdates=$offlineGuard
         operation='repair'; expectedVersion=$script:NewVersion; installerVerified=$true; receiptVerified=$true; launch=$repairLaunch
         oldInstallerBefore=$oldInstallerHash; oldInstallerAfter=(Get-FileHash -LiteralPath $script:InstallerOldPath -Algorithm SHA256).Hash
         newInstallerBefore=$newInstallerHash; newInstallerAfter=(Get-FileHash -LiteralPath $script:InstallerNewPath -Algorithm SHA256).Hash

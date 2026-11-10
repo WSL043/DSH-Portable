@@ -1,6 +1,7 @@
 import { readFile, writeFile } from 'node:fs/promises'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
+import { safeDataTarget } from '../launcher/data-paths.mjs'
 
 const MARKER = 'dsh-portable-native-settings-command-v3'
 const STORE_MARKER = 'dsh-portable-native-settings-store-command-v1'
@@ -129,28 +130,6 @@ export function patchPortableUpdatesIcon(source) {
                 stroke: "currentColor", strokeWidth: 1.25, strokeLinecap: "round", strokeLinejoin: "round", "aria-hidden": true,
                 children: (0, react_jsx_runtime.jsx)("path", { d: "M2.5 2.5h11v8h-11zM8 10.5v3m-3 0h6" })
             });`, 'Portable navigation icon seam changed upstream')
-}
-
-export function patchPluginInstallationGuidance(plugins, report = () => {}) {
-  // Copy is optional presentation, unlike the required interaction seams below.
-  // Never partially rewrite an unfamiliar locale pair or block a core release.
-  const officialCopy = ['Inspect the plugins this deployment ships.', '查看内置部署的插件列表']
-  const pairs = [
-    ['Configure and inspect the plugins installed in this deployment.',
-      'Install plugins in Plugin Market; update or remove them in Installed. Plugin configuration changes their settings.'],
-    ['配置和查看本部署已安装的插件。',
-      '在「插件市场」安装插件，在「已安装」中更新或卸载；「插件配置」用于修改插件设置。'],
-  ]
-  const once = text => plugins.split(text).length === 2
-  if (officialCopy.every(once)) { report('upstream-owned'); return plugins }
-  if (pairs.every(([, after]) => once(after))) { report('already-applied'); return plugins }
-  if (!pairs.every(([before]) => once(before))) {
-    report('skipped-unrecognized-copy')
-    return plugins
-  }
-  report('legacy-copy-updated')
-  for (const [before, after] of pairs) plugins = plugins.replace(before, after)
-  return plugins
 }
 
 function patchPluginManagerToolbar(source) {
@@ -311,26 +290,23 @@ export function patchWorkspaceHeaderActions(source) {
 
 async function main() {
   if (!process.argv[2]) throw new Error('usage: node patch-native-settings-command.mjs <app-root>')
-  const appRoot = path.resolve(process.argv[2])
-  const filename = path.join(appRoot, 'node_modules', '@deepseek-ai', 'dsh-client-ui-settings-general', 'lib', 'client.js')
-  const source = await readFile(filename, 'utf8')
-  await writeFile(filename, patchPortableUpdatesIcon(patchNativeSettingsCommand(source)), 'utf8')
-  const pluginsFile = path.join(appRoot, 'node_modules', '@deepseek-ai', 'dsh-client-ui-settings-plugins', 'lib', 'client.js')
-  let plugins = patchPluginSettingsNavigation(await readFile(pluginsFile, 'utf8'))
-  plugins = patchPluginInstallationGuidance(plugins, status => {
-    console.log(JSON.stringify({ adapter: 'plugin-installation-guidance', required: false, status }))
-    if (status === 'skipped-unrecognized-copy') console.warn('Optional plugin installation copy changed upstream; original text retained. Required interaction checks remain enabled.')
-  })
-  await writeFile(pluginsFile, plugins, 'utf8')
-  const managerFile = path.join(appRoot, 'node_modules', '@deepseek-ai', 'dsh-client-ui-plugin-manager', 'lib', 'client.js')
-  let manager
-  try { manager = await readFile(managerFile, 'utf8') } catch (error) {
-    if (error.code !== 'ENOENT') throw error
+  process.chdir(process.argv[2])
+  const targets = [
+    ['dsh-client-ui-settings-general', source => patchPortableUpdatesIcon(patchNativeSettingsCommand(source))],
+    ['dsh-client-ui-settings-plugins', patchPluginSettingsNavigation],
+    ['dsh-client-ui-plugin-manager', patchPluginManagerActions, true],
+    ['dsh-client-ui-workspace', patchWorkspaceHeaderActions],
+  ]
+  for (const [name, patch, optional] of targets) {
+    const file = await safeDataTarget(process.cwd(), `node_modules/@deepseek-ai/${name}/lib/client.js`, { createParents: false })
+    if (!file) {
+      if (optional) continue
+      throw new Error(`Staged official client is missing: ${name}`)
+    }
+    const source = await readFile(file, 'utf8')
+    const patched = patch(source)
+    if (patched !== source) await writeFile(file, patched, 'utf8')
   }
-  if (manager !== undefined) await writeFile(managerFile, patchPluginManagerActions(manager), 'utf8')
-  const workspaceFile = path.join(appRoot, 'node_modules', '@deepseek-ai', 'dsh-client-ui-workspace', 'lib', 'client.js')
-  await writeFile(workspaceFile, patchWorkspaceHeaderActions(await readFile(workspaceFile, 'utf8')), 'utf8')
-  console.log(filename)
 }
 
 if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url)) await main()

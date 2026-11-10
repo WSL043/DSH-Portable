@@ -55,7 +55,7 @@ node scripts/check-official-payload-security.mjs '<portable-root>/app/<version>/
 
 | 动作 | 输入与边界 |
 | --- | --- |
-| 从文件更新 | 官方 Windows x64 安装包和已验收索引快照；无 current 的轻量包也可离线首次安装。按完整大小与 SHA-512 唯一匹配版本，再验 Authenticode、发布者和解包边界，不按文件名猜版本。 |
+| 从文件更新 | 官方 Windows x64 安装包和已验收索引快照；无 current 的轻量包也可离线首次安装。按完整大小与 SHA-512 唯一匹配版本，再验 Authenticode、发布者和解包边界，不按文件名猜版本。已安装时只接受较新版本；最近 24 小时内已因健康检查回退的版本同样暂停重试。 |
 | 修复官方程序 | 同版本的官方安装包；修复 `app/<当前版本>/`，数据原样保留。旧程序和收据放在固定 `.repair-backup` 槽；整个便携根只允许新增一组修复保全槽，任何版本已有槽时停止，核实后移回收站再修复。 |
 | 回退 | 只接受 current 中记录、完整树收据仍匹配的 previous。保留退下的程序，清空 previous，记录 rejected；不支持任意历史版本。 |
 
