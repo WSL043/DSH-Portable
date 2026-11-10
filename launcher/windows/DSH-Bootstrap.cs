@@ -25,8 +25,8 @@ using Microsoft.Win32.SafeHandles;
 [assembly: System.Reflection.AssemblyCompany("WSL043")]
 [assembly: System.Reflection.AssemblyProduct("DSH-Portable")]
 [assembly: System.Reflection.AssemblyCopyright("Copyright © WSL043 2026")]
-[assembly: System.Reflection.AssemblyVersion("0.9.11.65534")]
-[assembly: System.Reflection.AssemblyFileVersion("0.9.11.65534")]
+[assembly: System.Reflection.AssemblyVersion("0.9.12.65534")]
+[assembly: System.Reflection.AssemblyFileVersion("0.9.12.65534")]
 
 namespace DshPortableBootstrap
 {
