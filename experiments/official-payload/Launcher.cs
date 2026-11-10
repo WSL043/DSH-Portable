@@ -18,8 +18,6 @@ using System.Windows.Forms;
 using Microsoft.Win32;
 [assembly: System.Reflection.AssemblyTitle("DeepSeek Harness Portable")]
 [assembly: System.Reflection.AssemblyProduct("DSH-Portable official-payload")]
-[assembly: System.Reflection.AssemblyVersion("1.0.0.5")]
-[assembly: System.Reflection.AssemblyInformationalVersion("1.0.0-alpha.5")]
 
 internal static class PortableLauncher {
     private static readonly JavaScriptSerializer Json = new JavaScriptSerializer();

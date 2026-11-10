@@ -5,6 +5,9 @@
     [Parameter(Mandatory=$true)][string]$FeedUrl,
     [Parameter(Mandatory=$true)][string]$IndexUrl,
     [string]$CacheDirName='@deepseek-aidsh-desktop-updater-portable',
+    [ValidatePattern('\A1\.0\.0(?:-alpha\.(?:0|[1-9][0-9]{0,2}))?\z')]
+    [string]$PortableVersion='1.0.0-alpha.5',
+    [string]$ExpectedOfficialVersion,
     [switch]$Bootstrap
 )
 $ErrorActionPreference = 'Stop'
@@ -25,6 +28,9 @@ if ($Bootstrap) {
     $candidate = Get-AcceptedInstallerCandidate $index $Installer
     Assert-Installer $Installer $candidate
 }
+if ($PortableVersion -eq '1.0.0' -and (!$ExpectedOfficialVersion -or $candidate.version -cne $ExpectedOfficialVersion)) {
+    throw 'The 1.0.0 package requires the selected official version to match its accepted installer'
+}
 $appRoot = Join-Path $Output 'app'; $launcherRoot = Join-Path $Output 'launcher'; $dataRoot = Join-Path $Output 'data'
 New-Item -ItemType Directory -Path $appRoot, $launcherRoot, (Join-Path $launcherRoot 'receipts'), (Join-Path $dataRoot 'dsh-home'), (Join-Path $dataRoot 'electron'), (Join-Path $dataRoot 'launcher') -Force | Out-Null
 $partial = Join-Path $appRoot ($candidate.version + '.partial')
@@ -35,7 +41,7 @@ try {
         $receiptPath = Join-Path $launcherRoot ('receipts/' + $candidate.version + '.json')
         [IO.File]::WriteAllText($receiptPath, (($receipt | ConvertTo-Json -Depth 8) + "`n"), (New-Object Text.UTF8Encoding($false)))
     }
-    & (Join-Path $PSScriptRoot 'build-launcher.ps1') -Output (Join-Path $Output 'DeepSeek Harness Portable.exe')
+    & (Join-Path $PSScriptRoot 'build-launcher.ps1') -Output (Join-Path $Output 'DeepSeek Harness Portable.exe') -PortableVersion $PortableVersion
     foreach ($file in @('apply-update.ps1', 'Payload.psm1')) { Copy-Item -LiteralPath (Join-Path $PSScriptRoot $file) -Destination (Join-Path $launcherRoot $file) }
     foreach ($file in @('7z.exe', '7z.dll', 'License.txt')) {
         $source = Join-Path (Split-Path -Parent $SevenZip) $file
@@ -55,7 +61,7 @@ try {
     $readme = @'
 # DeepSeek Harness Portable / 纯便携版
 
-**1.0.0-alpha.5 · Windows x64 · 解压到独立目录。** 本包使用官方桌面安装包的原始文件；唯一允许的官方文件差异是 `app/<版本>/resources/app-update.yml`。不预装插件、不带市场。
+**__PORTABLE_VERSION__ · Windows x64 · 解压到独立目录。** 本包使用官方桌面安装包的原始文件；唯一允许的官方文件差异是 `app/<版本>/resources/app-update.yml`。不预装插件、不带市场。
 
 **便携数据：** `data/dsh-home/`（官方 `DSH_HOME`）、`data/agents/`（独立 agents home）、`data/electron/`（Chromium/Electron user data）、`data/cache/native-addons/`（原生模块缓存）及 `data/launcher/`（日志、更新状态与暂存）。搬动时完全退出并移动整个根目录。
 
@@ -69,7 +75,7 @@ try {
 
 ---
 
-**1.0.0-alpha.5 · Windows x64 · Extract to a dedicated folder.** Official desktop files are preserved byte-for-byte except `app/<version>/resources/app-update.yml`. No plugins or marketplace are bundled.
+**__PORTABLE_VERSION__ · Windows x64 · Extract to a dedicated folder.** Official desktop files are preserved byte-for-byte except `app/<version>/resources/app-update.yml`. No plugins or marketplace are bundled.
 
 **Portable data:** `data/dsh-home/` (`DSH_HOME`), `data/agents/` (separate agents home), `data/electron/` (Chromium/Electron user data), `data/cache/native-addons/` (native addon cache), and `data/launcher/` (logs, update status and staging). Exit fully before moving the complete root folder.
 
@@ -81,6 +87,7 @@ try {
 
 **Runtime limits:** Older official packages use fixed port 19387; newer packages can use dynamic ports. Close other DeepSeek Harness desktop instances first. A conflict produces a bilingual message; no process is terminated. The official default workspace is created in your system Documents folder (`Documents\deepseek-harness`), as with the installed app, and does not move with this folder; your own projects can live anywhere. The launcher does not patch the official EXE, ASAR or runtime and ships no adapters, default plugins or marketplace files.
 '@
+    $readme = $readme.Replace('__PORTABLE_VERSION__', $PortableVersion)
     if ($Bootstrap) {
         $readme = $readme.Replace('本包使用官方桌面安装包的原始文件；唯一允许的官方文件差异是 `app/<版本>/resources/app-update.yml`。', '轻量包不含官方桌面文件。首次启动从已验收索引选择最新版本，从官方 CDN 下载并校验安装包，再使用随包更新引擎完成解包与切换。')
         $readme = $readme.Replace('Official desktop files are preserved byte-for-byte except `app/<version>/resources/app-update.yml`.', 'This lite package excludes the official desktop payload. On first launch it selects the newest accepted version, downloads and verifies the installer from the official CDN, then installs it with the bundled update engine.')

@@ -44,8 +44,9 @@ test('updated-copy filename, protocol link whitelist and launcher protocol comma
   assert.match(source, /ProtocolKey = ProtocolRoot \+ @"\\shell\\open\\command"/);
   assert.match(source, /--open \\\"%1\\\"/);
   assert.match(source, /WritePortableRootPointer\(ReadCacheName\(\)\)/);
-  assert.match(source, /1\.0\.0\.5/);
-  assert.match(source, /1\.0\.0-alpha\.5/);
+  assert.doesNotMatch(source, /Assembly(?:File|Informational)?Version\(/);
+  const build = await readFile(resolve(root, 'experiments/official-payload/build-launcher.ps1'), 'utf8');
+  assert.match(build, /\$fileVersion\.ProductVersion -cne \$PortableVersion/);
 });
 
 test('bootstrap marker installs only when current state or its application is missing', async () => {
