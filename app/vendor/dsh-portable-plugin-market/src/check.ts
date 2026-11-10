@@ -29,6 +29,7 @@ import { createRequire } from 'node:module'
 import { homedir } from 'node:os'
 import { dirname, join, resolve } from 'node:path'
 import { JSON_SCHEMA, Type, load } from 'js-yaml'
+import semver from 'semver'
 import { INBOX_BUNDLES, readBundleRules, suggestOrder, validateOrder } from './order.ts'
 import { resolveBundlePatchPaths } from './package-path.ts'
 
@@ -512,6 +513,12 @@ export function satisfiesRange(version: string, range: string, options: Satisfie
     }
   }
 
+  if (options.includePrerelease) {
+    const hostOptions = { includePrerelease: true }
+    return semver.validRange(normalizedRange, hostOptions) === null
+      ? null : semver.satisfies(version, normalizedRange, hostOptions)
+  }
+
   const single = (part: string): boolean | null => {
     const p = part.trim()
     if (p === '' || p === '*' || p === 'x' || p === 'X') return true
@@ -572,7 +579,7 @@ export function satisfiesRange(version: string, range: string, options: Satisfie
     if (parts.length === 0) return true
     const parsed = parts.map(part => comparator(part))
     if (parsed.some(part => part === null)) return null
-    if (versionHasPre && options.includePrerelease !== true) {
+    if (versionHasPre) {
       // npm gate (set-level): the set admits prerelease versions only when a
       // comparator pins the SAME base tuple with a prerelease of its own.
       const admitted = parsed.some((part) => {

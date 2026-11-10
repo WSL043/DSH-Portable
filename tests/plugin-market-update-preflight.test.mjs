@@ -63,6 +63,7 @@ test('hoisted host peers are resolved through node_modules ancestors', async () 
 })
 
 test('update preflight uses the host prerelease semantics', () => {
+  assert.equal(assessUpdateRequirements({ engines: { dsh: '^0.2.1' } }, '0.3.0-rc.1', {}).length, 1)
   assert.deepEqual(assessUpdateRequirements({ engines: { dsh: '>=0.2.0-rc.1 <0.3.0-0' } }, '0.2.1-rc.5', {}), [])
   assert.deepEqual(assessUpdateRequirements({ peerDependencies: { '@deepseek-ai/dsh-agent': '^0.2.1-rc.1' } }, '0.2.1-rc.5', { '@deepseek-ai/dsh-agent': '0.2.1-rc.5' }), [])
   assert.deepEqual(
