@@ -131,28 +131,6 @@ export function patchPortableUpdatesIcon(source) {
             });`, 'Portable navigation icon seam changed upstream')
 }
 
-export function patchPluginInstallationGuidance(plugins, report = () => {}) {
-  // Copy is optional presentation, unlike the required interaction seams below.
-  // Never partially rewrite an unfamiliar locale pair or block a core release.
-  const officialCopy = ['Inspect the plugins this deployment ships.', '查看内置部署的插件列表']
-  const pairs = [
-    ['Configure and inspect the plugins installed in this deployment.',
-      'Install plugins in Plugin Market; update or remove them in Installed. Plugin configuration changes their settings.'],
-    ['配置和查看本部署已安装的插件。',
-      '在「插件市场」安装插件，在「已安装」中更新或卸载；「插件配置」用于修改插件设置。'],
-  ]
-  const once = text => plugins.split(text).length === 2
-  if (officialCopy.every(once)) { report('upstream-owned'); return plugins }
-  if (pairs.every(([, after]) => once(after))) { report('already-applied'); return plugins }
-  if (!pairs.every(([before]) => once(before))) {
-    report('skipped-unrecognized-copy')
-    return plugins
-  }
-  report('legacy-copy-updated')
-  for (const [before, after] of pairs) plugins = plugins.replace(before, after)
-  return plugins
-}
-
 function patchPluginManagerToolbar(source) {
   const marker = 'dsh-portable-plugin-manager-actions-v2'
   if (source.includes(marker)) return source
@@ -316,12 +294,7 @@ async function main() {
   const source = await readFile(filename, 'utf8')
   await writeFile(filename, patchPortableUpdatesIcon(patchNativeSettingsCommand(source)), 'utf8')
   const pluginsFile = path.join(appRoot, 'node_modules', '@deepseek-ai', 'dsh-client-ui-settings-plugins', 'lib', 'client.js')
-  let plugins = patchPluginSettingsNavigation(await readFile(pluginsFile, 'utf8'))
-  plugins = patchPluginInstallationGuidance(plugins, status => {
-    console.log(JSON.stringify({ adapter: 'plugin-installation-guidance', required: false, status }))
-    if (status === 'skipped-unrecognized-copy') console.warn('Optional plugin installation copy changed upstream; original text retained. Required interaction checks remain enabled.')
-  })
-  await writeFile(pluginsFile, plugins, 'utf8')
+  await writeFile(pluginsFile, patchPluginSettingsNavigation(await readFile(pluginsFile, 'utf8')), 'utf8')
   const managerFile = path.join(appRoot, 'node_modules', '@deepseek-ai', 'dsh-client-ui-plugin-manager', 'lib', 'client.js')
   let manager
   try { manager = await readFile(managerFile, 'utf8') } catch (error) {
