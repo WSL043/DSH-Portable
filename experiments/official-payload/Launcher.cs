@@ -202,8 +202,6 @@ internal static class PortableLauncher {
         long ensureMs = phases.ElapsedMilliseconds;
         CheckExternalOfficialOrPort(executable);
         long conflictMs = phases.ElapsedMilliseconds - ensureMs;
-        RunSeedPluginsBeforeLaunch();
-        long seedMs = phases.ElapsedMilliseconds - ensureMs - conflictMs;
         // Only one official desktop can run at a time (fixed port), so the root whose launcher passed these checks
         // is the only possible requester of an update. Writing the pointer earlier let a second Portable copy that
         // failed to start redirect another root's update to itself.
@@ -213,12 +211,12 @@ internal static class PortableLauncher {
         bool protocolChanged = false;
         try {
             protocolChanged = true; RegisterProtocol();
-            long protocolMs = phases.ElapsedMilliseconds - ensureMs - conflictMs - seedMs;
+            long protocolMs = phases.ElapsedMilliseconds - ensureMs - conflictMs;
             Log("starting version=" + version);
             Process app = StartOfficialProcess(executable, initialLink, probe);
             try {
                 double sinceLauncherStart = (DateTime.Now - Process.GetCurrentProcess().StartTime).TotalMilliseconds;
-                Log("startup-trace ensureMs=" + ensureMs + " conflictCheckMs=" + conflictMs + " seedMs=" + seedMs + " protocolMs=" + protocolMs
+                Log("startup-trace ensureMs=" + ensureMs + " conflictCheckMs=" + conflictMs + " protocolMs=" + protocolMs
                     + " launcherToOfficialMs=" + (long)sinceLauncherStart + " version=" + version);
             } catch { }
             if (pendingHealth) {
@@ -293,23 +291,6 @@ internal static class PortableLauncher {
             Thread.Sleep(500);
         }
     }
-
-    private static void RunSeedPluginsBeforeLaunch() {
-        string manifest = Path.Combine(Root, "launcher", "seed", "seed.json");
-        string profile = Path.Combine(DataRoot, "dsh-home", "profiles", "desktop", "package.json");
-        string script = Path.Combine(Root, "launcher", "seed-plugins.ps1");
-        if (!File.Exists(manifest) || !File.Exists(profile) || !File.Exists(script)) return;
-        string powershell = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.System), "WindowsPowerShell", "v1.0", "powershell.exe");
-        var start = new ProcessStartInfo(powershell) { UseShellExecute = false, CreateNoWindow = true, WindowStyle = ProcessWindowStyle.Hidden, WorkingDirectory = Root };
-        start.EnvironmentVariables.Remove("PSModulePath");
-        start.Arguments = "-NoProfile -NonInteractive -ExecutionPolicy Bypass -File " + Quote(script) + " -Root " + Quote(Root);
-        int code;
-        try { using (Process child = Process.Start(start)) { child.WaitForExit(); code = child.ExitCode; } }
-        catch (Exception error) { throw new IOException(T("无法确认插件准备已停止，启动已取消。", "Could not confirm plugin preparation stopped; startup cancelled."), error); }
-        if (code != 0 && code != 1) throw new IOException(T("插件准备需要恢复，已保留恢复目录；请先确认没有写入进程。", "Plugin preparation needs recovery. Its backup is preserved; first confirm no writer remains."));
-        SeedLog(code == 0 ? "plugin seed completed" : "plugin seed failed safely; rollback completed");
-    }
-    private static void SeedLog(string message) { try { Log(message); } catch { } }
 
     private static bool HasPendingTransition() { return ReadPendingTransition() != null; }
 

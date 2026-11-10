@@ -74,7 +74,7 @@ jobs:
           Move-Item -LiteralPath (Join-Path $env:RUNNER_TEMP 'package') -Destination app/node_modules/js-yaml
       - name: Run the official payload static and contract tests
         shell: pwsh
-        run: node --test tests/official-pure-portable.test.mjs tests/official-pure-alpha-workflow.test.mjs tests/official-desktop-channel-workflow.test.mjs tests/official-payload-security.test.mjs tests/official-payload-security-evidence.test.mjs tests/official-pure-alpha-seed-smoke.test.mjs tests/official-desktop-channel.test.mjs tests/official-seed-plugins.test.mjs tests/official-seed-launcher.test.mjs
+        run: node --test tests/official-pure-portable.test.mjs tests/official-pure-alpha-workflow.test.mjs tests/official-desktop-channel-workflow.test.mjs tests/official-payload-security.test.mjs tests/official-payload-security-evidence.test.mjs tests/official-pure-package-smoke.test.mjs tests/official-desktop-channel.test.mjs
   package:
     needs: preflight
     runs-on: windows-latest
@@ -151,33 +151,31 @@ jobs:
         shell: powershell
         run: |
           $ErrorActionPreference = 'Stop'
-          ./experiments/official-payload/e2e/smoke-alpha-seeded.ps1 `
+          ./experiments/official-payload/e2e/smoke-portable-package.ps1 `
             -Archive 'build/orch-080/T32/DSH-Portable-1.0.0-alpha.${{ env.ALPHA }}-windows-x64.zip' `
             -WorkRoot 'build/orch-080/T32/smoke-root' `
-            -EvidenceRoot 'build/orch-080/T32/evidence' `
-            -NoSeed
+            -EvidenceRoot 'build/orch-080/T32/evidence'
       - name: Smoke lite bootstrap install from the accepted channel and official CDN
         if: inputs.smoke == 'all' || inputs.smoke == 'lite'
         shell: powershell
         run: |
           $ErrorActionPreference = 'Stop'
-          ./experiments/official-payload/e2e/smoke-alpha-seeded.ps1 `
+          ./experiments/official-payload/e2e/smoke-portable-package.ps1 `
             -Archive 'build/orch-080/T32/DSH-Portable-1.0.0-alpha.${{ env.ALPHA }}-windows-x64-lite.zip' `
             -WorkRoot 'build/orch-080/T32/smoke-lite-root' `
             -EvidenceRoot 'build/orch-080/T32/lite-evidence' `
-            -Bootstrap `
-            -NoSeed
+            -Bootstrap
       - name: Smoke lite first install from the already downloaded signed installer
         if: inputs.smoke == 'all'
         shell: powershell
         env:
           INSTALLER: ${{ steps.installer.outputs.installer }}
         run: |
-          ./experiments/official-payload/e2e/smoke-alpha-seeded.ps1 `
+          ./experiments/official-payload/e2e/smoke-portable-package.ps1 `
             -Archive 'build/orch-080/T32/DSH-Portable-1.0.0-alpha.${{ env.ALPHA }}-windows-x64-lite.zip' `
             -WorkRoot 'build/orch-080/T32/smoke-lite-local-root' `
             -EvidenceRoot 'build/orch-080/T32/lite-evidence/local-first-install' `
-            -Bootstrap -NoSeed -LocalInstallerFile $env:INSTALLER
+            -Bootstrap -LocalInstallerFile $env:INSTALLER
       - name: Collect actual accepted ASAR security evidence without blocking runtime artifacts
         if: always()
         shell: pwsh
@@ -211,7 +209,7 @@ jobs:
       - uses: actions/upload-artifact@v7
         if: always()
         with:
-          name: official-pure-alpha-${{ env.ALPHA }}-seed-smoke-evidence
+          name: official-pure-alpha-${{ env.ALPHA }}-package-smoke-evidence
           path: build/orch-080/T32/evidence/
           if-no-files-found: warn
           retention-days: 14

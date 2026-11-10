@@ -5,7 +5,7 @@ Windows x64 的 1.x 开发线，当前启动器标识仍为 `1.0.0-alpha.5`，�
 ## 当前实现
 
 - 会话、设置、菜单和插件管理沿用官方 Desktop。官方 EXE、ASAR、运行库保持安装包字节；唯一允许改写的是 `resources/app-update.yml` 更新配置，启动器负责便携数据、搬迁、更新与恢复。
-- 默认打包不带 Portable 插件、市场、ASAR adapter 或更新桥。已经公开的旧 alpha.5 曾携带两款默认关闭的插件；它与当前开发代码不能混称为同一交付物。
+- 打包不带 Portable 插件、市场、ASAR adapter 或更新桥。插件由用户从官方 Desktop 插件页安装。已经公开的旧 alpha.5 曾携带两款默认关闭的插件；旧资产保留其原始内容。
 - 原生启动器设置 `DSH_HOME=data/dsh-home`、`DSH_AGENTS_HOME=data/agents`、Electron userData 和原生扩展缓存，并临时管理 `dsh://` 协议，退出还原注册表。
 - 完整包携带已展开的官方桌面；Bootstrap 轻量包从已验收目录选择版本，验证安装包大小、SHA-512、Authenticode 发布者后展开。
 - 更新由外置 PowerShell 引擎下载、验证和暂存；启动器和引擎用 activation lock 排除启动/切换竞态。提交后清理失败只记录延后，不撤销已成功的更新。
