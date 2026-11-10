@@ -19,12 +19,12 @@ test('the alpha workflow parses, uses production channel constants, smoke-tests,
   assert.match(selector, /redirect:\s*'follow'/);
   assert.match(source, /-FeedUrl \$urls\.channelBaseUrl[\s\S]*-IndexUrl \$urls\.indexUrl/);
   assert.match(source, /smoke-portable-package\.ps1/);
-  assert.match(source, /DSH-Portable-1\.0\.0-alpha\.\$\{\{ env\.ALPHA \}\}-windows-x64-lite\.zip/);
+  assert.match(source, /DSH-Portable-\$\{\{ env\.PORTABLE_VERSION \}\}-windows-x64-lite\.zip/);
   assert.match(source, /\$liteBytes -ge 40MB/);
   assert.match(source, /launcher\/bootstrap\.json/);
   assert.match(source, /-Bootstrap/);
-  assert.match(source, /\$zipHash  DSH-Portable-1\.0\.0-alpha\.\$\{\{ env\.ALPHA \}\}-windows-x64\.zip/);
-  assert.match(source, /\$liteZipHash  DSH-Portable-1\.0\.0-alpha\.\$\{\{ env\.ALPHA \}\}-windows-x64-lite\.zip/);
+  assert.match(source, /\$zipHash  DSH-Portable-\$\{\{ env\.PORTABLE_VERSION \}\}-windows-x64\.zip/);
+  assert.match(source, /\$liteZipHash  DSH-Portable-\$\{\{ env\.PORTABLE_VERSION \}\}-windows-x64-lite\.zip/);
   assert.equal(workflow.jobs.package['timeout-minutes'], 90);
   const packageStep = workflow.jobs.package.steps.find(step => step.name === 'Package the pure portable layout against the production channel');
   for (const path of ['DeepSeek Harness Portable.exe', 'launcher/apply-update.ps1', 'launcher/Payload.psm1', 'launcher/follow.json', 'launcher/bootstrap.json', 'launcher/7z.exe']) {
@@ -61,16 +61,16 @@ test('the alpha failure evidence upload excludes the official payload', async ()
   const file = new URL('../.github/workflows/official-pure-alpha.yml', import.meta.url);
   const workflow = yaml.load(await readFile(file, 'utf8'));
   const steps = workflow.jobs.package.steps;
-  const evidence = steps.find(step => step.with?.name === 'official-pure-alpha-${{ env.ALPHA }}-package-smoke-evidence');
+  const evidence = steps.find(step => step.with?.name === 'official-pure-${{ env.PORTABLE_VERSION }}-package-smoke-evidence');
   assert.ok(evidence);
   assert.equal(evidence.if, 'always()');
   assert.equal(evidence.with.path, 'build/orch-080/T32/evidence/');
   assert.doesNotMatch(evidence.with.path, /\.zip|(?:^|\/)package(?:\/|$)|(?:^|\/)app(?:\/|$)/i);
-  const releaseAssets = steps.find(step => step.with?.name === 'official-pure-alpha-${{ env.ALPHA }}-draft-assets');
+  const releaseAssets = steps.find(step => step.with?.name === 'official-pure-${{ env.PORTABLE_VERSION }}-draft-assets');
   assert.ok(releaseAssets);
   assert.equal(releaseAssets.if, 'success()');
-  assert.match(releaseAssets.with.path, /DSH-Portable-1\.0\.0-alpha\.\$\{\{ env\.ALPHA \}\}-windows-x64\.zip/);
-  assert.match(releaseAssets.with.path, /DSH-Portable-1\.0\.0-alpha\.\$\{\{ env\.ALPHA \}\}-windows-x64-lite\.zip/);
+  assert.match(releaseAssets.with.path, /DSH-Portable-\$\{\{ env\.PORTABLE_VERSION \}\}-windows-x64\.zip/);
+  assert.match(releaseAssets.with.path, /DSH-Portable-\$\{\{ env\.PORTABLE_VERSION \}\}-windows-x64-lite\.zip/);
   assert.match(releaseAssets.with.path, /smoke-root-moved\/smoke-report\.json/);
 });
 
@@ -86,7 +86,7 @@ test('a static preflight gates the package job, and a draft is only created afte
   const file = new URL('../.github/workflows/official-pure-alpha.yml', import.meta.url);
   const workflow = yaml.load(await readFile(file, 'utf8'));
   assert.equal(workflow.jobs.package.needs, 'preflight');
-  assert.equal(workflow.jobs['draft-release'].if, "inputs.publish_draft == true && inputs.smoke == 'all'");
+  assert.equal(workflow.jobs['draft-release'].if, "inputs.publish_draft == true && inputs.smoke == 'all' && !inputs.stable_candidate");
   const steps = workflow.jobs.package.steps;
   const full = steps.find(step => /Smoke first and second startup/.test(step.name ?? ''));
   const lite = steps.find(step => /Smoke lite bootstrap/.test(step.name ?? ''));
@@ -118,15 +118,25 @@ test('manual alpha qualification creates no draft unless publication is explicit
     }
   }
   assert.equal(mayPublish({ publish_draft: true, smoke: 'all' }), true);
+  assert.equal(mayPublish({ publish_draft: true, smoke: 'all', stable_candidate: true }), false);
   for (const smoke of ['full', 'lite', 'none']) assert.equal(mayPublish({ publish_draft: true, smoke }), false);
   assert.equal(workflow.jobs.package.permissions.contents, 'read');
   assert.ok(workflow.jobs.package.steps.some(step => step.uses?.startsWith('actions/upload-artifact@') && step.with?.name?.includes('draft-assets')));
 });
 
-test('the alpha number comes from one workflow-level variable', async () => {
+test('the build version reaches both packages and the 1.0.0 candidate requires an explicit official version', async () => {
   const workflow = yaml.load(await readFile(new URL('../.github/workflows/official-pure-alpha.yml', import.meta.url), 'utf8'));
   assert.equal(workflow.env.ALPHA, "${{ inputs.alpha || '5' }}");
   assert.equal(workflow.on.workflow_dispatch.inputs.alpha.default, '5');
+  assert.equal(workflow.on.workflow_dispatch.inputs.stable_candidate.default, false);
+  assert.match(workflow.env.PORTABLE_VERSION, /stable_candidate && '1\.0\.0'/);
+  const build = workflow.jobs.package.steps.find(step => step.name === 'Package the pure portable layout against the production channel');
+  assert.equal(build.run.split('-PortableVersion $env:PORTABLE_VERSION').length, 3);
+  assert.equal(build.run.split('-ExpectedOfficialVersion $env:EXPECTED_OFFICIAL_VERSION').length, 3);
+  assert.match(build.env.EXPECTED_OFFICIAL_VERSION, /stable_candidate && steps\.select\.outputs\.version/);
+  const mode = workflow.jobs.preflight.steps.find(step => step.name === 'Validate package version and draft mode');
+  assert.equal(mode.env.OFFICIAL_VERSION, '${{ inputs.version }}');
+  assert.match(mode.run, /\[\[ "\$PUBLISH_DRAFT" != true && "\$SMOKE" == all && -n "\$OFFICIAL_VERSION" \]\]/);
 });
 
 test('security collection preserves runtime artifacts and every external writer first requires bound reports', async () => {

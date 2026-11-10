@@ -23,10 +23,16 @@ on:
         required: false
         default: false
         type: boolean
+      stable_candidate:
+        description: Build an internal Windows 1.0.0 candidate with all smokes and publication disabled
+        required: false
+        default: false
+        type: boolean
 permissions:
   contents: read
 env:
   ALPHA: ${{ inputs.alpha || '5' }}
+  PORTABLE_VERSION: ${{ inputs.stable_candidate && '1.0.0' || format('1.0.0-alpha.{0}', inputs.alpha || '5') }}
 concurrency:
   group: official-pure-alpha-draft
   cancel-in-progress: false
@@ -39,9 +45,19 @@ jobs:
     permissions:
       contents: read
     steps:
-      - name: The alpha number is used in file names and the release tag, so it must be a plain number
+      - name: Validate package version and draft mode
         shell: bash
-        run: '[[ "$ALPHA" =~ ^[0-9]{1,3}$ ]] || { echo "alpha must be a number, got: $ALPHA" >&2; exit 1; }'
+        env:
+          STABLE_CANDIDATE: ${{ inputs.stable_candidate }}
+          PUBLISH_DRAFT: ${{ inputs.publish_draft }}
+          SMOKE: ${{ inputs.smoke }}
+          OFFICIAL_VERSION: ${{ inputs.version }}
+        run: |
+          if [[ "$STABLE_CANDIDATE" == true ]]; then
+            [[ "$PUBLISH_DRAFT" != true && "$SMOKE" == all && -n "$OFFICIAL_VERSION" ]] || { echo "A stable candidate requires an explicit official version, all smokes, and publication disabled" >&2; exit 1; }
+          else
+            [[ "$ALPHA" =~ ^(0|[1-9][0-9]{0,2})$ ]] || { echo "Invalid alpha number" >&2; exit 1; }
+          fi
       - uses: actions/checkout@v7
       - uses: actions/setup-node@v7
         with:
@@ -113,6 +129,7 @@ jobs:
         shell: pwsh
         env:
           INSTALLER: ${{ steps.installer.outputs.installer }}
+          EXPECTED_OFFICIAL_VERSION: ${{ inputs.stable_candidate && steps.select.outputs.version || '' }}
         run: |
           $ErrorActionPreference = 'Stop'
           $urls = node experiments/official-payload/channel/constants.mjs | ConvertFrom-Json
@@ -124,16 +141,20 @@ jobs:
             -Output 'build/orch-080/T32/package' `
             -SevenZip $sevenZip `
             -FeedUrl $urls.channelBaseUrl `
-            -IndexUrl $urls.indexUrl
+            -IndexUrl $urls.indexUrl `
+            -PortableVersion $env:PORTABLE_VERSION `
+            -ExpectedOfficialVersion $env:EXPECTED_OFFICIAL_VERSION
           if ($LASTEXITCODE -ne 0) { throw 'Pure portable packaging failed' }
-          $archive = 'build/orch-080/T32/DSH-Portable-1.0.0-alpha.${{ env.ALPHA }}-windows-x64.zip'
+          $archive = 'build/orch-080/T32/DSH-Portable-${{ env.PORTABLE_VERSION }}-windows-x64.zip'
           Compress-Archive -Path 'build/orch-080/T32/package/*' -DestinationPath $archive -CompressionLevel Optimal
           ./experiments/official-payload/package-pure.ps1 `
             -Bootstrap `
             -Output 'build/orch-080/T32/package-lite' `
             -SevenZip $sevenZip `
             -FeedUrl $urls.channelBaseUrl `
-            -IndexUrl $urls.indexUrl
+            -IndexUrl $urls.indexUrl `
+            -PortableVersion $env:PORTABLE_VERSION `
+            -ExpectedOfficialVersion $env:EXPECTED_OFFICIAL_VERSION
           if ($LASTEXITCODE -ne 0) { throw 'Lite portable packaging failed' }
           $liteRoot = 'build/orch-080/T32/package-lite'
           $liteFiles = @(Get-ChildItem -LiteralPath $liteRoot -Recurse -File)
@@ -143,7 +164,7 @@ jobs:
             if (-not (Test-Path -LiteralPath (Join-Path $liteRoot $required) -PathType Leaf)) { throw "Lite package is missing $required" }
           }
           if ((Test-Path -LiteralPath (Join-Path $liteRoot 'app/current.json')) -or @(Get-ChildItem -LiteralPath (Join-Path $liteRoot 'app') -Directory).Count -ne 0) { throw 'Lite package contains a preinstalled official app' }
-          $liteArchive = 'build/orch-080/T32/DSH-Portable-1.0.0-alpha.${{ env.ALPHA }}-windows-x64-lite.zip'
+          $liteArchive = 'build/orch-080/T32/DSH-Portable-${{ env.PORTABLE_VERSION }}-windows-x64-lite.zip'
           Compress-Archive -Path 'build/orch-080/T32/package-lite/*' -DestinationPath $liteArchive -CompressionLevel Optimal
           [IO.File]::WriteAllText('build/orch-080/T32/lite-package-size.txt', ($liteBytes.ToString() + "`n"), [Text.Encoding]::ASCII)
       - name: Smoke first and second startup, plugin-free config, and moved root
@@ -152,7 +173,7 @@ jobs:
         run: |
           $ErrorActionPreference = 'Stop'
           ./experiments/official-payload/e2e/smoke-portable-package.ps1 `
-            -Archive 'build/orch-080/T32/DSH-Portable-1.0.0-alpha.${{ env.ALPHA }}-windows-x64.zip' `
+            -Archive 'build/orch-080/T32/DSH-Portable-${{ env.PORTABLE_VERSION }}-windows-x64.zip' `
             -WorkRoot 'build/orch-080/T32/smoke-root' `
             -EvidenceRoot 'build/orch-080/T32/evidence'
       - name: Smoke lite bootstrap install from the accepted channel and official CDN
@@ -161,7 +182,7 @@ jobs:
         run: |
           $ErrorActionPreference = 'Stop'
           ./experiments/official-payload/e2e/smoke-portable-package.ps1 `
-            -Archive 'build/orch-080/T32/DSH-Portable-1.0.0-alpha.${{ env.ALPHA }}-windows-x64-lite.zip' `
+            -Archive 'build/orch-080/T32/DSH-Portable-${{ env.PORTABLE_VERSION }}-windows-x64-lite.zip' `
             -WorkRoot 'build/orch-080/T32/smoke-lite-root' `
             -EvidenceRoot 'build/orch-080/T32/lite-evidence' `
             -Bootstrap
@@ -172,7 +193,7 @@ jobs:
           INSTALLER: ${{ steps.installer.outputs.installer }}
         run: |
           ./experiments/official-payload/e2e/smoke-portable-package.ps1 `
-            -Archive 'build/orch-080/T32/DSH-Portable-1.0.0-alpha.${{ env.ALPHA }}-windows-x64-lite.zip' `
+            -Archive 'build/orch-080/T32/DSH-Portable-${{ env.PORTABLE_VERSION }}-windows-x64-lite.zip' `
             -WorkRoot 'build/orch-080/T32/smoke-lite-local-root' `
             -EvidenceRoot 'build/orch-080/T32/lite-evidence/local-first-install' `
             -Bootstrap -LocalInstallerFile $env:INSTALLER
@@ -183,7 +204,7 @@ jobs:
           SECURITY_DIRECTORY: build/orch-080/T32/security
           SECURITY_CANDIDATE: build/orch-080/T32/candidate.json
           SECURITY_ROOTS: '[["full","build/orch-080/T32/smoke-root-moved"],["lite","build/orch-080/T32/smoke-lite-root-moved"]]'
-          SECURITY_ASSETS: '["build/orch-080/T32/DSH-Portable-1.0.0-alpha.${{ env.ALPHA }}-windows-x64.zip","build/orch-080/T32/DSH-Portable-1.0.0-alpha.${{ env.ALPHA }}-windows-x64-lite.zip"]'
+          SECURITY_ASSETS: '["build/orch-080/T32/DSH-Portable-${{ env.PORTABLE_VERSION }}-windows-x64.zip","build/orch-080/T32/DSH-Portable-${{ env.PORTABLE_VERSION }}-windows-x64-lite.zip"]'
         run: |
           node scripts/official-payload-security-evidence.mjs collect
           if (Test-Path 'build/orch-080/T32/security/summary.md') { Get-Content 'build/orch-080/T32/security/summary.md' | Out-File -FilePath $env:GITHUB_STEP_SUMMARY -Append -Encoding utf8 }
@@ -195,21 +216,21 @@ jobs:
       - uses: actions/upload-artifact@v7
         if: always()
         with:
-          name: official-pure-alpha-${{ env.ALPHA }}-security
+          name: official-pure-${{ env.PORTABLE_VERSION }}-security
           path: build/orch-080/T32/security/
           if-no-files-found: warn
           retention-days: 14
       - uses: actions/upload-artifact@v7
         if: always()
         with:
-          name: official-pure-alpha-${{ env.ALPHA }}-lite-smoke-evidence
+          name: official-pure-${{ env.PORTABLE_VERSION }}-lite-smoke-evidence
           path: build/orch-080/T32/lite-evidence/
           if-no-files-found: warn
           retention-days: 14
       - uses: actions/upload-artifact@v7
         if: always()
         with:
-          name: official-pure-alpha-${{ env.ALPHA }}-package-smoke-evidence
+          name: official-pure-${{ env.PORTABLE_VERSION }}-package-smoke-evidence
           path: build/orch-080/T32/evidence/
           if-no-files-found: warn
           retention-days: 14
@@ -218,22 +239,22 @@ jobs:
         run: |
           $ErrorActionPreference = 'Stop'
           $candidate = Get-Content -LiteralPath 'build/orch-080/T32/candidate.json' -Raw | ConvertFrom-Json
-          $archive = 'build/orch-080/T32/DSH-Portable-1.0.0-alpha.${{ env.ALPHA }}-windows-x64.zip'
-          $liteArchive = 'build/orch-080/T32/DSH-Portable-1.0.0-alpha.${{ env.ALPHA }}-windows-x64-lite.zip'
+          $archive = 'build/orch-080/T32/DSH-Portable-${{ env.PORTABLE_VERSION }}-windows-x64.zip'
+          $liteArchive = 'build/orch-080/T32/DSH-Portable-${{ env.PORTABLE_VERSION }}-windows-x64-lite.zip'
           $launcher = 'build/orch-080/T32/package/DeepSeek Harness Portable.exe'
           $zipHash = (Get-FileHash -LiteralPath $archive -Algorithm SHA256).Hash.ToLowerInvariant()
           $liteZipHash = (Get-FileHash -LiteralPath $liteArchive -Algorithm SHA256).Hash.ToLowerInvariant()
           $launcherHash = (Get-FileHash -LiteralPath $launcher -Algorithm SHA256).Hash.ToLowerInvariant()
-          @("$zipHash  DSH-Portable-1.0.0-alpha.${{ env.ALPHA }}-windows-x64.zip", "$liteZipHash  DSH-Portable-1.0.0-alpha.${{ env.ALPHA }}-windows-x64-lite.zip", "$launcherHash  DeepSeek Harness Portable.exe") | Set-Content -LiteralPath 'build/orch-080/T32/checksums.txt' -Encoding ascii
-          $source = @("# DSH-Portable 1.0.0-alpha.${{ env.ALPHA }} source", '', "- Official desktop version: $($candidate.version)", "- Official installer URL: $($candidate.installerUrl)", "- Official installer SHA-512 (base64): $($candidate.sha512)", "- Full package SHA-256: $zipHash", "- Lite package SHA-256: $liteZipHash", "- Launcher SHA-256: $launcherHash", "- Source commit: $env:GITHUB_SHA", '', 'The lite package downloads the accepted official desktop from the official CDN on first launch. Both packages are draft assets and do not replace the stable Native line.')
+          @("$zipHash  DSH-Portable-${{ env.PORTABLE_VERSION }}-windows-x64.zip", "$liteZipHash  DSH-Portable-${{ env.PORTABLE_VERSION }}-windows-x64-lite.zip", "$launcherHash  DeepSeek Harness Portable.exe") | Set-Content -LiteralPath 'build/orch-080/T32/checksums.txt' -Encoding ascii
+          $source = @("# DSH-Portable $env:PORTABLE_VERSION source", '', "- Official desktop version: $($candidate.version)", "- Official installer URL: $($candidate.installerUrl)", "- Official installer SHA-512 (base64): $($candidate.sha512)", "- Full package SHA-256: $zipHash", "- Lite package SHA-256: $liteZipHash", "- Launcher SHA-256: $launcherHash", "- Source commit: $env:GITHUB_SHA", '', 'The lite package downloads the accepted official desktop from the official CDN on first launch. Both packages use the separate official Desktop update channel.')
           $source | Set-Content -LiteralPath 'build/orch-080/T32/SOURCE.md' -Encoding utf8
       - uses: actions/upload-artifact@v7
         if: success()
         with:
-          name: official-pure-alpha-${{ env.ALPHA }}-draft-assets
+          name: official-pure-${{ env.PORTABLE_VERSION }}-draft-assets
           path: |
-            build/orch-080/T32/DSH-Portable-1.0.0-alpha.${{ env.ALPHA }}-windows-x64.zip
-            build/orch-080/T32/DSH-Portable-1.0.0-alpha.${{ env.ALPHA }}-windows-x64-lite.zip
+            build/orch-080/T32/DSH-Portable-${{ env.PORTABLE_VERSION }}-windows-x64.zip
+            build/orch-080/T32/DSH-Portable-${{ env.PORTABLE_VERSION }}-windows-x64-lite.zip
             build/orch-080/T32/checksums.txt
             build/orch-080/T32/SOURCE.md
             build/orch-080/T32/lite-package-size.txt
@@ -246,7 +267,7 @@ jobs:
     needs: package
     # Ordinary manual runs retain Actions artifacts without creating or updating a draft.
     # Explicit publication still requires both real package smokes.
-    if: inputs.publish_draft == true && inputs.smoke == 'all'
+    if: inputs.publish_draft == true && inputs.smoke == 'all' && !inputs.stable_candidate
     runs-on: ubuntu-latest
     timeout-minutes: 15
     permissions:
@@ -258,11 +279,11 @@ jobs:
           node-version: 24.22.1
       - uses: actions/download-artifact@v8
         with:
-          name: official-pure-alpha-${{ env.ALPHA }}-draft-assets
+          name: official-pure-${{ env.PORTABLE_VERSION }}-draft-assets
           path: release-input
       - uses: actions/download-artifact@v8
         with:
-          name: official-pure-alpha-${{ env.ALPHA }}-security
+          name: official-pure-${{ env.PORTABLE_VERSION }}-security
           path: release-security
       - name: Require bound actual-ASAR security authorization before any external write
         shell: bash
@@ -271,7 +292,7 @@ jobs:
           SECURITY_CANDIDATE: release-security/selection.json
           SECURITY_EXPECTED_VERSION: ${{ needs.package.outputs.version }}
           SECURITY_KINDS: '["full","lite"]'
-          SECURITY_ASSETS: '["release-input/DSH-Portable-1.0.0-alpha.${{ env.ALPHA }}-windows-x64.zip","release-input/DSH-Portable-1.0.0-alpha.${{ env.ALPHA }}-windows-x64-lite.zip"]'
+          SECURITY_ASSETS: '["release-input/DSH-Portable-${{ env.PORTABLE_VERSION }}-windows-x64.zip","release-input/DSH-Portable-${{ env.PORTABLE_VERSION }}-windows-x64-lite.zip"]'
         run: |
           node scripts/official-payload-security-evidence.mjs authorize
       - name: Create or update only the alpha.${{ env.ALPHA }} draft release
@@ -292,4 +313,4 @@ jobs:
             if [ "$DRAFT" != true ]; then echo 'Refusing to mutate an existing non-draft alpha.${{ env.ALPHA }} release' >&2; exit 1; fi
             gh api -X PATCH "repos/$GITHUB_REPOSITORY/releases/$RELEASE_ID" -f tag_name="$RELEASE_TAG" -f target_commitish="$GITHUB_SHA" -f name="$RELEASE_NAME" -F body=@release-input/SOURCE.md -F draft=true -F prerelease=true > /dev/null
           fi
-          node scripts/upload-release-assets.mjs "$RELEASE_TAG" release-input/DSH-Portable-1.0.0-alpha.${{ env.ALPHA }}-windows-x64.zip release-input/DSH-Portable-1.0.0-alpha.${{ env.ALPHA }}-windows-x64-lite.zip release-input/checksums.txt release-input/SOURCE.md --mutable
+          node scripts/upload-release-assets.mjs "$RELEASE_TAG" release-input/DSH-Portable-${{ env.PORTABLE_VERSION }}-windows-x64.zip release-input/DSH-Portable-${{ env.PORTABLE_VERSION }}-windows-x64-lite.zip release-input/checksums.txt release-input/SOURCE.md --mutable

@@ -11,11 +11,14 @@ GitHub Actions 按每小时计划检查官方 Windows Desktop feed。main 中的
 ```powershell
 gh workflow run official-desktop-channel.yml --ref <branch> -f force_version=0.2.2-rc.1 -f publish_channel=false
 gh workflow run official-pure-alpha.yml --ref <branch> -f alpha=99 -f smoke=all -f publish_draft=false
+gh workflow run official-pure-alpha.yml --ref <branch> -f stable_candidate=true -f version=<已接纳的官方桌面版本> -f smoke=all -f publish_draft=false
 gh workflow run official-pure-e2e.yml --ref <branch> -f candidate_version=0.2.1-rc.3
 gh workflow run official-pure-e2e.yml --ref <branch> -f scenario=data-transfer -f candidate_version=0.2.1-rc.3
 ```
 
 第一条执行与定时任务相同的 Windows Desktop 完整资格检查。打包流程使用生产目录中已接纳的版本，生成完整包与 Bootstrap 包并实际冒烟，不创建 alpha.99 草稿或标签；不表示最新 nightly 已被接纳。更新 E2E 由受控旧候选 `candidate.json` 的 `0.1.7-rc.2` 升级至官方 feed 当前版本；参数只断言新版身份，不改写生产目录。feed 版本改变后应先核实身份再调整断言。
+
+`stable_candidate=true` 生成 Windows x64 `1.0.0` 完整包和轻量包。指定的官方版本必须与两种包实际选中的最新已接纳版本一致。它要求全部启动检查，输出仅保存在 Actions，供正式发布前核对版本和成品摘要。
 
 `candidate.json` 的旧版本是跨版本 E2E 输入，不是过时的生产版本锁，不能随源码基线刷新一起覆盖。
 
