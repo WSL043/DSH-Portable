@@ -206,8 +206,6 @@ Open **Settings → Plugins → Plugin Market** to search, filter, visit a proje
 
 In the official **Plugins → Add plugin** dialog, enter a **package name or address, not a terminal command**. For example, enter `dsh-codex-subscription`, or `dsh-codex-subscription@2.1.3-beta.1` for that candidate. Do not include `dsh plugin --profile web add`. Review the source and follow the installation result; restart only when requested.
 
-Optional provider: [Codex Subscription](https://github.com/WSL043/dsh-codex-subscription) connects a ChatGPT/Codex subscription through the existing Plugin Market or standard DSH command; it is not installed by default.
-
 New packages do not install community plugins by default. Community plugins remain opt-in through the Plugin Market or standard DSH commands. Normal upgrades preserve the existing Profile, installed packages and enablement states.
 
 ### DSH Terminal and plugin management commands

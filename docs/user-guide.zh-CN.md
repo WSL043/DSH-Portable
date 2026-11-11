@@ -208,8 +208,6 @@ AppImage 的会话、设置、插件和工作区保存在旁边的 `DSH-Portable
 
 使用官方 **插件 → 添加插件** 时，输入的是**包名或地址，不是终端命令**。例如安装订阅插件填写 `dsh-codex-subscription`；指定候选版本填写 `dsh-codex-subscription@2.1.3-beta.1`。不要把 `dsh plugin --profile web add` 一起粘贴进去。确认来源后，由页面显示安装结果；只有明确提示需要重启时再重启。
 
-可选 Provider：[Codex Subscription](https://github.com/WSL043/dsh-codex-subscription) 可通过现有插件市场或标准 DSH 命令连接 ChatGPT/Codex 订阅；不会默认安装。
-
 新版本不再默认安装社区插件。社区插件仍按需从插件市场或通过标准 DSH 命令安装。普通升级会保留现有 Profile、已安装插件及启停状态。
 
 ### DSH 终端与插件管理命令
