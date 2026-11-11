@@ -35,6 +35,7 @@ jobs:
     outputs:
       no_op: ${{ steps.identity.outputs.no_op }}
       version: ${{ steps.identity.outputs.version }}
+      channel: ${{ steps.identity.outputs.channel }}
       identity: ${{ steps.identity.outputs.identity }}
       publish: ${{ steps.identity.outputs.publish }}
     steps:
@@ -58,10 +59,10 @@ jobs:
           import { readFile, writeFile } from 'node:fs/promises';
           import { CHANNEL_BASE_URL, CHANNEL_INDEX_URL } from './experiments/official-payload/channel/constants.mjs';
           import { needsChannelPublication } from './experiments/official-payload/channel/build-channel.mjs';
-          import { parseDesktopFeed } from './experiments/official-payload/feed.mjs';
-          const candidateBytes = await readFile('build/orch-080/T28/input/candidate.json');
-          const candidate = JSON.parse(candidateBytes);
-          const identity = createHash('sha256').update(candidateBytes).digest('hex');
+          import { fetchOfficialDesktopCandidate, parseDesktopFeed } from './experiments/official-payload/feed.mjs';
+          const candidatePath = 'build/orch-080/T28/input/candidate.json';
+          let candidate = JSON.parse(await readFile(candidatePath));
+          let channel = 'nightly';
           const requested = process.env.FORCE_VERSION ?? '';
           if (requested && candidate.version !== requested) throw new Error(`force_version ${requested} is not the current official feed candidate ${candidate.version}`);
           const response = await fetch(CHANNEL_INDEX_URL, { redirect: 'follow', signal: AbortSignal.timeout(15000) });
@@ -74,21 +75,37 @@ jobs:
             index = JSON.parse(text);
           }
           const publicationRequested = process.env.PUBLISH_CHANNEL === 'true';
-          let feed;
-          if (publicationRequested) {
-            const response = await fetch(`${CHANNEL_BASE_URL}nightly.yml`, { redirect: 'follow', signal: AbortSignal.timeout(15000) });
-            if (response.status !== 404) {
-              if (!response.ok) throw new Error(`Channel feed request failed: ${response.status}`);
-              if (!index.versions?.length) throw new Error('Existing channel feed has no index; refusing to discard channel history');
-              feed = parseDesktopFeed(await response.text());
+          async function readFeed(name) {
+            const response = await fetch(`${CHANNEL_BASE_URL}${name}.yml`, { redirect: 'follow', signal: AbortSignal.timeout(15000) });
+            if (response.status === 404) return null;
+            if (!response.ok) throw new Error(`Channel ${name} feed request failed: ${response.status}`);
+            if (!index.versions?.length) throw new Error('Existing channel feed has no index; refusing to discard channel history');
+            return parseDesktopFeed(await response.text());
+          }
+          let feed = publicationRequested ? await readFeed(channel) : null;
+          if (publicationRequested && !requested && !needsChannelPublication(index, candidate, feed)) {
+            const stable = await fetchOfficialDesktopCandidate('stable').catch(error => {
+              console.warn(`::warning::Official stable feed unavailable: ${error.message}`);
+              return null;
+            });
+            if (stable) {
+              const stableFeed = await readFeed('stable');
+              if (needsChannelPublication(index, stable, stableFeed, 'stable')) {
+                channel = 'stable';
+                candidate = stable;
+                feed = stableFeed;
+              }
             }
           }
-          const needsPublication = needsChannelPublication(index, candidate, feed);
+          const candidateBytes = JSON.stringify(candidate, null, 2) + '\n';
+          const identity = createHash('sha256').update(candidateBytes).digest('hex');
+          const needsPublication = needsChannelPublication(index, candidate, feed, channel);
           const publish = publicationRequested && needsPublication;
           const noOp = publicationRequested && !needsPublication && !requested;
+          await writeFile(candidatePath, candidateBytes);
           await writeFile('build/orch-080/T28/input/index.json', JSON.stringify(index, null, 2) + '\n');
-          await writeFile(process.env.GITHUB_OUTPUT, `no_op=${noOp}\npublish=${publish}\nversion=${candidate.version}\nidentity=${identity}\n`, { flag: 'a' });
-          console.log(JSON.stringify({ version: candidate.version, noOp, publish, indexedVersions: index.versions.length, indexUrl: CHANNEL_INDEX_URL }));
+          await writeFile(process.env.GITHUB_OUTPUT, `no_op=${noOp}\npublish=${publish}\nchannel=${channel}\nversion=${candidate.version}\nidentity=${identity}\n`, { flag: 'a' });
+          console.log(JSON.stringify({ version: candidate.version, channel, noOp, publish, indexedVersions: index.versions.length, indexUrl: CHANNEL_INDEX_URL }));
           NODE
       - uses: actions/upload-artifact@v7
         if: steps.identity.outputs.no_op == 'false'
@@ -155,9 +172,11 @@ jobs:
       - name: Run phase-1 official update contract probe
         if: steps.qualification-cache.outputs.cache-hit != 'true'
         shell: pwsh
+        env:
+          UPDATE_CHANNEL: ${{ needs.resolve.outputs.channel }}
         run: |
           $ErrorActionPreference = 'Stop'
-          ./experiments/official-payload/contract/run-contract-probe.ps1 -AppDir 'build/orch-080/T28/official-new' -WorkRoot 'build/orch-080/T28/contract/work' -Locale en
+          ./experiments/official-payload/contract/run-contract-probe.ps1 -AppDir 'build/orch-080/T28/official-new' -WorkRoot 'build/orch-080/T28/contract/work' -Locale en -UpdateChannel $env:UPDATE_CHANNEL
           if ($LASTEXITCODE -ne 0) { throw 'Official update contract probe exited non-zero' }
           $report = Get-Content -LiteralPath 'build/orch-080/T28/contract/contract-report.json' -Raw | ConvertFrom-Json
           if (-not $report.overallPassed) { throw 'Phase-1 contract report overallPassed was not true' }
@@ -244,6 +263,7 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
           CHANNEL_TAG: update-channel-desktop
+          UPDATE_CHANNEL: ${{ needs.resolve.outputs.channel }}
           VERSION: ${{ needs.resolve.outputs.version }}
         run: |
           $ErrorActionPreference = 'Stop'
@@ -271,6 +291,7 @@ jobs:
           node experiments/official-payload/channel/build-channel.mjs `
             --candidate 'build/orch-080/T28/input/candidate.json' `
             --index 'build/orch-080/T28/input/index.json' `
+            --channel $env:UPDATE_CHANNEL `
             --launcher $launcher `
             --output 'build/orch-080/T28/channel-output'
           if ($LASTEXITCODE -ne 0) { throw 'Qualified channel generation failed' }
@@ -284,12 +305,13 @@ jobs:
           }
           node @exeArgs
           if ($LASTEXITCODE -ne 0) { throw 'Immutable launcher asset upload failed' }
-          node scripts/upload-release-assets.mjs $tag "$output/index.json" "$output/nightly.yml" --mutable
+          $feedName = "$($env:UPDATE_CHANNEL).yml"
+          node scripts/upload-release-assets.mjs $tag "$output/index.json" "$output/$feedName" --mutable
           if ($LASTEXITCODE -ne 0) { throw 'Mutable channel metadata upload failed' }
           $readback = Join-Path $env:RUNNER_TEMP 'channel-readback'
           New-Item -ItemType Directory -Path $readback -Force | Out-Null
           $urls = node experiments/official-payload/channel/constants.mjs | ConvertFrom-Json
-          foreach ($name in @($assetName, 'index.json', 'nightly.yml')) {
+          foreach ($name in @($assetName, 'index.json', $feedName)) {
             Invoke-WebRequest -Uri ($urls.channelBaseUrl + $name) -OutFile (Join-Path $readback $name) -TimeoutSec 20 -MaximumRetryCount 3 -RetryIntervalSec 3
             $expected = (Get-FileHash -LiteralPath (Join-Path $output $name) -Algorithm SHA256).Hash
             $actual = (Get-FileHash -LiteralPath (Join-Path $readback $name) -Algorithm SHA256).Hash

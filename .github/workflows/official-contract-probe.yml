@@ -1,6 +1,12 @@
 name: Official desktop update contract probe
 on:
   workflow_dispatch:
+    inputs:
+      update_channel:
+        description: Official Desktop channel to exercise on the isolated loopback feed
+        type: choice
+        options: [nightly, stable]
+        default: nightly
 permissions:
   contents: read
 concurrency:
@@ -25,8 +31,10 @@ jobs:
           import { readFileSync } from 'node:fs';
           const candidate = JSON.parse(readFileSync('experiments/official-payload/candidate.json', 'utf8'));
           const digest = Buffer.from(candidate.sha512, 'base64').toString('hex');
-          console.log(`cache_key=official-contract-${candidate.version}-${digest}`);
+          console.log(`cache_key=official-contract-${process.env.UPDATE_CHANNEL}-${candidate.version}-${digest}`);
           NODE
+        env:
+          UPDATE_CHANNEL: ${{ inputs.update_channel }}
       - uses: actions/upload-artifact@v7
         with:
           name: official-contract-candidate
@@ -69,8 +77,9 @@ jobs:
         shell: pwsh
         env:
           EXPANDED_PAYLOAD: build/official-contract-probe/official-payload
+          UPDATE_CHANNEL: ${{ inputs.update_channel }}
         run: |
-          ./experiments/official-payload/contract/run-contract-probe.ps1 -AppDir $env:EXPANDED_PAYLOAD -WorkRoot 'build/official-contract-probe/work' -Locale en
+          ./experiments/official-payload/contract/run-contract-probe.ps1 -AppDir $env:EXPANDED_PAYLOAD -WorkRoot 'build/official-contract-probe/work' -Locale en -UpdateChannel $env:UPDATE_CHANNEL
           if ($LASTEXITCODE -ne 0) { throw 'Official update contract probe failed' }
       - name: Save exact successful probe identity
         if: success() && steps.success-cache.outputs.cache-hit != 'true'

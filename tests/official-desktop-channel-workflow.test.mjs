@@ -73,7 +73,8 @@ test('channel publishing uploads only the candidate and keeps immutable conflict
   const publication = channel.jobs.publish.steps.find(step => step.name === 'Build and publish qualified assets, then verify public downloads').run;
   assert.match(publication, /\$exeFiles\.Count -ne 1/);
   assert.match(publication, /--verify-only/);
-  assert.match(publication, /foreach \(\$name in @\(\$assetName, 'index\.json', 'nightly\.yml'\)\)/);
+  assert.match(publication, /--channel \$env:UPDATE_CHANNEL/);
+  assert.match(publication, /foreach \(\$name in @\(\$assetName, 'index\.json', \$feedName\)\)/);
   assert.match(publication, /\$exeArgs = @\('scripts\/upload-release-assets\.mjs', \$tag\) \+ \$exeFiles/);
   assert.doesNotMatch(publication, /--clobber|DELETE/);
   assert.doesNotMatch(publication, /\$exeArgs[^\r\n]*--mutable/);

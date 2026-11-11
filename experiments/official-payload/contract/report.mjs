@@ -36,7 +36,8 @@ export function buildContractReport(input = {}) {
   const resultById = new Map();
   const put = (id, passed, evidence) => resultById.set(id, { id, passed: Boolean(passed), evidence });
 
-  put('feed-http-accepted', hasRequest('/nightly.yml', 200), requests.filter(item => item.path === '/nightly.yml'));
+  const feedPath = input.updateChannel === 'stable' ? '/stable.yml' : '/nightly.yml';
+  put('feed-http-accepted', hasRequest(feedPath, 200), requests.filter(item => item.path === feedPath));
   const installerPath = `/deepseek-harness-${input.version ?? 'unknown'}-win-x64.exe`;
   put('installer-downloaded', hasRequest(installerPath, 200) && input.installerFileExists === true, { request: requests.find(item => item.path === installerPath), installerFileExists: Boolean(input.installerFileExists) });
   const blockmapPath = `${installerPath}.blockmap`;

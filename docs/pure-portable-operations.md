@@ -6,6 +6,8 @@
 
 GitHub Actions 每小时检查官方 Windows Desktop feed。新候选通过签名、SHA-512、实际更新、离线修复、回退和健康恢复后，自动发布到 1.x 的 Windows 桌面通道并回读公开下载。已发布版本跳过；若目录已有候选但 feed 尚未切换，重新验收后补齐。main 中验收源码的变更触发只读检查。手动运行默认只验收，也可显式指定 `publish_channel=true` 补跑通道发布。
 
+官方桌面端的开发版与正式版分别使用 `nightly.yml` 和 `stable.yml`。开发版跟随官方 nightly。官方 stable 提供正式版本后，工作流也会独立验收并发布该通道。两个通道共用已验收安装包索引，分别保留各自当前版本。GitHub 调度可能延迟，请以 Actions 中实际启动时间和公开 feed 为准。
+
 仅验收的示例（先提交并推送待验分支，`<branch>` 替换为实际分支）：
 
 ```powershell

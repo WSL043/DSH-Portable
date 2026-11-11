@@ -48,39 +48,60 @@ function assertChannelBase(value) {
   return url.href;
 }
 
-export function needsChannelPublication(index, candidate, feed) {
-  if (index.schemaVersion !== 1 || !Array.isArray(index.versions) || index.versions.length > 100) throw new Error('Existing channel index is invalid');
-  const same = index.versions.find(entry => entry.version === candidate.version);
-  if (same && (same.sha512 !== candidate.sha512 || same.size !== candidate.size)) throw new Error(`Official same-version identity changed: ${candidate.version}`);
-  if (index.versions.some(entry => compareVersions(entry.version, candidate.version) > 0)) return false;
-  const expectedUrl = `${CHANNEL_BASE_URL}deepseek-harness-${candidate.version}-win-x64.exe`;
-  return !same || feed?.version !== candidate.version || feed.url !== expectedUrl;
+function assertChannelVersion(channel, version) {
+  if (channel !== 'nightly' && channel !== 'stable') throw new Error('Unsupported Desktop channel');
+  if (channel === 'stable' && !/^\d+\.\d+\.\d+$/.test(version)) throw new Error('Stable Desktop channel requires a final version');
 }
 
-export function generateChannel({ existingIndex = null, candidate, launcherBytes, channelBaseUrl = CHANNEL_BASE_URL, qualifiedAt = new Date().toISOString() }) {
+function channelVersion(index, channel) {
+  if (index.schemaVersion !== 1 || !Array.isArray(index.versions) || index.versions.length > 100) throw new Error('Existing channel index is invalid');
+  const recorded = index[`${channel}Version`];
+  if (recorded != null) {
+    assertChannelVersion(channel, recorded);
+    if (!index.versions.some(entry => entry.version === recorded)) throw new Error(`Existing ${channel} version is missing from the index`);
+    return recorded;
+  }
+  if (channel === 'nightly' && index.stableVersion == null) {
+    return index.versions.reduce((newest, { version }) => !newest || compareVersions(version, newest) > 0 ? version : newest, null);
+  }
+  return null;
+}
+
+export function needsChannelPublication(index, candidate, feed, channel = 'nightly') {
+  assertChannelVersion(channel, candidate.version);
+  const current = channelVersion(index, channel);
+  const same = index.versions.find(entry => entry.version === candidate.version);
+  if (same && (same.sha512 !== candidate.sha512 || same.size !== candidate.size)) throw new Error(`Official same-version identity changed: ${candidate.version}`);
+  if ([current, feed?.version].some(version => version && compareVersions(version, candidate.version) > 0)) return false;
+  const expectedUrl = `${CHANNEL_BASE_URL}deepseek-harness-${candidate.version}-win-x64.exe`;
+  return !same || current !== candidate.version || feed?.version !== candidate.version || feed.url !== expectedUrl;
+}
+
+export function generateChannel({ existingIndex = null, candidate, launcherBytes, channel = 'nightly', channelBaseUrl = CHANNEL_BASE_URL, qualifiedAt = new Date().toISOString() }) {
   if (!Buffer.isBuffer(launcherBytes) || launcherBytes.length === 0) throw new Error('Launcher file is empty');
   const channelBase = assertChannelBase(channelBaseUrl);
+  assertChannelVersion(channel, candidate.version);
+  existingIndex ??= { schemaVersion: 1, versions: [] };
+  const current = channelVersion(existingIndex, channel);
+  if (current && compareVersions(candidate.version, current) < 0) throw new Error('Candidate is older than the latest qualified version in its channel');
   const byVersion = new Map();
-  if (existingIndex !== null) {
-    if (!existingIndex || existingIndex.schemaVersion !== 1 || !Array.isArray(existingIndex.versions) || existingIndex.versions.length > 100) throw new Error('Invalid existing channel index');
-    for (const entry of existingIndex.versions) {
-      const normalized = normalizeEntry(entry, qualifiedAt);
-      const prior = byVersion.get(normalized.version);
-      if (prior && (prior.sha512 !== normalized.sha512 || prior.size !== normalized.size)) throw new Error(`Official version identity changed: ${normalized.version}`);
-      byVersion.set(normalized.version, normalized);
-    }
+  for (const entry of existingIndex.versions) {
+    const normalized = normalizeEntry(entry, qualifiedAt);
+    const prior = byVersion.get(normalized.version);
+    if (prior && (prior.sha512 !== normalized.sha512 || prior.size !== normalized.size)) throw new Error(`Official version identity changed: ${normalized.version}`);
+    byVersion.set(normalized.version, normalized);
   }
   const incoming = normalizeEntry(candidate, qualifiedAt);
   const prior = byVersion.get(incoming.version);
   if (prior && (prior.sha512 !== incoming.sha512 || prior.size !== incoming.size)) throw new Error(`Official version identity changed: ${incoming.version}`);
-  byVersion.set(incoming.version, prior ?? incoming);
-
-  const versions = [...byVersion.values()].sort((a, b) => compareVersions(a.version, b.version)).slice(-MAX_VERSIONS);
-  if (versions.length === 0) throw new Error('No qualified official versions');
-  const latest = versions.at(-1);
-  // The feed digest describes this candidate's launcher bytes. Never attach
-  // them to a different, already qualified version when a feed moves backward.
-  if (latest.version !== incoming.version) throw new Error('Candidate is older than the latest qualified version');
+  const latest = prior ?? incoming;
+  byVersion.set(incoming.version, latest);
+  const nightlyVersion = channel === 'nightly' ? incoming.version : channelVersion(existingIndex, 'nightly');
+  const stableVersion = channel === 'stable' ? incoming.version : channelVersion(existingIndex, 'stable');
+  const pinned = new Set([nightlyVersion, stableVersion].filter(Boolean));
+  const order = (a, b) => compareVersions(a.version, b.version);
+  const history = [...byVersion.values()].filter(entry => !pinned.has(entry.version)).sort(order).slice(-(MAX_VERSIONS - pinned.size));
+  const versions = [...history, ...[...pinned].map(version => byVersion.get(version))].sort(order);
   const filename = `deepseek-harness-${latest.version}-win-x64.exe`;
   const launcherSha512 = createHash('sha512').update(launcherBytes).digest('base64');
   const releaseDate = new Date(latest.qualifiedAt).toISOString();
@@ -96,7 +117,7 @@ export function generateChannel({ existingIndex = null, candidate, launcherBytes
     '',
   ].join('\n');
   return {
-    index: { schemaVersion: 1, versions },
+    index: { schemaVersion: 1, ...(nightlyVersion ? { nightlyVersion } : {}), ...(stableVersion ? { stableVersion } : {}), versions },
     feed,
     launcherSha512,
     launcherSize: launcherBytes.length,
@@ -113,7 +134,7 @@ async function parseArgs(args) {
     if (!key?.startsWith('--') || !args[i + 1] || values[key.slice(2)] !== undefined) throw new Error('Usage: node build-channel.mjs --candidate FILE --launcher FILE --output DIR [--index FILE]');
     values[key.slice(2)] = args[i + 1];
   }
-  if (Object.keys(values).some(key => !['candidate', 'launcher', 'output', 'index', 'base-url'].includes(key)) || !values.candidate || !values.launcher || !values.output) throw new Error('Usage: node build-channel.mjs --candidate FILE --launcher FILE --output DIR [--index FILE] [--base-url URL]');
+  if (Object.keys(values).some(key => !['candidate', 'launcher', 'output', 'index', 'base-url', 'channel'].includes(key)) || !values.candidate || !values.launcher || !values.output) throw new Error('Usage: node build-channel.mjs --candidate FILE --launcher FILE --output DIR [--index FILE] [--base-url URL] [--channel nightly|stable]');
   return values;
 }
 
@@ -124,13 +145,14 @@ async function main() {
   const rawCandidate = JSON.parse(await readFile(args.candidate, 'utf8'));
   const candidate = { ...rawCandidate, installerUrl: rawCandidate.installerUrl ?? rawCandidate.url };
   const launcherBytes = await readFile(args.launcher);
-  const generated = generateChannel({ existingIndex, candidate, launcherBytes, channelBaseUrl: args['base-url'] ?? CHANNEL_BASE_URL });
+  const channel = args.channel ?? 'nightly';
+  const generated = generateChannel({ existingIndex, candidate, launcherBytes, channel, channelBaseUrl: args['base-url'] ?? CHANNEL_BASE_URL });
   const output = resolve(args.output);
   await mkdir(output, { recursive: true });
   await writeFile(resolve(output, 'index.json'), `${JSON.stringify(generated.index, null, 2)}\n`, { flag: 'wx' });
-  await writeFile(resolve(output, 'nightly.yml'), generated.feed, { flag: 'wx' });
+  await writeFile(resolve(output, `${channel}.yml`), generated.feed, { flag: 'wx' });
   for (const filename of generated.launcherFiles) await copyFile(args.launcher, resolve(output, filename));
-  console.log(JSON.stringify({ latest: generated.index.versions.at(-1).version, versions: generated.index.versions.length, launcherFiles: generated.launcherFiles, launcherSha512: generated.launcherSha512, launcherSize: generated.launcherSize }));
+  console.log(JSON.stringify({ channel, latest: candidate.version, versions: generated.index.versions.length, launcherFiles: generated.launcherFiles, launcherSha512: generated.launcherSha512, launcherSize: generated.launcherSize }));
 }
 
 if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) await main();

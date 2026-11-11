@@ -7,6 +7,7 @@ import { fileURLToPath } from 'node:url';
 import { createRequire } from 'node:module';
 import { generateChannel, needsChannelPublication } from '../experiments/official-payload/channel/build-channel.mjs';
 import { CHANNEL_BASE_URL, CHANNEL_INDEX_URL } from '../experiments/official-payload/channel/constants.mjs';
+import { fetchOfficialDesktopCandidate } from '../experiments/official-payload/feed.mjs';
 
 const requireApp = createRequire(new URL('../app/package.json', import.meta.url));
 const yaml = requireApp('js-yaml');
@@ -54,6 +55,39 @@ test('publication skips an already served or older version and resumes an incomp
   const launcherBytes = Buffer.from('immutable launcher');
   assert.deepEqual(generateChannel({ existingIndex: index, candidate, launcherBytes, qualifiedAt: '2026-11-11T00:00:00Z' }),
     generateChannel({ existingIndex: index, candidate, launcherBytes, qualifiedAt: '2026-11-12T00:00:00Z' }));
+});
+
+test('stable and nightly retain independent qualified versions and forbid stable prereleases', () => {
+  const launcherBytes = Buffer.from('launcher');
+  const nightly = entry('0.3.0-rc.1');
+  const stable = entry('0.2.2');
+  const index = { schemaVersion: 1, versions: [nightly] };
+  const result = generateChannel({ existingIndex: index, candidate: stable, launcherBytes, channel: 'stable' });
+  assert.equal(yaml.load(result.feed).version, stable.version);
+  assert.equal(result.index.stableVersion, stable.version);
+  assert.equal(result.index.nightlyVersion, nightly.version);
+  assert.equal(needsChannelPublication(result.index, stable, { version: stable.version, url: CHANNEL_BASE_URL + 'deepseek-harness-0.2.2-win-x64.exe' }, 'stable'), false);
+  assert.equal(needsChannelPublication(result.index, entry('0.2.1'), undefined, 'stable'), false);
+  assert.throws(() => generateChannel({ existingIndex: index, candidate: nightly, launcherBytes, channel: 'stable' }), /requires a final version/);
+  const history = Array.from({ length: 20 }, (_, i) => entry(`1.0.${i}`));
+  const latest = generateChannel({ existingIndex: { ...result.index, versions: [...result.index.versions, ...history] }, candidate: entry('1.1.0'), launcherBytes });
+  assert.equal(latest.index.versions.length, 20);
+  assert.ok(latest.index.versions.some(item => item.version === stable.version));
+  assert.equal(yaml.load(latest.feed).version, '1.1.0');
+});
+
+test('the official stable feed can be absent and accepts only an official final installer', async () => {
+  assert.equal(await fetchOfficialDesktopCandidate('stable', async () => new Response(null, { status: 404 })), null);
+  const makeFeed = version => [
+    `version: ${version}`, `  - url: ${installer(version)}`, `    sha512: ${digest}`, '    size: 1000000',
+  ].join('\n');
+  const candidate = await fetchOfficialDesktopCandidate('stable', async (url, options) => {
+    assert.match(url, /\/win-x64\/stable\.yml$/);
+    assert.equal(options.redirect, 'error');
+    return new Response(makeFeed('0.2.2'));
+  });
+  assert.equal(candidate.version, '0.2.2');
+  await assert.rejects(fetchOfficialDesktopCandidate('stable', async () => new Response(makeFeed('0.2.2-rc.2'))), /Invalid official Desktop stable candidate/);
 });
 
 test('installer URL host and path exactly match the PowerShell official payload allowlist', async () => {

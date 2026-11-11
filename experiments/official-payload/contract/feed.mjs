@@ -5,8 +5,9 @@ import { pathToFileURL } from 'node:url';
 
 const VERSION_RE = /^\d+\.\d+\.\d+(?:-[A-Za-z0-9]+(?:\.[A-Za-z0-9]+)*)?$/;
 
-export async function startFeed({ version, stubPath, port = 0, logPath }) {
+export async function startFeed({ version, stubPath, port = 0, logPath, channel = 'nightly' }) {
   if (!VERSION_RE.test(version)) throw new Error(`Invalid feed version: ${version}`);
+  if (channel !== 'nightly' && channel !== 'stable') throw new Error(`Invalid probe channel: ${channel}`);
   const stub = await readFile(stubPath);
   const filename = `deepseek-harness-${version}-win-x64.exe`;
   const sha512 = createHash('sha512').update(stub).digest('base64');
@@ -15,7 +16,7 @@ export async function startFeed({ version, stubPath, port = 0, logPath }) {
     let status = 404;
     let body = Buffer.from('not found');
     let type = 'text/plain; charset=utf-8';
-    if (request.method === 'GET' && pathname === '/nightly.yml') {
+    if (request.method === 'GET' && pathname === `/${channel}.yml`) {
       status = 200;
       type = 'text/yaml; charset=utf-8';
       body = Buffer.from([
@@ -47,8 +48,8 @@ export async function startFeed({ version, stubPath, port = 0, logPath }) {
 }
 
 if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
-  const [version, stubPath, requestedPort = '0', logPath] = process.argv.slice(2);
+  const [version, stubPath, requestedPort = '0', logPath, channel] = process.argv.slice(2);
   if (!version || !stubPath) throw new Error('Usage: node feed.mjs <version> <stub.exe> [port=0] [request-log]');
-  const feed = await startFeed({ version, stubPath, port: Number(requestedPort), logPath });
+  const feed = await startFeed({ version, stubPath, port: Number(requestedPort), logPath, channel });
   console.log(JSON.stringify({ port: feed.port, baseUrl: feed.baseUrl, filename: feed.filename, sha512: feed.sha512, size: feed.size }));
 }

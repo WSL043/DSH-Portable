@@ -85,7 +85,7 @@ For an existing 0.x folder, see the [offline update guide](docs/offline-updates.
 
 Extract [1.0.0-rc.1](https://github.com/WSL043/DSH-Portable/releases/tag/v1.0.0-rc.1) into a separate folder and run `DeepSeek Harness Portable.exe`. To bring supported 0.x data over, use the [migration guide](docs/pure-portable-operations.md#旧-native-数据迁入).
 
-The 1.x channel checks hourly for official Windows Desktop releases. It publishes them after signature, SHA-512, update, and recovery checks pass. When the app offers an update, choose **Install and Restart**. Portable rolls back if the new version fails its startup check. See the [1.x update and recovery guide](docs/pure-portable-operations.md).
+The 1.x workflow checks the official Windows Desktop feeds on an hourly schedule. It publishes each channel after signature, SHA-512, update, and recovery checks pass. Use the development channel for RC builds. The stable channel serves official final releases once they are available and verified. When the app offers an update, choose **Install and Restart**. Portable rolls back if the new version fails its startup check. See the [1.x update and recovery guide](docs/pure-portable-operations.md).
 
 ## Start in 3 steps
 

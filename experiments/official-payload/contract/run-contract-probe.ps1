@@ -2,7 +2,8 @@
 param(
     [Parameter(Mandatory = $true)][string]$AppDir,
     [string]$WorkRoot = 'build/orch-080/T22/probe',
-    [ValidateSet('zh', 'en')][string]$Locale = 'zh'
+    [ValidateSet('zh', 'en')][string]$Locale = 'zh',
+    [ValidateSet('nightly', 'stable')][string]$UpdateChannel = 'nightly'
 )
 
 Set-StrictMode -Version Latest
@@ -18,7 +19,7 @@ $script:Input = @{
     requests = @(); stubCalls = @(); staticChecks = @(); userDataFiles = @();
     defaultDataBefore = @(); defaultDataAfter = @(); directoryOutsideWrites = @();
     noPreexistingOfficialInstance = $false; updateDialogShown = $false; installerFileExists = $false;
-    appExitedAfterInstall = $false; version = $null
+    appExitedAfterInstall = $false; version = $null; updateChannel = $UpdateChannel
 }
 $script:Failure = $null
 $script:ExitCode = 0
@@ -172,7 +173,8 @@ try {
 
     $sourceVersion = $script:Input.sourceVersion
     if (-not $sourceVersion -or $sourceVersion -notmatch '^(\d+)\.(\d+)\.(\d+)(?:-.+)?$') { throw "Unsupported official app version: $sourceVersion" }
-    $feedVersion = '{0}.{1}.{2}-contract.0' -f $Matches[1], $Matches[2], ([int]$Matches[3] + 1)
+    $feedVersion = '{0}.{1}.{2}' -f $Matches[1], $Matches[2], ([int]$Matches[3] + 1)
+    if ($UpdateChannel -eq 'nightly') { $feedVersion += '-contract.0' }
     $guid = [Guid]::NewGuid().ToString('N')
     $cacheName = "dsh-contract-probe-$guid"
     $script:CachePath = Join-Path $env:LOCALAPPDATA $cacheName
@@ -192,7 +194,7 @@ try {
     & (Join-Path $PSScriptRoot 'build-stub.ps1') -OutputPath $stubPath | Out-Null
     $feedStdout = Join-Path $script:WorkPath 'feed-start.jsonl'
     $feedScript = Join-Path $PSScriptRoot 'feed.mjs'
-    $feedArgs = @($feedScript, $feedVersion, $stubPath, '0', $script:RequestLog) | ForEach-Object { ConvertTo-NativeArgument $_ }
+    $feedArgs = @($feedScript, $feedVersion, $stubPath, '0', $script:RequestLog, $UpdateChannel) | ForEach-Object { ConvertTo-NativeArgument $_ }
     $script:ProbeFeed = Start-Process -FilePath $node -ArgumentList ([string]::Join(' ', $feedArgs)) -WindowStyle Hidden -PassThru -RedirectStandardOutput $feedStdout -RedirectStandardError (Join-Path $script:WorkPath 'feed-stderr.log')
     $feedDeadline = [DateTime]::UtcNow.AddSeconds(15)
     $feedInfo = $null
@@ -226,6 +228,11 @@ try {
     $dshHome = Join-Path $appData 'dsh-home'
     $electronData = Join-Path $appData 'electron'
     $null = New-Item -ItemType Directory -Path $dshHome, $electronData -Force
+    if ($UpdateChannel -eq 'stable') {
+        $desktopSettings = Join-Path $electronData 'desktop'
+        $null = New-Item -ItemType Directory -Path $desktopSettings
+        [IO.File]::WriteAllText((Join-Path $desktopSettings 'settings.json'), '{"updates":{"channel":"stable"}}')
+    }
     $script:Input.appExe = $script:AppExe
     $script:Input.cacheRoot = $script:CachePath
     $script:Input.cdpPort = $cdpPort

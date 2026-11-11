@@ -85,7 +85,7 @@ AppImage 与完整目录的启动和数据位置见[Linux 使用说明](docs/use
 
 将 [1.0.0-rc.1](https://github.com/WSL043/DSH-Portable/releases/tag/v1.0.0-rc.1) 解压到独立文件夹，然后运行 `DeepSeek Harness Portable.exe`。如需从 0.x 迁入数据，请查看[迁移指南](docs/pure-portable-operations.md#旧-native-数据迁入)。
 
-1.x 通道每小时检查官方 Windows 桌面版。新版本通过签名、SHA-512、更新和恢复检查后自动发布。应用提示有更新时，选择 **安装并重启**。如果新版本未通过启动检查，Portable 会自动回退。详见 [1.x 更新和恢复指南](docs/pure-portable-operations.md)。
+1.x 按每小时计划检查官方 Windows 桌面版。各通道通过签名、SHA-512、更新和恢复检查后自动发布。RC 版本通过开发版通道分发，正式版通道在官方成品可用并通过验收后更新。应用提示有更新时，选择 **安装并重启**。如果新版本未通过启动检查，Portable 会自动回退。详见 [1.x 更新和恢复指南](docs/pure-portable-operations.md)。
 
 ## 三步启动
 
