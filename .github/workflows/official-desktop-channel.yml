@@ -51,19 +51,23 @@ jobs:
           PUBLISH_CHANNEL: ${{ github.event_name == 'schedule' || (github.event_name == 'workflow_dispatch' && inputs.publish_channel == true) }}
         run: |
           set -euo pipefail
-          node experiments/official-payload/resolve-candidate.mjs
           mkdir -p build/orch-080/T28/input
-          cp experiments/official-payload/candidate.json build/orch-080/T28/input/candidate.json
           node --input-type=module <<'NODE'
           import { createHash } from 'node:crypto';
-          import { readFile, writeFile } from 'node:fs/promises';
+          import { writeFile } from 'node:fs/promises';
           import { CHANNEL_BASE_URL, CHANNEL_INDEX_URL } from './experiments/official-payload/channel/constants.mjs';
           import { needsChannelPublication } from './experiments/official-payload/channel/build-channel.mjs';
           import { fetchOfficialDesktopCandidate, parseDesktopFeed } from './experiments/official-payload/feed.mjs';
           const candidatePath = 'build/orch-080/T28/input/candidate.json';
-          let candidate = JSON.parse(await readFile(candidatePath));
+          let nightlyError;
+          let candidate = await fetchOfficialDesktopCandidate().catch(error => {
+            nightlyError = error;
+            return null;
+          });
           let channel = 'nightly';
           const requested = process.env.FORCE_VERSION ?? '';
+          const publicationRequested = process.env.PUBLISH_CHANNEL === 'true';
+          if (!candidate && (requested || !publicationRequested)) throw nightlyError;
           if (requested && candidate.version !== requested) throw new Error(`force_version ${requested} is not the current official feed candidate ${candidate.version}`);
           const response = await fetch(CHANNEL_INDEX_URL, { redirect: 'follow', signal: AbortSignal.timeout(15000) });
           let index;
@@ -74,7 +78,6 @@ jobs:
             if (text.length > 1_048_576) throw new Error('Channel index is too large');
             index = JSON.parse(text);
           }
-          const publicationRequested = process.env.PUBLISH_CHANNEL === 'true';
           async function readFeed(name) {
             const response = await fetch(`${CHANNEL_BASE_URL}${name}.yml`, { redirect: 'follow', signal: AbortSignal.timeout(15000) });
             if (response.status === 404) return null;
@@ -83,7 +86,7 @@ jobs:
             return parseDesktopFeed(await response.text());
           }
           let feed = publicationRequested ? await readFeed(channel) : null;
-          if (publicationRequested && !requested && !needsChannelPublication(index, candidate, feed)) {
+          if (publicationRequested && !requested && (!candidate || !needsChannelPublication(index, candidate, feed))) {
             const stable = await fetchOfficialDesktopCandidate('stable').catch(error => {
               console.warn(`::warning::Official stable feed unavailable: ${error.message}`);
               return null;
@@ -97,6 +100,7 @@ jobs:
               }
             }
           }
+          if (!candidate) throw nightlyError;
           const candidateBytes = JSON.stringify(candidate, null, 2) + '\n';
           const identity = createHash('sha256').update(candidateBytes).digest('hex');
           const needsPublication = needsChannelPublication(index, candidate, feed, channel);
