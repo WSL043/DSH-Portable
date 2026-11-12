@@ -7,6 +7,8 @@ const marker = 'dsh-portable-theme-bootstrap-v1'
 
 export function patchThemeBootstrap(source) {
   if (source.includes(marker)) return source
+  const official = /function bootstrapPreference\(\)\s*\{[^{}]*document\.documentElement\.dataset\.dsThemeSource;\s*return isThemePreference\(preference\)\s*\?\s*preference\s*:\s*DEFAULT_PREFERENCE;?\s*\}/u
+  if (official.test(source) && /this\.preference\s*=\s*bootstrapPreference\(\)/u.test(source)) return source
   const needle = "this.host = host;\n\t\t\t\tthis.preference = DEFAULT_PREFERENCE;"
   if (source.split(needle).length !== 2) throw new Error('theme client bootstrap seam changed upstream')
   return source.replace(needle, `this.host = host;\n\t\t\t\t/* ${marker} */\n\t\t\t\tconst bootPreference = typeof document === "undefined" ? null : document.documentElement?.dataset.dsThemeSource;\n\t\t\t\tthis.preference = ["light", "dark", "system"].includes(bootPreference) ? bootPreference : DEFAULT_PREFERENCE;`)

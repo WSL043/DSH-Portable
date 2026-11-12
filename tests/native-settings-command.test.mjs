@@ -341,6 +341,17 @@ test('partial public plugin operations never fall back to a still-matchable lega
   assert.match(patchPluginManagerActions(legacy + '"plugins.tab": { kind: "list", scope: "root" };'), /plugins.portable.update/)
 })
 
+test('the official compact plugin manager keeps its built-in updates', () => {
+  const source = [
+    '"plugins.add.actions":{kind:`list`,scope:`root`},"plugins.tab":{kind:`list`,scope:`root`}',
+    'renderSlot(`plugins.add.actions`,{onDismiss});renderSlot(`plugins.tab`,{install:props.installFrom})',
+    'this.ctx.remote.pluginManager.listVersions(packageName,{});',
+    'this.ctx.remote.pluginManager.updateBundle(update.packageName,update.to,source.kind===`registry`?{registry:source.registry}:{})',
+  ].join(';')
+  assert.equal(patchPluginManagerActions(source), source)
+  assert.throws(() => patchPluginManagerActions(source.replace('listVersions', 'otherOperation')), /refusing legacy overlay/)
+})
+
 
 test('verified raw RC3 public slots retain the complete legacy overlay, while partial or native-update shapes fail closed', async () => {
   const fixture = JSON.parse(await readFile(new URL('./fixtures/native-plugin-manager-rc3.json', import.meta.url), 'utf8'))

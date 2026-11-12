@@ -94,7 +94,6 @@ function fakeContext(initialSessions) {
   let cleared = 0
   let locale = { active: 'zh', revision: 1 }
   let theme = { active: { colorScheme: 'dark' }, revision: 1 }
-  let downloadSnapshot = { bySession: {} }
   const disposers = []
   const slotEntries = []
   let workspaceSnapshot = { items: [], baselinesReady: true, recentWorkspaceId: undefined }
@@ -170,16 +169,6 @@ function fakeContext(initialSessions) {
     uiWorkspace: {
       startSession(id) { startedWorkspaces.push(id) },
     },
-    sessionLogDownload: {
-      store: {
-        getSnapshot: () => downloadSnapshot,
-        update(updater) {
-          const next = structuredClone(downloadSnapshot)
-          updater(next)
-          downloadSnapshot = next
-        },
-      },
-    },
     effect(factory) {
       const dispose = factory()
       if (typeof dispose === 'function') disposers.push(dispose)
@@ -196,7 +185,6 @@ function fakeContext(initialSessions) {
     opened,
     sent,
     get cleared() { return cleared },
-    get downloadSnapshot() { return downloadSnapshot },
     slotEntries,
     createdWorkspaces,
     startedWorkspaces,
@@ -634,7 +622,7 @@ test('private tray bridge projects bounded official runtime state and invokes on
   const runtime = fakeContext(sessionList())
   runtime.ctx.uiWorkspace = {}
 
-  assert.deepEqual([...client.exports.inject], ['slots', 'locale', 'theme', 'sessions', 'workspaces', 'uiWorkspace', 'sessionLogDownload', 'layout'])
+  assert.deepEqual([...client.exports.inject], ['slots', 'locale', 'theme', 'sessions', 'workspaces', 'uiWorkspace', 'layout'])
   client.exports.apply(runtime.ctx)
   assert.equal(runtime.slotEntries.length, 0)
 
@@ -668,28 +656,6 @@ test('private tray bridge projects bounded official runtime state and invokes on
   assert.deepEqual(runtime.opened, ['session-9'])
   assert.equal(runtime.cleared, 1)
   assert.deepEqual(runtime.sent, [{ sessionId: 'session-9', content: [{ type: 'text', text: '继续完善' }], mode: 'queue' }])
-
-  client.send({
-    type: 'dsh-portable/download',
-    schemaVersion: 1,
-    sessionId: 'session-9',
-    state: 'downloading',
-    fileName: 'session-9.zip',
-    percent: 42,
-    bytesReceived: 420,
-    totalBytes: 1000,
-  })
-  assert.equal(runtime.downloadSnapshot.bySession['session-9'].status, 'downloading')
-  assert.equal(runtime.downloadSnapshot.bySession['session-9'].nativeDownload.percent, 42)
-  client.send({
-    type: 'dsh-portable/download',
-    schemaVersion: 1,
-    sessionId: 'session-9',
-    state: 'completed',
-    fileName: 'session-9.zip',
-    percent: 100,
-  })
-  assert.equal(runtime.downloadSnapshot.bySession['session-9'].status, 'success')
 
   const idle = sessionList(2)
   for (const item of Object.values(idle.byId)) item.running = false

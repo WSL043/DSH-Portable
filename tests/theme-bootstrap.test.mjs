@@ -27,6 +27,12 @@ test('theme bootstrap patch is idempotent and rejects a changed client seam', ()
   assert.throws(() => patchThemeBootstrap(''), /seam changed/)
 })
 
+test('the upstream bootstrap implementation is reused, including compact bundles', () => {
+  const official = 'function bootstrapPreference(){if(typeof document===`undefined`)return DEFAULT_PREFERENCE;const preference=document.documentElement.dataset.dsThemeSource;return isThemePreference(preference)?preference:DEFAULT_PREFERENCE}class Theme{constructor(){this.preference=bootstrapPreference()}}'
+  assert.equal(patchThemeBootstrap(official), official)
+  assert.throws(() => patchThemeBootstrap(official.replace('isThemePreference(preference)?preference', 'false?preference')), /seam changed/)
+})
+
 test('the CLI accepts a staged app argument from an external core build and leaves the host file intact', async () => {
   const app = await mkdtemp(path.join(tmpdir(), 'dsh-theme-staged-app-'))
   const lib = path.join(app, 'node_modules/@deepseek-ai/dsh-client-ui-theme/lib')

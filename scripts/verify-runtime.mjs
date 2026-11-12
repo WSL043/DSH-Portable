@@ -113,7 +113,7 @@ const marketManifestPath = requireFromApp.resolve('@wsl043/dsh-portable-plugin-m
 const marketManifest = JSON.parse(readFileSync(marketManifestPath, 'utf8'))
 const marketRoot = path.dirname(marketManifestPath)
 const marketClientPath = requireFromApp.resolve('@wsl043/dsh-portable-plugin-market/client')
-const sessionExportClientPath = requireFromApp.resolve('@deepseek-ai/dsh-session-log-export/client')
+requireFromApp.resolve('@deepseek-ai/dsh-session-log-export/client')
 const permissionSettingsClientPath = requireFromApp.resolve('@deepseek-ai/dsh-client-ui-permission-presets/client')
 const conversationClientPath = requireFromApp.resolve('@deepseek-ai/dsh-client-ui-conversation/client')
 assert.equal(dshManifest.name, '@deepseek-ai/dsh')
@@ -152,11 +152,6 @@ assert.match(
 )
 assert.equal(existsSync(path.join(marketRoot, 'LICENSE')), true, 'Portable plugin market license is missing')
 assert.equal(existsSync(path.join(marketRoot, 'NOTICE.md')), true, 'Portable plugin market attribution notice is missing')
-assert.match(
-  readFileSync(sessionExportClientPath, 'utf8'),
-  /dsh-portable-native-download-v1/,
-  'Session export client is missing the native desktop download lifecycle adapter',
-)
 verifyPermissionLocalization(readFileSync(permissionSettingsClientPath, 'utf8'), readFileSync(conversationClientPath, 'utf8'))
 
 await new Promise((resolve) => {

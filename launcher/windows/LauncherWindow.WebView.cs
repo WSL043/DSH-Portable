@@ -435,104 +435,10 @@ namespace DshPortable
                 if (dialog.ShowDialog(this) != DialogResult.OK)
                 {
                     eventArgs.Cancel = true;
-                    PostDownloadStateSoon(eventArgs.DownloadOperation, "cancelled");
                     return;
                 }
                 eventArgs.ResultFilePath = dialog.FileName;
             }
-
-            TrackDownloadOperation(eventArgs.DownloadOperation);
-        }
-
-        private void TrackDownloadOperation(CoreWebView2DownloadOperation operation)
-        {
-            string sessionId = QueryValue(operation.Uri, "sessionId");
-            if (String.IsNullOrWhiteSpace(sessionId)) return;
-            int lastPercent = -2;
-            string lastState = String.Empty;
-            EventHandler<object> changed = null;
-            Action publish = delegate
-            {
-                if (IsDisposed || webView.CoreWebView2 == null) return;
-                string state = "downloading";
-                if (operation.State == CoreWebView2DownloadState.Completed) state = "completed";
-                else if (operation.State == CoreWebView2DownloadState.Interrupted)
-                    state = operation.InterruptReason == CoreWebView2DownloadInterruptReason.UserCanceled
-                        ? "cancelled"
-                        : "interrupted";
-                ulong? total = operation.TotalBytesToReceive;
-                long totalBytes = total.HasValue
-                    ? (long)Math.Min(total.Value, (ulong)long.MaxValue)
-                    : 0L;
-                int percent = totalBytes > 0
-                    ? (int)Math.Max(0, Math.Min(100, operation.BytesReceived * 100L / totalBytes))
-                    : -1;
-                if (state == lastState && percent == lastPercent) return;
-                lastState = state;
-                lastPercent = percent;
-                PostDownloadState(operation, sessionId, state, percent, totalBytes);
-                if (operation.State != CoreWebView2DownloadState.InProgress && changed != null)
-                {
-                    operation.BytesReceivedChanged -= changed;
-                    operation.StateChanged -= changed;
-                }
-            };
-            changed = delegate
-            {
-                if (IsDisposed) return;
-                try { BeginInvoke((MethodInvoker)delegate { publish(); }); }
-                catch (InvalidOperationException) { }
-            };
-            operation.BytesReceivedChanged += changed;
-            operation.StateChanged += changed;
-            BeginInvoke((MethodInvoker)delegate { publish(); });
-        }
-
-        private void PostDownloadStateSoon(CoreWebView2DownloadOperation operation, string state)
-        {
-            string sessionId = QueryValue(operation.Uri, "sessionId");
-            if (String.IsNullOrWhiteSpace(sessionId)) return;
-            Task.Delay(75).ContinueWith(delegate
-            {
-                if (IsDisposed) return;
-                try
-                {
-                    BeginInvoke((MethodInvoker)delegate { PostDownloadState(operation, sessionId, state, -1, 0L); });
-                }
-                catch (InvalidOperationException) { }
-            });
-        }
-
-        private void PostDownloadState(CoreWebView2DownloadOperation operation, string sessionId, string state, int percent, long totalBytes)
-        {
-            Dictionary<string, object> message = new Dictionary<string, object>
-            {
-                { "type", "dsh-portable/download" },
-                { "schemaVersion", 1 },
-                { "sessionId", sessionId },
-                { "state", state },
-                { "fileName", Path.GetFileName(operation.ResultFilePath) ?? String.Empty },
-                { "bytesReceived", Math.Max(0L, operation.BytesReceived) },
-                { "totalBytes", Math.Max(0L, totalBytes) },
-                { "percent", percent },
-                { "reason", operation.State == CoreWebView2DownloadState.Interrupted ? operation.InterruptReason.ToString() : String.Empty },
-            };
-            try { webView.CoreWebView2.PostWebMessageAsJson(json.Serialize(message)); }
-            catch { }
-        }
-
-        private static string QueryValue(string uriText, string name)
-        {
-            Uri uri;
-            if (!Uri.TryCreate(uriText, UriKind.Absolute, out uri)) return String.Empty;
-            foreach (string pair in uri.Query.TrimStart('?').Split('&'))
-            {
-                if (String.IsNullOrEmpty(pair)) continue;
-                string[] parts = pair.Split(new[] { '=' }, 2);
-                if (!String.Equals(Uri.UnescapeDataString(parts[0].Replace('+', ' ')), name, StringComparison.Ordinal)) continue;
-                return parts.Length > 1 ? Uri.UnescapeDataString(parts[1].Replace('+', ' ')) : String.Empty;
-            }
-            return String.Empty;
         }
 
         private static string GetDefaultDownloadFolder()

@@ -2,7 +2,7 @@ window.__ModuleLoader__.load({
   id: '@wsl043/dsh-portable-desktop-bridge',
   factory: function (require) {
     const exports = {}
-    const inject = ['slots', 'locale', 'theme', 'sessions', 'workspaces', 'uiWorkspace', 'sessionLogDownload', 'layout']
+    const inject = ['slots', 'locale', 'theme', 'sessions', 'workspaces', 'uiWorkspace', 'layout']
     const React = require('react')
 
     const copy = {
@@ -2322,38 +2322,6 @@ window.__ModuleLoader__.load({
       return false
     }
 
-    function applyNativeDownload(ctx, message) {
-      if (message?.schemaVersion !== 1) return
-      const sessionId = String(message.sessionId || '')
-      if (!sessionId || !ctx.sessionLogDownload?.store?.update) return
-      const nativeDownload = {
-        state: String(message.state || ''),
-        fileName: String(message.fileName || ''),
-        bytesReceived: Math.max(0, Number(message.bytesReceived || 0)),
-        totalBytes: Math.max(0, Number(message.totalBytes || 0)),
-        percent: Number.isFinite(Number(message.percent)) ? Number(message.percent) : -1,
-        reason: String(message.reason || ''),
-      }
-      const status = nativeDownload.state === 'completed'
-        ? 'success'
-        : nativeDownload.state === 'interrupted' || nativeDownload.state === 'cancelled'
-          ? 'error'
-          : 'downloading'
-      ctx.sessionLogDownload.store.update(state => {
-        const current = state.bySession[sessionId]
-        state.bySession = {
-          ...state.bySession,
-          [sessionId]: {
-            ...current,
-            open: current?.open ?? true,
-            status,
-            error: status === 'error' ? nativeDownload.reason : null,
-            nativeDownload,
-          },
-        }
-      })
-    }
-
     async function ensurePortableWorkspace(ctx, workspacePath) {
       const target = String(workspacePath || '').trim()
       if (!target || !ctx.workspaces?.list?.getSnapshot || typeof ctx.workspaces.create !== 'function') return { status: 'unavailable' }
@@ -2627,10 +2595,6 @@ window.__ModuleLoader__.load({
             pendingEnvironmentRequests.delete(requestId)
             if (message.ok === true) pending.resolve(message)
             else pending.reject(new Error(String(message.error || 'Portable environment could not be opened.')))
-            return
-          }
-          if (message.type === 'dsh-portable/download') {
-            applyNativeDownload(ctx, message)
             return
           }
           if (message.type !== 'dsh-portable/action') return

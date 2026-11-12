@@ -155,23 +155,25 @@ function patchPluginManagerToolbar(source) {
 
 // Slot presence predates native version updates: RC3 has the public slots but still needs the 0.x overlay.
 const PUBLIC_PLUGIN_DECLARATIONS = [
-  /"plugins\.add\.actions": \{\s*kind: "list",\s*scope: "root"\s*\}/g,
-  /"plugins\.tab": \{\s*kind: "list",\s*scope: "root"\s*\}/g,
+  /"plugins\.add\.actions":\s*\{\s*kind:\s*["`]list["`],\s*scope:\s*["`]root["`]\s*\}/g,
+  /"plugins\.tab":\s*\{\s*kind:\s*["`]list["`],\s*scope:\s*["`]root["`]\s*\}/g,
 ]
-const PUBLIC_PLUGIN_CONSUMERS = [
-  'renderSlot("plugins.add.actions", { onDismiss })',
-  'renderSlot("plugins.tab", {',
-  'this.ctx.remote.pluginManager.listVersions(packageName, {})',
-  'this.ctx.remote.pluginManager.updateBundle(update.packageName, update.to, {',
+const PUBLIC_PLUGIN_RENDERERS = [
+  /renderSlot\(["`]plugins\.add\.actions["`],\s*\{\s*onDismiss\s*\}\)/g,
+  /renderSlot\(["`]plugins\.tab["`],\s*\{/g,
+]
+const PUBLIC_PLUGIN_UPDATES = [
+  /this\.ctx\.remote\.pluginManager\.listVersions\(packageName,\s*\{\}\)/g,
+  /this\.ctx\.remote\.pluginManager\.updateBundle\(update\.packageName,\s*update\.to,\s*(?:\{|source\.kind\s*===\s*["`]registry["`])/g,
 ]
 const LEGACY_PLUGIN_MARKERS = ['dsh-portable-plugin-manager-actions-v2', 'dsh-portable-plugin-refresh-v1', 'dsh-portable-plugin-card-updates-v1']
 const once = (source, anchor) => source.split(anchor).length === 2
 function hasPublicPluginSlots(source) {
   return PUBLIC_PLUGIN_DECLARATIONS.every(pattern => [...source.matchAll(pattern)].length === 1)
-    && PUBLIC_PLUGIN_CONSUMERS.slice(0, 2).every(anchor => once(source, anchor))
+    && PUBLIC_PLUGIN_RENDERERS.every(pattern => [...source.matchAll(pattern)].length === 1)
 }
 export function hasOfficialPluginManagement(source) {
-  return hasPublicPluginSlots(source) && PUBLIC_PLUGIN_CONSUMERS.slice(2).every(anchor => once(source, anchor))
+  return hasPublicPluginSlots(source) && PUBLIC_PLUGIN_UPDATES.every(pattern => [...source.matchAll(pattern)].length === 1)
 }
 function hasReviewedLegacyPluginManager(source) {
   if (!hasPublicPluginSlots(source) || /\b(?:listVersions|updateBundle)\b/u.test(source)) return false
