@@ -255,9 +255,8 @@ export async function verifyOfficialCoreUi(page, evidence, theme) {
   try {
     await dismissOnboarding(page)
     await clickAfterOnboarding(page, page.getByRole('button', { name: /^(Plugins|插件)$/ }).first())
-    await page.getByRole('button', { name: /^(Add plugin|添加插件)$/ }).first().waitFor({ state: 'visible' })
-    const loading = page.getByText(/^(Reading plugins…|正在读取插件…)$/)
-    await loading.waitFor({ state: 'hidden' })
+    const addPlugin = page.getByRole('button', { name: /^(Add plugin|添加插件)$/ })
+    await addPlugin.and(page.locator(':enabled')).first().waitFor({ state: 'visible' })
     assert.equal(await page.getByText(/Could not read all plugins|无法读取全部插件/).count(), 0, 'official installed-plugin data loaded successfully')
     for (const name of ['dsh-chat-manager', 'dsh-image-viewer']) {
       assert.equal(await page.locator(`[data-plugin-package="${name}"]`).count(), 0, `${name} is absent from the official installed-plugin page`)
@@ -267,6 +266,7 @@ export async function verifyOfficialCoreUi(page, evidence, theme) {
     await dismissOnboarding(page)
     const input = page.locator('[contenteditable="true"][role="textbox"]').first()
     const draft = `Official core ${theme} qualification draft`
+    await input.waitFor({ state: 'visible' })
     await clickAfterOnboarding(page, input)
     assert.equal(await input.evaluate(element => element === document.activeElement || element.contains(document.activeElement)), true, 'official composer receives focus after onboarding')
     assert.equal(await visibleOnboarding(page), null, 'official onboarding is closed before entering a draft')
