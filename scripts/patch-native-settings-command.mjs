@@ -17,8 +17,8 @@ export function patchNativeSettingsCommand(source) {
 
   // DSH rc.2 moved Settings state into a shared store. Use its public actions
   // instead of rebuilding the removed local state/focus effect in Portable.
-  const storeSeam = '\t\t\tconst { close, openSection } = actions;'
-  if (source.includes(storeSeam)) {
+  const storeSeam = source.match(/\bconst\s*\{\s*close,\s*openSection\s*\}\s*=\s*actions;/u)?.[0]
+  if (storeSeam) {
     const replacement = `${storeSeam}
             /* ${STORE_MARKER} */
             const portableRestoring = (0, react.useRef)(false);
@@ -53,7 +53,7 @@ export function patchNativeSettingsCommand(source) {
                 } catch {}
             }, [open, activeId]);`
     source = replaceRequired(source, storeSeam, replacement, 'official settings store seam changed upstream')
-    return source.replace('ctx.slots.entries("settings.section").map(',
+    return source.replace(/ctx\.slots\.entries\((["`])settings\.section\1\)\.map\(/u,
       'ctx.slots.entries("settings.section").filter((entry, index, all) => all.findIndex((candidate) => candidate.options.id === entry.options.id) === index).map(')
   }
 
@@ -101,7 +101,9 @@ export function patchNativeSettingsCommand(source) {
 export function patchPluginSettingsNavigation(source) {
   const marker = 'dsh-portable-plugin-tab-state-v1'
   if (source.includes(marker)) return source
-  return replaceRequired(source, 'const [activeId, setActiveId] = (0, react.useState)();', `/* ${marker} */
+  const seam = source.match(/\bconst\s*\[activeId,\s*setActiveId\]\s*=\s*\(0,\s*react\.useState\)\(\);/u)?.[0]
+  if (!seam) throw new Error('plugin settings navigation seam changed upstream')
+  return replaceRequired(source, seam, `/* ${marker} */
             const [activeId, setActiveId] = (0, react.useState)(() => {
                 try { return sessionStorage.getItem("dsh-portable-plugin-tab") || void 0; } catch { return void 0; }
             });
@@ -113,7 +115,8 @@ export function patchPluginSettingsNavigation(source) {
 
 export function patchPortableUpdatesIcon(source) {
   const marker = 'dsh-portable-updates-nav-icon-v1'
-  const seam = 'function navIcon(id) {'
+  const seam = source.match(/\bfunction navIcon\(id\)\s*\{/u)?.[0]
+  if (!seam) throw new Error('settings navigation icon seam changed upstream: expected 1 match, found 0')
   if (!source.includes(marker)) source = replaceRequired(source, seam, `${seam}
             /* ${marker} */
             if (id === "portable-updates") return (0, react_jsx_runtime.jsx)(_deepseek_ai_dsh_client_ui_primitives.IconDownloadOutlineRegular ?? _deepseek_ai_dsh_client_ui_primitives.IconDownloadOutline16, {
@@ -261,7 +264,7 @@ export function patchWorkspaceHeaderActions(source) {
   const marker = 'dsh-portable-workspace-header-actions-v2'
   const legacy = 'dsh-portable-workspace-header-actions-v1'
   if (!source.includes('"sidebar.workspaces.session.menu.item"')) return source
-  const owner = /(ctx\.slots\.inject\("sidebar\.workspaces",\s*\(\)\s*=>\s*ctx\.slots\.register\(\{\s*name:\s*"sidebar\.workspaces",\s*children:\s*\{)/g
+  const owner = /ctx\.slots\.inject\((["`])sidebar\.workspaces\1,\s*\(\)\s*=>\s*ctx\.slots\.register\(\{\s*name:\s*(["`])sidebar\.workspaces\2,\s*children:\s*\{/gu
   const declaration = ' /* ' + marker + ' */ "sidebar.workspaces.header.action": { kind: "list", scope: "root" },'
   if (source.includes(marker)) {
     const matches = [...source.matchAll(owner)]
@@ -282,8 +285,10 @@ export function patchWorkspaceHeaderActions(source) {
       throw new Error('legacy workspace header action changed upstream')
     return source
   }
-  source = replaceRequired(source, 'children: [wide && (0, react_jsx_runtime.jsx)(ViewOptionsMenu, {',
-    'children: [wide && renderSlot("sidebar.workspaces.header.action", { className: WorkspaceBrowser_module_css_default.iconButton }), wide && (0, react_jsx_runtime.jsx)(ViewOptionsMenu, {', 'workspace header action position')
+  const actions = source.match(/children:\s*\[wide\s*&&\s*\(0,\s*react_jsx_runtime\.jsx\)\(ViewOptionsMenu,\s*\{/u)?.[0]
+  if (!actions) throw new Error('workspace header action position changed upstream')
+  source = replaceRequired(source, actions,
+    actions.replace('[', '[wide && renderSlot("sidebar.workspaces.header.action", { className: WorkspaceBrowser_module_css_default.iconButton }), '), 'workspace header action position')
   // Keep the official controls and collapsed/search-hidden state.
   const widths = [...source.matchAll(/\.\w+_headerActions\{[^}]*?max-width:60px/g)]
   if (widths.length !== 1) throw new Error('workspace header action width changed upstream')

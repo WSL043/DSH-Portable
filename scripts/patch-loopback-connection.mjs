@@ -3,12 +3,12 @@ import path from 'node:path'
 import { fileURLToPath } from 'node:url'
 
 const MARKER = 'dsh-portable-loopback-connection-v1'
-const ORIGINAL = 'stopNetworkWatch: watchBrowserNetwork(controller)'
+const ORIGINAL = /\bstopNetworkWatch:\s*watchBrowserNetwork\(controller\)/gu
 const REPLACEMENT = `stopNetworkWatch: handle.isLoopback ? () => {} : watchBrowserNetwork(controller) /* ${MARKER} */`
 
 export function patchLoopbackConnection(source) {
   if (source.includes(MARKER)) return source
-  const matches = source.split(ORIGINAL).length - 1
+  const matches = [...source.matchAll(ORIGINAL)].length
   if (matches !== 1) throw new Error(`Loopback connection seam changed: expected 1 match, found ${matches}`)
   return source.replace(ORIGINAL, REPLACEMENT)
 }

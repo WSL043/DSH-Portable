@@ -13,17 +13,17 @@ function replaceRequired(source, needle, replacement, label) {
 export function patchPortableHeroContext(source) {
   if (source.includes(MARKER)) return source
 
-  const renderNeedle = `\t\t\t\t\trenderSlot("conversation.hero.agentPreset", {})`
+  const renders = [...source.matchAll(/renderSlot\((["`])conversation\.hero\.agentPreset\1,\s*\{\}\)/gu)]
+  if (renders.length !== 1) throw new Error(`Hero context render seam changed upstream: expected 1 match, found ${renders.length}`)
+  const renderNeedle = renders[0][0]
   const renderReplacement = `${renderNeedle},\n\t\t\t\t\t/* ${MARKER} */\n\t\t\t\t\trenderSlot("conversation.hero.portableContext", {})`
   let output = replaceRequired(source, renderNeedle, renderReplacement, 'Hero context render seam changed upstream')
 
   // alpha.2 gives the official preset an optional session owner. Preserve
   // that contract; Portable's environment summary remains application-wide.
-  const contracts = ['root', 'session-maybe'].map(scope =>
-    `\t\t\t\t\t"conversation.hero.agentPreset": {\n\t\t\t\t\t\tkind: "single",\n\t\t\t\t\t\tscope: "${scope}"\n\t\t\t\t\t}`)
-  const matching = contracts.filter(contract => source.includes(contract))
+  const matching = [...source.matchAll(/"conversation\.hero\.agentPreset":\s*\{\s*kind:\s*(["`])single\1,\s*scope:\s*(["`])(?:root|session-maybe)\2\s*\}/gu)]
   if (matching.length !== 1) throw new Error('Hero context contract seam changed upstream: expected one supported scope')
-  const contractNeedle = matching[0]
+  const contractNeedle = matching[0][0]
   const contractReplacement = `${contractNeedle},\n\t\t\t\t\t"conversation.hero.portableContext": {\n\t\t\t\t\t\tkind: "list",\n\t\t\t\t\t\tscope: "root"\n\t\t\t\t\t}`
   output = replaceRequired(output, contractNeedle, contractReplacement, 'Hero context contract seam changed upstream')
   return output

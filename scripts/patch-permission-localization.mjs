@@ -5,20 +5,23 @@ import { fileURLToPath } from 'node:url'
 import { verifiedPackageFile } from './verified-package-file.mjs'
 
 const includesAll = (source, needles) => needles.every(needle => source.includes(needle))
+const compactCalls = source => source.replace(/,\s*(?=[\w{])/gu, ',')
 const permissionLabel = [
-  'function permissionLabel(value, name, t)',
-  'permissionLabel(option.value, option.name, t)',
+  'function permissionLabel(value,name,t)',
+  'permissionLabel(option.value,option.name,t)',
 ]
 
 // Keep this entry point for core qualification. Supported cores localize the
 // official controls themselves, either inline or through the presets slot.
 export function verifyPermissionLocalization(settings, conversation) {
+  settings = compactCalls(settings)
+  conversation = compactCalls(conversation)
   assert.ok(includesAll(settings, [
     '"preset.readOnly":',
     '"preset.workspaceWrite":',
     '"preset.fullAccess":',
-    'function displayPermissionPreset(value, name, t)',
-    'displayPermissionPreset(option.id, option.label, t)',
+    'function displayPermissionPreset(value,name,t)',
+    'displayPermissionPreset(option.id,option.label,t)',
   ]), 'Official permission settings localization is missing')
 
   const inline = includesAll(conversation, [
@@ -27,8 +30,9 @@ export function verifyPermissionLocalization(settings, conversation) {
     '"access.preset.fullAccess":',
     ...permissionLabel,
   ])
-  const slot = includesAll(settings, [...permissionLabel, 'ctx.slots.inject("conversation.input.permission"'])
-    && conversation.includes('renderSlot("conversation.input.permission", { locked })')
+  const slot = includesAll(settings, permissionLabel)
+    && /ctx\.slots\.inject\((["`])conversation\.input\.permission\1/u.test(settings)
+    && /renderSlot\((["`])conversation\.input\.permission\1,\{\s*locked\s*\}\)/u.test(conversation)
     && !conversation.includes('function optionLabel(')
   assert.ok(inline || slot, 'Official conversation permission localization is missing')
 }

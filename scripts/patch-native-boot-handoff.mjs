@@ -86,7 +86,10 @@ export function patchNativeBootHandoff(source) {
 \t\t\t});
 \t\t}`
 
-  return replaceRequired(source, original, replacement, 'native boot handoff seam changed upstream')
+  const compact = 'function BootHandoff(props){const[ready,setReady]=(0,react.useState)(false);(0,react.useLayoutEffect)(()=>{setReady(true)},[]);if(ready)return props.app();return(0,react.createElement)(`div`,{className:props.boot.className,"data-dsh-boot":``,dangerouslySetInnerHTML:{__html:props.boot.html}})}'
+  const seams = [original, compact].filter(candidate => source.includes(candidate))
+  if (seams.length !== 1) throw new Error('native boot handoff seam changed upstream: expected one supported shape')
+  return replaceRequired(source, seams[0], replacement, 'native boot handoff seam changed upstream')
 }
 
 export function patchNativeBootCss(source) {
