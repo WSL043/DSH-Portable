@@ -88,6 +88,21 @@ test('the app dropping a message an older shell still sends breaks older shells'
   assert.match(diffShellContract(frozen, unhandled).breaking[0], /app no longer handles bridge dsh-portable\/surface-ready/u)
 })
 
+test('a core can ignore the legacy download notification while the shell retains it for rollback', () => {
+  const previous = copy()
+  const notification = 'dsh-portable/download'
+  previous.shell.bridge.push(notification)
+  previous.app.bridge.push(notification)
+  const next = structuredClone(previous)
+  next.app.bridge.pop()
+  assert.deepEqual(diffShellContract(previous, next), {
+    breaking: [], compatible: ['the app no longer uses bridge ' + notification],
+  })
+  const noLegacySender = structuredClone(next)
+  noLegacySender.shell.bridge.pop()
+  assert.deepEqual(diffShellContract(next, noLegacySender).breaking, ['the shell no longer provides bridge ' + notification])
+})
+
 test('test hooks and run-time prefixes are not part of the interface', async () => {
   const scan = await scanShellContract(root)
   for (const side of [scan.shell, scan.app]) {

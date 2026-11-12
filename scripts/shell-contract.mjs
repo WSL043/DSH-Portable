@@ -27,6 +27,9 @@ export const CONTRACT_FILE = 'config/shell-contract.json'
 export const KINDS = ['env', 'bridge', 'cli', 'flag', 'file', 'capsule', 'layout']
 // Kinds where the shell asks and the app answers; every other kind has the shell offering and the app using.
 const SHELL_ASKS = new Set(['layout'])
+// Older cores use this one-way notification. New cores can ignore it, and
+// compatible shells still send it so rolling back retains the legacy UI.
+const LEGACY_DOWNLOAD_NOTIFICATION = 'dsh-portable/download'
 const ENV = /\bDSH_PORTABLE_[A-Z0-9]+(?:_[A-Z0-9]+)*\b(?!_)/gu
 const BRIDGE = /\bdsh-portable\/[a-z][a-z0-9]*(?:-[a-z0-9]+)*\b/gu
 const FLAG = /'(--[a-z][a-z0-9]*(?:-[a-z0-9]+)*)'/gu
@@ -133,19 +136,21 @@ export function diffShellContract(frozen, current) {
     for (const name of current.app[kind]) {
       if (!has(frozen.shell[kind], name) && !has(frozen.app[kind], name)) breaking.push(`the app now uses ${kind} ${name}, which the frozen shell never provided`)
     }
-    for (const name of frozen.shell[kind]) {
-      if (has(frozen.app[kind], name) && !has(current.shell[kind], name)) breaking.push(`the shell no longer provides ${kind} ${name}`)
-    }
     if (kind === 'bridge') {
       for (const name of frozen.app[kind]) {
-        if (has(frozen.shell[kind], name) && !has(current.app[kind], name)) breaking.push(`the app no longer handles ${kind} ${name}`)
+        if (!has(frozen.shell[kind], name) || has(current.app[kind], name)) continue
+        if (name === LEGACY_DOWNLOAD_NOTIFICATION) compatible.push(`the app no longer uses ${kind} ${name}`)
+        else breaking.push(`the app no longer handles ${kind} ${name}`)
       }
     }
     for (const name of current.shell[kind]) {
       if (!has(frozen.shell[kind], name)) compatible.push(`the shell now provides ${kind} ${name}`)
     }
     for (const name of frozen.shell[kind]) {
-      if (!has(current.shell[kind], name) && !has(frozen.app[kind], name)) compatible.push(`the shell no longer has ${kind} ${name}, which the app never used`)
+      if (has(current.shell[kind], name)) continue
+      if (has(frozen.app[kind], name) || (kind === 'bridge' && name === LEGACY_DOWNLOAD_NOTIFICATION)) {
+        breaking.push(`the shell no longer provides ${kind} ${name}`)
+      } else compatible.push(`the shell no longer has ${kind} ${name}, which the app never used`)
     }
     for (const name of current.app[kind]) {
       if (!has(frozen.app[kind], name) && has(frozen.shell[kind], name)) compatible.push(`the app now uses ${kind} ${name}, which the shell already provided`)

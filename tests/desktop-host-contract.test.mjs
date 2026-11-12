@@ -383,7 +383,7 @@ test('Windows keeps native context menus while owning browser chrome and file do
   assert.match(host, /eventArgs\.Handled\s*=\s*true/)
   assert.match(host, /SaveFileDialog/)
   assert.match(host, /eventArgs\.ResultFilePath\s*=\s*dialog\.FileName/)
-  assert.doesNotMatch(host, /DownloadProgressWindow|dsh-portable\/download/)
+  assert.doesNotMatch(host, /DownloadProgressWindow/)
   assert.match(host, /DSH_PORTABLE_DOWNLOAD_DIRECTORY/)
   assert.match(host, /DSH_PORTABLE_TEST_HIDDEN/)
   assert.match(host, /DSH_PORTABLE_TEST_WEBVIEW2_ARGUMENTS/)

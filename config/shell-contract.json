@@ -213,7 +213,6 @@
       "dsh-portable/data-export",
       "dsh-portable/data-inspect",
       "dsh-portable/doctor",
-      "dsh-portable/download",
       "dsh-portable/engine-versions",
       "dsh-portable/environments",
       "dsh-portable/import-data",
