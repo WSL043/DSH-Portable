@@ -10,10 +10,10 @@ const openMarker = 'dsh-portable-login-open-v1'
 // attempt: WebView2 forwards window.open to the system default browser, where the user is usually signed in.
 export function patchLoginBrowserOpen(source) {
   if (source.includes(openMarker)) return source
-  const effect = /(\(0, react\.useEffect\)\(\(\) => \{\r?\n)(\s*)(setCopyResult\(null\);)(\r?\n\s*\}, \[attempt\?\.id, attempt\?\.authorizeUrl\]\);)/g
+  const effect = /(\(0,\s*react\.useEffect\)\(\(\)\s*=>\s*\{\s*)(setCopyResult\(null\));?(\s*\},\s*\[attempt\?\.id,\s*attempt\?\.authorizeUrl\]\);?)/g
   const matches = source.match(effect)?.length ?? 0
   if (matches !== 1) throw new Error(`sign-in dialog seam changed upstream: expected 1 match, found ${matches}`)
-  return source.replace(effect, (_, head, indent, body, tail) => `${head}${indent}${body}\n${indent}/* ${openMarker} */ if (attempt?.authorizeUrl && attempt.phase === "waiting-browser" && globalThis.__dshPortableLoginOpened !== attempt.id) { globalThis.__dshPortableLoginOpened = attempt.id; window.open(authorizeUrlWithTheme(attempt.authorizeUrl, colorScheme), "_blank"); }${tail}`)
+  return source.replace(effect, (_, head, body, tail) => `${head}${body}; /* ${openMarker} */ if (attempt?.authorizeUrl && attempt.phase === "waiting-browser" && globalThis.__dshPortableLoginOpened !== attempt.id) { globalThis.__dshPortableLoginOpened = attempt.id; window.open(authorizeUrlWithTheme(attempt.authorizeUrl, colorScheme), "_blank"); }${tail}`)
 }
 
 if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
