@@ -260,41 +260,6 @@ export function patchPluginManagerActions(source) {
   return source.slice(0, start) + card + source.slice(end)
 }
 
-export function patchWorkspaceHeaderActions(source) {
-  const marker = 'dsh-portable-workspace-header-actions-v2'
-  const legacy = 'dsh-portable-workspace-header-actions-v1'
-  if (!source.includes('"sidebar.workspaces.session.menu.item"')) return source
-  const owner = /ctx\.slots\.inject\((["`])sidebar\.workspaces\1,\s*\(\)\s*=>\s*ctx\.slots\.register\(\{\s*name:\s*(["`])sidebar\.workspaces\2,\s*children:\s*\{/gu
-  const declaration = ' /* ' + marker + ' */ "sidebar.workspaces.header.action": { kind: "list", scope: "root" },'
-  if (source.includes(marker)) {
-    const matches = [...source.matchAll(owner)]
-    if (matches.length !== 1 || !source.slice(matches[0].index + matches[0][0].length).startsWith(declaration))
-      throw new Error('workspace header slot has no matching parent declaration')
-    return source
-  }
-  const repairing = source.includes(legacy)
-  if (repairing) source = replaceRequired(source,
-    '/* ' + legacy + ' */ "sidebar.workspaces.header.action": { kind: "list", scope: "root" },\n',
-    '', 'legacy workspace header slot declaration')
-  const parents = [...source.matchAll(owner)]
-  if (parents.length !== 1) throw new Error('workspace header parent declaration changed upstream')
-  source = replaceRequired(source, parents[0][0], parents[0][0] + declaration, 'workspace header parent declaration')
-  if (repairing) {
-    if (!source.includes('wide && renderSlot("sidebar.workspaces.header.action",')
-      || !/\.\w+_headerActions\{[^}]*?max-width:92px/.test(source))
-      throw new Error('legacy workspace header action changed upstream')
-    return source
-  }
-  const actions = source.match(/children:\s*\[wide\s*&&\s*\(0,\s*react_jsx_runtime\.jsx\)\(ViewOptionsMenu,\s*\{/u)?.[0]
-  if (!actions) throw new Error('workspace header action position changed upstream')
-  source = replaceRequired(source, actions,
-    actions.replace('[', '[wide && renderSlot("sidebar.workspaces.header.action", { className: WorkspaceBrowser_module_css_default.iconButton }), '), 'workspace header action position')
-  // Keep the official controls and collapsed/search-hidden state.
-  const widths = [...source.matchAll(/\.\w+_headerActions\{[^}]*?max-width:60px/g)]
-  if (widths.length !== 1) throw new Error('workspace header action width changed upstream')
-  return source.replace(widths[0][0], widths[0][0].replace('max-width:60px', 'max-width:92px'))
-}
-
 async function main() {
   if (!process.argv[2]) throw new Error('usage: node patch-native-settings-command.mjs <app-root>')
   process.chdir(process.argv[2])
@@ -302,7 +267,6 @@ async function main() {
     ['dsh-client-ui-settings-general', source => patchPortableUpdatesIcon(patchNativeSettingsCommand(source))],
     ['dsh-client-ui-settings-plugins', patchPluginSettingsNavigation],
     ['dsh-client-ui-plugin-manager', patchPluginManagerActions, true],
-    ['dsh-client-ui-workspace', patchWorkspaceHeaderActions],
   ]
   for (const [name, patch, optional] of targets) {
     const file = await safeDataTarget(process.cwd(), `node_modules/@deepseek-ai/${name}/lib/client.js`, { createParents: false })
