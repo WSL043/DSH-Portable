@@ -1,0 +1,31 @@
+{
+  "version": "0.9.13",
+  "zh": {
+    "summary": "精简便携版与官方 DSH 之间的兼容层，继续独立更新便携程序与内核。",
+    "highlights": [
+      "会话导出、主题初始化和新版内核的插件管理使用官方实现。Windows 仍可使用系统对话框保存导出文件。",
+      "移除未使用的工作区标题栏补丁，保留新版内核所需的启动、设置和浏览器登录兼容性。"
+    ],
+    "upgradeNotes": [
+      "Windows 在线升级会保留当前选择的内核。要切换到独立发布的 DSH 0.2.2-rc.3，请使用设置中的内核更新。",
+      "离线整包需要与当前内核版本一致。从 0.9.10 或更早版本首次升级时，请用本页的 Windows 便携启动器更新现有文件夹。"
+    ],
+    "acknowledgements": [
+      "感谢 DeepSeek Harness 团队及贡献者维护官方客户端和内核。"
+    ]
+  },
+  "en": {
+    "summary": "Simplifies the integration with official DSH and keeps Portable and core updates independent.",
+    "highlights": [
+      "Use official session export, theme initialization, and plugin management on newer cores. Windows still offers the system dialog for saving exports.",
+      "Remove an unused workspace header patch and keep startup, settings, and browser sign-in compatible with newer cores."
+    ],
+    "upgradeNotes": [
+      "Online Windows upgrades preserve the selected core. To switch to the separately delivered DSH 0.2.2-rc.3, use Core Updates in Settings.",
+      "Full offline packages must match the current core. For a first upgrade from 0.9.10 or earlier, use the Windows portable launcher from this page to update the existing folder."
+    ],
+    "acknowledgements": [
+      "Thanks to the DeepSeek Harness team and contributors for maintaining the official client and core."
+    ]
+  }
+}
