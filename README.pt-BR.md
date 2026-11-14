@@ -2,16 +2,16 @@
 
 <p align="center"><a href="README.md">English</a> · <a href="README.zh-CN.md">简体中文</a> · <a href="README.ja.md">日本語</a> · <a href="README.es.md">Español</a> · <a href="README.fr.md">Français</a> · <a href="README.de.md">Deutsch</a> · <a href="README.ru.md">Русский</a> · <strong>Português (Brasil)</strong></p>
 
+<p align="center">
+  <img src="assets/portable-hero-zh.png" width="1040" alt="Ilustração do DSH-Portable com a interface em chinês simplificado">
+</p>
+
 ## Aplicativo oficial ou versão portátil?
 
 - **Para a maioria dos usuários**, recomendamos o [aplicativo oficial de desktop do DeepSeek Harness](https://www.deepseek.com/harness/).
 - **Para uso portátil**, o [DSH-Portable](https://github.com/WSL043/DSH-Portable/releases/latest) mantém o aplicativo e os dados em uma só pasta.
 
 A manutenção manual e os lançamentos podem se tornar menos frequentes. A manutenção terá foco na portabilidade, na compatibilidade e em correções importantes.
-
-<p align="center">
-  <img src="assets/portable-hero-zh.png" width="1040" alt="Ilustração do DSH-Portable com a interface em chinês simplificado">
-</p>
 
 DeepSeek Harness portátil: conversas, configurações, plugins e área de trabalho ficam em uma pasta. Para Windows, macOS e Linux.
 

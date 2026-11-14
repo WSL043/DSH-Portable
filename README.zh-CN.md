@@ -11,13 +11,6 @@
   0.x 稳定版支持 Windows、macOS 和 Linux。1.x 候选版在 Windows x64 上运行官方桌面端。
 </p>
 
-## 官方桌面端还是便携版？
-
-- **日常使用：** 推荐下载 [DeepSeek Harness 官方桌面端](https://www.deepseek.com/harness/)，支持 Windows x64 和 Apple 芯片 Mac。
-- **需要便携：** [下载 DSH-Portable](#下载)，将应用和数据放在同一个文件夹，随 U 盘携带，或迁移到系统和架构相同的电脑。
-
-DSH-Portable 由社区独立维护。今后人工维护和发版可能减少，重点是便携体验、兼容性和重要问题修复。
-
 <p align="center">
   <a href="https://wsl043.github.io/DSH-Portable/"><strong>官网</strong></a>
   · <a href="#下载"><strong>下载</strong></a>
@@ -43,6 +36,13 @@ DSH-Portable 由社区独立维护。今后人工维护和发版可能减少，�
 <p align="center">
   <img src="assets/portable-hero-zh.png" width="1040" alt="DSH-Portable 便携工作环境示意图（简体中文界面）">
 </p>
+
+## 官方桌面端还是便携版？
+
+- **日常使用：** 推荐下载 [DeepSeek Harness 官方桌面端](https://www.deepseek.com/harness/)，支持 Windows x64 和 Apple 芯片 Mac。
+- **需要便携：** [下载 DSH-Portable](#下载)，将应用和数据放在同一个文件夹，随 U 盘携带，或迁移到系统和架构相同的电脑。
+
+DSH-Portable 由社区独立维护。今后人工维护和发版可能减少，重点是便携体验、兼容性和重要问题修复。
 
 ## 便携版版本选择
 

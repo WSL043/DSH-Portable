@@ -11,13 +11,6 @@
   Stable 0.x runs on Windows, macOS, and Linux. The 1.x release candidate runs the official Desktop on Windows x64.
 </p>
 
-## Official Desktop or Portable?
-
-- **For most users:** We recommend [DeepSeek Harness Desktop](https://www.deepseek.com/harness/), the official app for Windows x64 and Apple silicon Macs.
-- **For portable use:** [Download DSH-Portable](#downloads) to keep your app and data in one folder, carry it on a USB drive, or move it to another computer with the same OS and architecture.
-
-DSH-Portable is an independent community distribution. Hands-on maintenance and Portable releases may become less frequent. The focus will be on portability, compatibility, and important fixes.
-
 <p align="center">
   <a href="https://wsl043.github.io/DSH-Portable/"><strong>Website</strong></a>
   · <a href="#downloads"><strong>Downloads</strong></a>
@@ -43,6 +36,13 @@ DSH-Portable is an independent community distribution. Hands-on maintenance and 
 <p align="center">
   <img src="assets/portable-hero-zh.png" width="1040" alt="DSH-Portable product illustration with the Simplified Chinese interface">
 </p>
+
+## Official Desktop or Portable?
+
+- **For most users:** We recommend [DeepSeek Harness Desktop](https://www.deepseek.com/harness/), the official app for Windows x64 and Apple silicon Macs.
+- **For portable use:** [Download DSH-Portable](#downloads) to keep your app and data in one folder, carry it on a USB drive, or move it to another computer with the same OS and architecture.
+
+DSH-Portable is an independent community distribution. Hands-on maintenance and Portable releases may become less frequent. The focus will be on portability, compatibility, and important fixes.
 
 ## Portable editions
 
