@@ -255,8 +255,12 @@ h1 {
   line-height: 1.8;
 }
 .hero-note {
-  font-size: 10px;
-  margin-top: 25px;
+  font-size: 12px;
+  margin-top: 18px;
+}
+.hero-note a {
+  text-decoration: underline;
+  text-underline-offset: 2px;
 }
 .product-stage {
   position: absolute;

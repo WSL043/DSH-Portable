@@ -30,7 +30,7 @@ const copy = {
       "One folder for your sessions, settings, plugins, and workspace.<br>Move it on the same platform; update Portable and core separately.",
     downloadFor: "Download for Windows",
     otherPlatforms: "Other platforms",
-    heroNote: "No installation or PATH changes / Copy the folder on the same platform / Data-preserving rollback and recovery",
+    heroNote: 'For most users, we recommend <a class="text-link" href="https://www.deepseek.com/harness/">the official DeepSeek Harness Desktop ↗</a>.',
     stageCaption: "Sessions, settings, plugins, and workspace in one folder.",
     portableTitle: "One folder.<br>Pick up where you left off.",
     portableIntro:
@@ -88,7 +88,7 @@ const copy = {
       "Fully exit, then copy the whole folder to a USB drive or a computer with the same OS and architecture. Sessions, settings, plugins, and the default workspace move together.",
     faqLineQ: "Stable 0.x or the 1.0 preview?",
     faqLineA:
-      'For everyday use, choose stable 0.x, available for Windows, macOS, and Linux. The 1.0 preview runs the official desktop app itself; it is a Windows x64 release candidate and can sit next to 0.x. <a href="../guides/official-desktop-portable.html">About the 1.0 preview</a> (in Chinese).',
+      'If you need a portable edition, start with stable 0.x for Windows, macOS, or Linux. The 1.0 preview runs the official desktop app itself; it is a Windows x64 release candidate and can sit next to 0.x. <a href="../guides/official-desktop-portable.html">About the 1.0 preview</a> (in Chinese).',
     faqDefenderQ: "What if Windows Security removed the program?",
     faqDefenderA:
       'Release files are not digitally signed yet and are occasionally misjudged. Download only from GitHub Releases and compare the checksums; the <a href="https://github.com/WSL043/DSH-Portable/blob/main/docs/user-guide.en.md#windows-security-removed-the-program-or-blocked-it">user guide</a> covers restoring the file and reporting the false positive.',
@@ -120,13 +120,13 @@ const copy = {
       "Rollback, checks, targeted repair, and recovery tools help fix issues while preserving personal data.",
     choiceTitle: "Official desktop or portable?",
     choiceIntro:
-      "Each delivery model has a different focus. Choose based on installation preferences, number of devices, and update control.",
+      "We recommend the official desktop app for most users. Choose DSH-Portable if you want to carry the app and data together in one folder.",
     choiceOfficialLabel: "OFFICIAL DESKTOP",
     choiceOfficialTitle: "DeepSeek official desktop app",
-    choiceOfficialInstall: "Installer-based, available for Windows and macOS.",
+    choiceOfficialInstall: "Installers for Windows x64 and Apple silicon Macs.",
     choiceOfficialUpdates: "Follows the official release schedule.",
     choiceOfficialFit: "A good fit if you want an installed app on one computer.",
-    officialDesktopLink: "Explore the official desktop app ↗",
+    officialDesktopLink: "Download the official desktop app ↗",
     choicePortableLabel: "DSH-PORTABLE",
     choicePortableTitle: "The portable edition of DeepSeek Harness",
     choicePortableInstall:
@@ -139,14 +139,14 @@ const copy = {
       "A good fit if you want to carry it between devices or control update timing.",
     portableDownloadsLink: "View stable downloads ↗",
     projectBoundary:
-      "DSH-Portable is an independent community project, not an official DeepSeek app, and is not endorsed by DeepSeek.",
-    linesTitle: "Two product lines",
+      "DSH-Portable is an independent community project. Hands-on maintenance and Portable releases may become less frequent. The focus will be on portability, compatibility, and important fixes.",
+    linesTitle: "Portable editions",
     linesIntro:
-      "Choose the stable line for everyday use. The development line is separate from public downloads.",
+      "If you need a portable edition, start with stable 0.x.",
     stableLineLabel: "CURRENT DOWNLOAD",
     stableLineTitle: "Stable 0.x (Native)",
     stableLineText:
-      '<ul class="line-points"><li>Recommended for everyday use on Windows, macOS, and Linux.</li><li>Portable and the core update separately; choose among up to five verified core versions.</li><li>No install and no system changes; copy the folder to take it with you.</li></ul><p><a href="#downloads">See downloads</a></p>',
+      '<ul class="line-points"><li>Stable 0.x supports Windows, macOS, and Linux.</li><li>Portable and the core update separately; choose among up to five verified core versions.</li><li>No install and no system changes; copy the folder to take it with you.</li></ul><p><a href="#downloads">See downloads</a></p>',
     developmentLineLabel: "RELEASE CANDIDATE",
     developmentLineTitle: "1.0 line: runs the official desktop app itself",
     developmentLineText:
