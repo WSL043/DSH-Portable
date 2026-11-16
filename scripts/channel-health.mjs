@@ -32,7 +32,11 @@ export function evaluateChannelHealth({ latestRelease, feedVersion, state, catal
 }
 
 async function json(url) {
-  const response = await fetch(url, { headers: { accept: 'application/vnd.github+json', 'user-agent': 'dsh-portable-channel-health' }, redirect: 'follow' })
+  const headers = { accept: 'application/vnd.github+json', 'user-agent': 'dsh-portable-channel-health' }
+  if (new URL(url).hostname === 'api.github.com' && process.env.GH_TOKEN) {
+    headers.authorization = `Bearer ${process.env.GH_TOKEN}`
+  }
+  const response = await fetch(url, { headers, redirect: 'follow' })
   if (!response.ok) throw new Error(`${url}: HTTP ${response.status}`)
   return response.json()
 }

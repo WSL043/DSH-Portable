@@ -25,6 +25,8 @@ jobs:
       - name: Check that the feed offers a shell whose newest cores are qualified
         id: health
         continue-on-error: true
+        env:
+          GH_TOKEN: ${{ github.token }}
         run: |
           set -o pipefail
           node scripts/channel-health.mjs | tee health.json
@@ -34,7 +36,7 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           {
-            echo 'The stable update channel is not healthy, so users upgrading now may lose the core they selected.'
+            echo 'The stable update channel could not be verified or needs attention. See the details below.'
             echo
             echo '~~~json'
             cat health.json 2>/dev/null || echo '{"healthy":false,"problems":["the health check itself failed"]}'
