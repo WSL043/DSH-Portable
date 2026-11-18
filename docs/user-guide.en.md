@@ -200,7 +200,7 @@ Copying the complete folder is supported only between the same operating system 
 
 Use **Plugins → Installed / Discover** to manage plugins in DSH. New packages do not install community plugins by default. Normal upgrades preserve the existing Profile, installed packages, and enablement states.
 
-To add the optional community index, open the source selector under **Discover**, choose **Manage index sources**, and paste the URL from the [README](../README.md#community-index).
+If **Discover** is missing, open **Plugins → Experimental plugins** and enable **Custom plugin indexes**. In **Discover**, select **Add index source** or choose **Manage index sources** from the source selector. Paste the community index URL from the [README](../README.md#community-index).
 
 In **Plugins → Add plugin**, enter the package name or address published by its maintainer. If pnpm rejects a GitHub source repository with `ERR_PNPM_GIT_DEP_PREPARE_NOT_ALLOWED`, use the maintainer’s published npm package or release `.tgz`.
 

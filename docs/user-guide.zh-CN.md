@@ -202,7 +202,18 @@ AppImage 的会话、设置、插件和工作区保存在旁边的 `DSH-Portable
 
 在官方 DSH 的 **插件 → 已安装 / 发现** 页面管理插件。新版本不再默认安装社区插件。普通升级会保留现有 Profile、已安装插件及启停状态。
 
-如需添加社区索引，请在 **发现** 中打开索引源菜单，选择 **管理索引源**，粘贴 [README](../README.zh-CN.md#社区索引源) 中的地址。
+1. 如果没有「发现」，在左侧打开 **插件**，找到 **实验性插件**，打开 **自定义插件索引** 的开关。
+2. 打开 **发现 → 添加索引源**。如果已经添加过索引，从左侧的索引源下拉菜单打开 **管理索引源**。
+3. 粘贴 [README 中的社区索引地址](../README.zh-CN.md#社区索引源) 并点击 **添加**。
+
+<details>
+<summary>查看操作截图</summary>
+
+![实验性插件中的「自定义插件索引」开关](evidence/issue-271-enable-discover-zh.png)
+
+![「发现」中的索引源对话框](evidence/issue-271-add-index-zh.png)
+
+</details>
 
 在 **插件 → 添加插件** 中输入维护者发布的包名或地址。若从 GitHub 源码安装时遇到 `ERR_PNPM_GIT_DEP_PREPARE_NOT_ALLOWED`，请改用维护者发布的 npm 包名或 Release 提供的 `.tgz` 地址。
 

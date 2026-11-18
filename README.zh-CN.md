@@ -127,7 +127,7 @@ macOS、Linux 解压后直接运行，首次打开的注意事项见[用户指�
 
 ### 社区索引源
 
-在 **插件 → 发现** 打开索引源下拉菜单，选择 **管理索引源**，粘贴以下地址并点击 **添加**。
+如果没有「发现」，先到左侧 **插件 → 实验性插件**，启用 **自定义插件索引**。进入 **发现** 后点 **添加索引源**；已有索引时，从索引源下拉菜单打开 **管理索引源**。粘贴以下地址并点 **添加**。 [操作截图](docs/user-guide.zh-CN.md#插件)
 
 ```text
 https://cdn.jsdelivr.net/gh/WSL043/DSH-Portable-Updates@market-index/awesome-index.json

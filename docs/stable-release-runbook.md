@@ -66,7 +66,7 @@ FINAL_ACCEPTANCE_FILE=/path/to/final-acceptance.json scripts/ship-stable.sh x.y.
 2. 触发“Publish tested release”，但 `publish_feed=false`：版本专属 Release 和下载包已发布。应用内更新源和 GitHub Latest 仍指向上一版，避免默认下载的启动器读取到旧版清单。
 3. 检查**最新五个内核、至少两个 RC 或正式版**的窗口。脚本回读五个平台的签名目录；每个平台均已有同一 `requiredShellContract` 和 Node 版本的内核时可沿用验收。只绑定版本的内核需有本次完整发布提交的成功记录，且已出现在对应目录。其余触发更新仓库的“Sync verified DSH core”并等待自动队列。窗口内曾被 `blocked` 且从未在任何外壳验收成功的内核记为 `excused`。其他 `failed`/`blocked` 会退出，目录缺项仍为 `pending`。
 4. 全部通过后再用 `publish_feed=true` 发布稳定更新源与兼容镜像，最后将新 Release 标记为 GitHub Latest。
-5. 发布成功后，`Sync README core support` 从 GitHub Latest 及五个平台的更新目录同步中英文 README 的可选内核表。更新入口或操作有变化时，随实现同步修改 README 和用户指南。
+5. 发布成功后，`Sync README core support` 从 GitHub Latest 及五个平台的更新目录同步中英文 README 的可选内核表。更新入口或操作有变化时，随实现同步修改 README 和用户指南。0.x 的内核组件包含桌面桥接页面；修改更新页后，用现有 `rebuild_version` 流程刷新受影响的已验收内核，并在切换内核后核对新版提示仍然显示。
 
 Windows 首次从 0.9.10 或更早版本升级且需要保留已选内核时，应使用新发行页的 Windows 便携启动器。验收此路径时，让新版启动器更新隔离的旧版文件夹，核对外壳版本、同版本内核、实际启动和会话保留。旧版内置更新器仍按其原有流程运行。
 

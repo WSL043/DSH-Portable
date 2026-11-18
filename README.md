@@ -121,7 +121,7 @@ New packages no longer install community plugins by default. Use **Plugins → I
 
 ### Community index
 
-In **Plugins → Discover**, open the source selector and choose **Manage index sources**. Paste this URL and select **Add**.
+If **Discover** is missing, open **Plugins → Experimental plugins** and enable **Custom plugin indexes**. In **Discover**, choose **Add index source**. If you already have an index, open the source selector and choose **Manage index sources**. Paste this URL and select **Add**.
 
 ```text
 https://cdn.jsdelivr.net/gh/WSL043/DSH-Portable-Updates@market-index/awesome-index.json
