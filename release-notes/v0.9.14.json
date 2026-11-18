@@ -1,0 +1,31 @@
+{
+  "version": "0.9.14",
+  "zh": {
+    "summary": "改善 GitHub 限流或拒绝访问时的便携版与内核更新检查。",
+    "highlights": [
+      "当 GitHub 返回 403 或 429 时，Portable 和内核更新检查会尝试现有镜像，并验证镜像返回的更新清单签名。",
+      "更新页面会说明从哪个子目录选择 JSON，并提供手动下载指南。"
+    ],
+    "upgradeNotes": [
+      "Portable 与内核可分别更新。若当前版本无法联网检查，可在能联网的电脑下载同一更新的 JSON、签名和 ZIP，再在应用中选择从文件更新。",
+      "第三方插件若在 GitHub 源码安装时被 pnpm 拒绝，可使用维护者发布的 npm 包或 Release 的 .tgz。"
+    ],
+    "acknowledgements": [
+      "感谢 #271 的报告者提供 Windows 更新和插件安装的反馈。"
+    ]
+  },
+  "en": {
+    "summary": "Improves Portable and core update checks when GitHub denies or rate-limits requests.",
+    "highlights": [
+      "If GitHub returns 403 or 429, Portable and core update checks try the existing mirrors and verify the signature on the returned update metadata.",
+      "The Updates page explains which folder contains the JSON and links to manual download instructions."
+    ],
+    "upgradeNotes": [
+      "Portable and core update separately. If your current version cannot check online, download the matching JSON, signature and ZIP on a connected computer, then select Update from file.",
+      "If pnpm refuses to install a third-party plugin from GitHub source, use the maintainer's npm package or release .tgz."
+    ],
+    "acknowledgements": [
+      "Thanks to the reporter of #271 for the Windows update and plugin installation feedback."
+    ]
+  }
+}

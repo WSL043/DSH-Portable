@@ -337,6 +337,9 @@ test('Get files opts into a native folder picker while old hosts retain the guid
         assert.ok(control)
         if (nativeFileDownloads) {
           assert.notEqual(control.type, 'a')
+          assert.match(textContent(row), /Get files.*creates a subfolder.*Select its JSON/)
+          const guide = findNode(row, node => node.type === 'a' && textContent(node) === 'Manual download guide')
+          assert.equal(guide?.props.href, 'https://github.com/WSL043/DSH-Portable/blob/main/docs/offline-updates.md')
           control.props.onClick()
           assert.deepEqual(JSON.parse(JSON.stringify(nativeMessages.at(-1))), {
             type: 'dsh-portable/open-update', schemaVersion: 1, scope, downloadFiles: true,
