@@ -206,6 +206,8 @@ Open **Settings → Plugins → Plugin Market** to search, filter, visit a proje
 
 In the official **Plugins → Add plugin** dialog, enter a **package name or address, not a terminal command**. For example, enter `dsh-codex-subscription`, or `dsh-codex-subscription@2.1.3-beta.1` for that candidate. Do not include `dsh plugin --profile web add`. Review the source and follow the installation result; restart only when requested.
 
+If installing from a GitHub source repository returns `ERR_PNPM_GIT_DEP_PREPARE_NOT_ALLOWED`, the source requires local build scripts. Enter the maintainer-published npm package name or the Release's `.tgz` URL in **Add plugin**. For example, the community market is published as `dshmarket` on npm.
+
 New packages do not install community plugins by default. Community plugins remain opt-in through the Plugin Market or standard DSH commands. Normal upgrades preserve the existing Profile, installed packages and enablement states.
 
 ### DSH Terminal and plugin management commands

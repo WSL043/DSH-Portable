@@ -42,15 +42,16 @@ test('archives try GitHub first and then the mirrors', () => {
   assert.deepEqual(withMirrorRoutes(['https://cdn.example/core.zip'], ['https://m.example/']), ['https://cdn.example/core.zip'])
 })
 
-test('metadata falls back to a mirror only when GitHub cannot be reached, and only with a valid signature', async () => {
+test('metadata falls back to a signed mirror after a network failure or GitHub denying access', async () => {
   const bytes = await fixture('sample.json')
   const signature = await fixture('sample.json.sig')
   const mirror = 'https://m.example/'
   const calls = []
-  const serve = ({ githubDown = true, tamper = false, signed = true } = {}) => async input => {
+  const serve = ({ githubDown = true, githubStatus, tamper = false, signed = true } = {}) => async input => {
     const url = String(input)
     calls.push(url)
     if (url.startsWith('https://github.com/')) {
+      if (githubStatus) return response('', githubStatus)
       if (githubDown) throw new TypeError('fetch failed')
       return response('{"from":"github"}')
     }
@@ -65,6 +66,13 @@ test('metadata falls back to a mirror only when GitHub cannot be reached, and on
 
   await assert.rejects(fetchJson(MANIFEST, options(serve({ tamper: true }))), /fetch failed/)
   await assert.rejects(fetchJson(MANIFEST, options(serve({ signed: false }))), /fetch failed/)
+
+  for (const githubStatus of [403, 429]) {
+    assert.deepEqual(await fetchJson(MANIFEST, options(serve({ githubStatus }))),
+      { fixture: 'update-signature', schemaVersion: 1 })
+    await assert.rejects(fetchJson(MANIFEST, options(serve({ githubStatus, tamper: true }))),
+      new RegExp(`HTTP ${githubStatus}`))
+  }
 
   calls.length = 0
   assert.deepEqual(await fetchJson(MANIFEST, options(serve({ githubDown: false }))), { from: 'github' })

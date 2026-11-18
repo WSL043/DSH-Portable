@@ -4,13 +4,11 @@
 
 从 0.9.5 起，Windows Native 在既有更新流程上提供本地文件入口，适用于 0.x Portable 和内核。1.x 官方桌面纯便携线提供独立的[离线更新、修复和程序回退入口](pure-portable-operations.md#离线更新修复和程序回退)。
 
-## 自动准备文件（0.9.8）
-
-以下为 0.9.8 主线改进，正式交付状态以 Release 为准。
+## 在联网电脑上获取更新文件
 
 1. 在联网的 Windows Native 打开 **设置 → 更新**，选择 Portable 或内核的目标版本，点击 **获取文件**，再选择保存目录。
 2. 程序自动取得并校验同版的原始 JSON、签名和指定 ZIP，保存到一个新子目录；不会安装更新、停止工作台或覆盖已有文件。下载可以取消。
-3. 将该子目录整体复制到离线电脑，点击对应区域的 **从文件更新**，选择其中的 JSON。无需自行匹配三个附件。
+3. 将该子目录整体复制到离线电脑，点击对应区域的 **从文件更新**，选择其中的 JSON。若「获取文件」也无法联网，可在另一台能访问 GitHub 的电脑上按下文手动下载。
 
 旧版或其他宿主可按下方步骤手动准备；仍不要混用版本或修改清单。
 
@@ -78,7 +76,7 @@
 
 ## Download files (English)
 
-In 0.9.8 Windows Native update settings, select the target Portable/core version and choose **Get files**, then a destination folder. This main-branch improvement is subject to the published Release status. The application downloads and verifies the matching original JSON, signature and ZIP into a new subfolder without installing, stopping the workspace or overwriting existing files; the download can be cancelled. Copy that folder to the offline computer and select its JSON under **Update from file**. Older hosts can use the manual instructions below.
+On a connected Windows Native installation, open **Settings → Updates**, select a Portable or core version and choose **Get files**, then a destination folder. The application downloads and verifies the original JSON, signature and ZIP into a new subfolder. Copy that folder to the offline computer and select its JSON under **Update from file**. If **Get files** cannot connect, use the manual steps below from a computer that can reach GitHub.
 
 Use a connected computer first. Open the release and expand **Assets**:
 

@@ -517,8 +517,9 @@ export async function fetchJson(urlValue, { allowHttp, fetchImpl, timeoutMs, mir
   try {
     return JSON.parse((await fetchMetadataBytes(url, { fetchImpl, timeoutMs })).toString('utf8'))
   } catch (error) {
-    // GitHub answering (a 404, a 403) is final. Only a failure to reach it, or a server error, moves on to mirrors.
-    if (/^HTTP \d+$/.test(error?.message) && !/^HTTP 5\d\d$/.test(error.message)) throw error
+    // A proxy denial or rate limit can affect GitHub alone. A missing asset stays final.
+    const status = /^HTTP (\d{3})$/.exec(error?.message)?.[1]
+    if (status && status !== '403' && status !== '429' && !status.startsWith('5')) throw error
     for (const mirror of mirrorUrls(urlValue, mirrors)) {
       try {
         const bytes = await fetchMetadataBytes(mirror, { fetchImpl, timeoutMs: Math.max(timeoutMs, 8000) })
