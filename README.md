@@ -15,6 +15,7 @@
   <a href="https://wsl043.github.io/DSH-Portable/"><strong>Website</strong></a>
   · <a href="#downloads"><strong>Downloads</strong></a>
   · <a href="#start-in-3-steps">Get started</a>
+  · <a href="#update-an-existing-installation">Updates</a>
   · <a href="docs/user-guide.en.md">User guide</a>
   · <a href="#plugins">Plugins</a>
   · <a href="#get-help">Support</a>
@@ -78,8 +79,6 @@ Not sure? Use the online launcher with internet, or the standard ZIP for manual 
 
 See the [Linux guide](docs/user-guide.en.md#linux) for AppImage launch details, data location, and the complete folder.
 
-For an existing 0.x folder, see the [offline update guide](docs/offline-updates.md#download-files-english).
-
 ### 1.x for Windows x64
 
 | Package | When to use it |
@@ -102,6 +101,12 @@ These steps use the **0.x Windows online launcher**.
 On macOS and Linux, extract and run; see the [guide](docs/user-guide.en.md#macos) for first-launch notes.
 
 The close button sends the app to the tray, so tasks continue. To quit, use **File → Exit DeepSeek Harness**; on Windows press Ctrl+Q. The tray menu is an alternate exit path.
+
+## Update an existing installation
+
+- **0.x online:** Open **Settings → Updates** and choose **Check for updates** under **DSH-Portable** or **DeepSeek Harness**. Each has its own check and install action. Updating Portable keeps the selected core.
+- **0.x offline on Windows:** On a connected computer, choose **Get files** for the target version. Copy the new subfolder containing the JSON, its matching `.sig`, and the ZIP to the target computer. Under the same update section, choose **Update from file** and select the JSON. If **Get files** is unavailable, use the [manual download guide](docs/offline-updates.md#download-files-english).
+- **1.x:** Choose **Install and Restart** when the Desktop offers an update. Hold **Shift** at launch to open the offline update and recovery tools. See the [1.x guide](docs/pure-portable-operations.md).
 
 ## How portability works
 
@@ -132,7 +137,7 @@ Core selection applies to 0.x stable.
 **Optional cores (up to 5 verified versions)** · Settings → Updates · Since 0.6.5 stable (first available in 0.6.5-rc.1).
 
 <details>
-<summary>View available cores for Portable 0.9.13</summary>
+<summary>View available cores for Portable 0.9.14</summary>
 
 | Platform | Available cores |
 | --- | --- |

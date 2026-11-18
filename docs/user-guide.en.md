@@ -9,27 +9,27 @@
 - [Updates and repair](#updates-and-repair)
 - [Portable data and migration](#portable-data)
 - [DSH Terminal and plugin commands](#dsh-terminal-and-plugin-commands)
-- [Plugin Market and installation](#plugins)
+- [Plugin installation and discovery](#plugins)
 - [DSH-Recovery.exe](#dsh-recoveryexe)
 - [Linux AppImage and complete folder](#linux)
 - [First launch on macOS](#macos)
 - [Offline deployment](#offline-deployment)
 <p align="center">
-  <img src="assets/DSH-Portable.svg" width="82" alt="DeepSeek Harness">
+  <img src="../assets/DSH-Portable.svg" width="82" alt="DeepSeek Harness">
 </p>
 
 <h1 align="center">DSH-Portable</h1>
 
 <p align="center">
   <strong>DeepSeek Harness, ready to use. Install plugins visually. Take your workspace with you.</strong><br>
-  Includes the runtime, desktop window, and Plugin Market. Keep sessions, settings, plugins, and the default workspace together for moving and backup.
+  Includes the runtime and desktop window. Keep sessions, settings, plugins, and the default workspace together for moving and backup.
 </p>
 
 <p align="center">
   <a href="https://wsl043.github.io/DSH-Portable/"><strong>Website</strong></a>
   · <a href="https://github.com/WSL043/DSH-Portable/releases/latest"><strong>Download</strong></a>
   · <a href="#start-in-3-steps">Get started</a>
-  · <a href="docs/move-between-computers.en.md">Move</a>
+  · <a href="move-between-computers.en.md">Move</a>
   · <a href="#plugins">Plugins</a>
   · <a href="#get-help">Support</a>
   · <a href="README.md">简体中文</a> · <strong>English</strong>
@@ -48,7 +48,7 @@
 </p>
 
 <p align="center">
-  <img src="assets/portable-layout-en.svg" width="1040" alt="Windows portable folder: program components, data and workspace together; exit and copy to a new location on the same platform">
+  <img src="../assets/portable-layout-en.svg" width="1040" alt="Windows portable folder: program components, data and workspace together; exit and copy to a new location on the same platform">
 </p>
 
 > [!NOTE]
@@ -71,9 +71,9 @@ Image Viewer and Session Manager are included and can be removed independently. 
 <details>
 <summary>Historical product screenshots (the current interface may differ)</summary>
 
-![DSH-Portable 0.6.4 workspace in Chinese](assets/dsh-workspace-0.6.4.png)
+![DSH-Portable 0.6.4 workspace in Chinese](../assets/dsh-workspace-0.6.4.png)
 
-![Actual 0.6.5-rc.1 update settings in Chinese](assets/portable-updates.png)
+![Actual 0.6.5-rc.1 update settings in Chinese](../assets/portable-updates.png)
 
 Product and core versions are selected separately, subject to compatibility checks. The current entry is Settings → Updates.
 
@@ -86,7 +86,7 @@ Want to use DeepSeek Harness without first setting up a runtime, remembering lau
 | What you need | How Portable helps |
 | --- | --- |
 | **Start working** | Bundled Node.js and plugin tools, with a desktop entry point instead of a development-environment setup. |
-| **Install plugins visually** | Search, install, and manage plugins in the built-in market. Routine installation needs no terminal commands. |
+| **Install plugins visually** | Find and manage plugins on the official DSH Plugins page. |
 | **Move your environment** | Exit completely and copy the folder to a computer with the same OS and CPU architecture. Move external projects separately. |
 | **Keep your setup through updates** | Product updates preserve sessions, settings, plugins, and workspace. Official-core updates are offered separately from Portable updates. |
 | **Use desktop controls** | Dedicated window, tray, shortcuts, full screen, task notifications, and remembered window placement. |
@@ -94,7 +94,7 @@ Want to use DeepSeek Harness without first setting up a runtime, remembering lau
 
 If you already prefer deploying official DSH, managing its runtime, and launching it from a terminal, that remains an option. Portable brings installation, desktop controls, moving, and maintenance together; model capabilities still come from your connected service. The standard ZIP avoids the initial program-component download, but online models and new plugin downloads still need a network connection.
 
-Offline deployment requires a prepared local model server and model weights. The standard Windows ZIP requires system WebView2. Starting with 0.6.5, a separate [complete offline ZIP](https://github.com/WSL043/DSH-Portable/releases/latest/download/DSH-Portable-windows-x64-complete-offline.zip) includes WebView2 and default-plugin dependencies, but no models. See the [offline deployment acceptance notes](docs/offline-deployment-acceptance.md).
+Offline deployment requires a prepared local model server and model weights. The standard Windows ZIP requires system WebView2. The [complete offline ZIP](https://github.com/WSL043/DSH-Portable/releases/latest/download/DSH-Portable-windows-x64-complete-offline.zip) includes WebView2. See the [offline deployment acceptance notes](offline-deployment-acceptance.md).
 
 | One folder | Move and continue | Update without moving data |
 | --- | --- | --- |
@@ -107,7 +107,7 @@ On Windows, enabling **Task notifications** shows a system notification when a b
 | Where you start | What Portable handles |
 | --- | --- |
 | **Online** | Download the lightweight launcher, place it where you want to keep the product, and run it. It prepares and verifies the complete folder beside itself. |
-| **Offline** | The complete ZIP includes official DSH, its runtime, the Plugin Market, and plugin management tools. |
+| **Offline** | The complete ZIP includes official DSH, its runtime, and WebView2. |
 | **Another PC or USB drive (same OS/architecture)** | Copy the folder; Portable repairs the paths it owns on the next launch. |
 | **Personal data only** | Export the same migration contents as either a plain package or a password-encrypted private package. |
 | **Long-term updates** | DSH-Portable and the official DSH core update independently while preserving `data` and `workspace`. |
@@ -151,7 +151,7 @@ The close button sends the app to the system tray by default, so an active task 
 
 The window-rendering component is called WebView2. [Windows 11 includes it, and most Windows 10 PCs already have it](https://learn.microsoft.com/en-us/microsoft-edge/webview2/concepts/end-user-faq). The standard ZIP uses that existing component; the complete offline ZIP carries its own copy.
 
-None of these includes a model service or model weights. Prepare a local model before offline use. Both ZIPs include the application runtime and default-plugin dependencies.
+None of these includes a model service or model weights. Prepare a local model before offline use. Both ZIPs include the application runtime.
 
 
 
@@ -182,11 +182,11 @@ The full-folder `DeepSeek-Herness` launcher is a Linux ELF. Some file managers s
 
 ## Offline deployment
 
-See the [offline deployment guide](docs/offline-deployment-acceptance.md) for preparation, model requirements, and qualification boundaries. The Windows complete offline ZIP includes WebView2 and default-plugin dependencies, but no model; prepare model weights in advance for an offline model service.
+See the [offline deployment guide](offline-deployment-acceptance.md) for preparation, model requirements, and qualification boundaries. The Windows complete offline ZIP includes WebView2. Prepare model weights in advance for an offline model service.
 
 ## Move and back up
 
-See the [computer-to-computer migration guide](docs/move-between-computers.en.md) for the complete procedure, data-only packages, and a portability check that does not require a second computer.
+See the [computer-to-computer migration guide](move-between-computers.en.md) for the complete procedure, data-only packages, and a portability check that does not require a second computer.
 
 1. Quit the app completely and wait for the window and tray icon to disappear. On Windows, use **File → Exit**, `Ctrl+Q`, or the tray's **Exit** command.
 2. Copy the entire `DSH-Portable` folder to a new location with the same OS and architecture.
@@ -198,17 +198,11 @@ Copying the complete folder is supported only between the same operating system 
 
 ## Plugins
 
-On newer cores with public Plugins slots, the official page owns routine updates and management of installed plugins. When the optional official market is enabled, Portable shows Advanced. Otherwise, including a failed check, it retains Plugin Market and Advanced tabs, using its existing discovery and confirmed installation flow without enabling that optional bundle. Advanced keeps groups, themes, diagnostics and explicit recovery. A group switch applies the Portable group; a member’s Manage action opens the official page. Older cores retain their existing entries.
+Use **Plugins → Installed / Discover** to manage plugins in DSH. New packages do not install community plugins by default. Normal upgrades preserve the existing Profile, installed packages, and enablement states.
 
-Open **Settings → Plugins → Plugin Market** to search, filter, visit a project, and install, update, disable, or remove community plugins. The market follows the DSH language and theme and never interrupts an active task silently.
+To add the optional community index, open the source selector under **Discover**, choose **Manage index sources**, and paste the URL from the [README](../README.md#community-index).
 
-**Routine installation requires no terminal or code.** Search for a plugin, open its details, and click Install; follow the page prompt if a refresh or restart is needed. Starting with Portable 0.7.3, stable is the default; a separate Install or Try Beta button appears only when npm's Beta tag points to a newer prerelease. An installed Beta can explicitly return to the current stable release; ordinary updates never silently downgrade it. The market draws on [dsh-market](https://github.com/dsh-market/dsh-market) and hands installation to the official DSH plugin manager.
-
-In the official **Plugins → Add plugin** dialog, enter a **package name or address, not a terminal command**. For example, enter `dsh-codex-subscription`, or `dsh-codex-subscription@2.1.3-beta.1` for that candidate. Do not include `dsh plugin --profile web add`. Review the source and follow the installation result; restart only when requested.
-
-If installing from a GitHub source repository returns `ERR_PNPM_GIT_DEP_PREPARE_NOT_ALLOWED`, the source requires local build scripts. Enter the maintainer-published npm package name or the Release's `.tgz` URL in **Add plugin**. For example, the community market is published as `dshmarket` on npm.
-
-New packages do not install community plugins by default. Community plugins remain opt-in through the Plugin Market or standard DSH commands. Normal upgrades preserve the existing Profile, installed packages and enablement states.
+In **Plugins → Add plugin**, enter the package name or address published by its maintainer. If pnpm rejects a GitHub source repository with `ERR_PNPM_GIT_DEP_PREPARE_NOT_ALLOWED`, use the maintainer’s published npm package or release `.tgz`.
 
 ### DSH Terminal and plugin management commands
 
@@ -225,11 +219,11 @@ dsh --profile web --dump-config
 The Portable DSH Terminal recognizes `dsh` only inside that window and never changes the system `PATH`. After moving the complete Portable folder within the same OS and architecture, a newly opened DSH Terminal automatically resolves the new location without repairing environment variables.
 
 
-Plugins that can be mounted safely take effect immediately, while client-only plugins need only a refresh. Updating host code is marked as pending restart. The market never updates, removes, or silently restarts DSH while a task is running. Install only plugins you trust.
+Plugins that can be mounted safely take effect immediately, while client-only plugins need only a refresh. Updating host code is marked as pending restart. Install only plugins you trust.
 
 ## Windows desktop controls
 
-![Windows native navigation](assets/windows-navigation-dark.png)
+![Windows native navigation](../assets/windows-navigation-dark.png)
 
 Native navigation follows the selected theme and provides sidebar and history controls.
 
@@ -251,23 +245,23 @@ Leaving full screen restores the previous window bounds and maximized state. Out
 
 > The screenshot was captured on 0.6.5-rc.1. The current entry is Settings → Updates.
 
-![Dedicated Updates settings page](assets/portable-updates.png)
+![Dedicated Updates settings page](../assets/portable-updates.png)
 
 - DSH-Portable opens the local workspace first, then checks in the background only when the corresponding startup setting is enabled. Product updates and official DeepSeek Harness core updates are independent, and both **Check for updates at startup** settings are off by default; **Settings → Updates** is the primary update entry: check DSH-Portable or the official DeepSeek Harness core, then install the update in-page after desktop-host confirmation. Their check and install operations are independent and use the same qualified Stable channel.
 - Updates use one **qualified Stable channel**. The **candidate** endpoint is retained as a compatibility mirror for older clients, and old Candidate preferences normalize to Stable. Alpha, Beta, and RC entries still require the corresponding finished-product qualification; the stage name alone does not establish availability. See the [release-stage policy](release-policy.md).
 - Windows startup update checks run in the background. Available updates are marked in the tray menu without restoring the window or opening a confirmation overlay. The tray retains separate manual checks for Portable and the core; a manual check opens the confirmation UI.
 - Every prompt names the target—DSH-Portable or DeepSeek Harness—and shows that target's current and next version.
-- **Unpublished main improvement:** Update checks, version lists, and reminder choices do not prepare the core runtime cache. Checks remain available when the runtime package is damaged; startup and installation still validate their runtime components.
+- Update checks, version lists, and reminder choices do not prepare the core runtime cache. Checks remain available when the runtime package is damaged; startup and installation still validate their runtime components.
 - A normal update downloads only the changed DSH application component and shows the real download percentage. Sessions, settings, credentials, and workspace remain in place.
-- When the runtime compatibility boundary changes, DSH-Portable downloads the verified complete package and replaces the app in place while preserving user data.
+- When the runtime compatibility boundary changes on Windows, Portable downloads the verified complete package and updates in place, preserving the selected core and user data. The update stops if it cannot keep the current core.
 - Choose Later or **Skip this version**; installation waits for active tasks. Before replacing the core, the new core composes every existing profile and its plugins; an incompatible update leaves the installed version unchanged. A new version commits only after its workspace becomes ready, and a startup failure or timeout restores the previous program automatically while keeping sessions, settings, plugins, and workspace.
 - Settings → Updates offers separate Portable and official core version selection. Portable history starts with qualified 0.6.5-rc.1 artifacts; older releases are not imported automatically, and known defective versions are excluded.
 
 The core list contains qualified versions compatible with the installed shell. Packages declaring `requiredShellContract` match by interface version, while Node, runtime layout and updater requirements are still checked. Older packages without that field require the exact Portable version and shell fingerprint. See the [shell contract](shell-contract.md).
 
-From **0.9.5**, **Update Portable/core from file** is available in the Windows Native Help menu. Newer Settings → Updates pages also offer this action; the native menu remains available after switching to a core with an older settings page. Choose the original signed manifest and keep its matching `.sig` and ZIP in the same directory. Failed verification never downloads a replacement. Older hosts need a shell upgrade before this entry becomes available. See [offline updates](offline-updates.md) for package types and commands.
+For an offline update on Windows, use **Settings → Updates → Get files** on a connected computer. Copy the generated subfolder, including the JSON, its signature, and the ZIP. In the matching Portable or core section on the target computer, choose **Update from file** and select the JSON. The native **Help** menu also offers the file picker. See the [offline guide](offline-updates.md#download-files-english) for manual downloads and accepted filenames.
 
-- **Settings → Portable** provides checks, repair, and a redacted support report. Startup traces and desktop/backend health samples are grouped by launch in `data/logs/history/`. Retention defaults to the latest 30 runs within 14 days, capped at 32 MiB; each log rotates at 128 KiB. Support reports include redacted launch history and explicitly mark truncation when the export budget is reached; retained local history remains available for further investigation. Attach that report for slow or failed launches instead of sending raw logs that may contain login tokens. Repair keeps user data and rebuilds only reproducible components.
+- **Settings → Desktop & data → Check and repair** provides checks, repair, and a redacted support report. Startup traces and desktop/backend health samples are grouped by launch in `data/logs/history/`. Retention defaults to the latest 30 runs within 14 days, capped at 32 MiB; each log rotates at 128 KiB. Support reports include redacted launch history and explicitly mark truncation when the export budget is reached; retained local history remains available for further investigation. Attach that report for slow or failed launches instead of sending raw logs that may contain login tokens. Repair keeps user data and rebuilds only reproducible components.
 
 Official DSH versions are discovered from the official npm registry every hour. A candidate must record immutable package integrity and verifiable official source provenance, then pass finished-product qualification for a target before it can be offered there. Targets are Windows x64, macOS arm64, macOS x64, Linux x64, and Linux arm64. The qualification window keeps the latest five candidates with at least two non-Alpha versions and processes the latest missing version first. A failed version never replaces the accepted catalog. A compatible official release can enter the independent core channel without a new DSH-Portable release; publication never directly replaces the working environment, and the two release lines can use different versions and dates.
 
@@ -279,7 +273,7 @@ Start with `README.txt` at the root. Bilingual guides and migration commands liv
 
 ## Portable data
 
-Normal updates preserve `data` and `workspace` in place. To move data into a clean Portable environment, choose **Export migration package** or **Export encrypted private package** under **Settings → Portable → Data and migration**. Both contain the same sessions, settings, plugin configuration, and API credentials; only the private package requires a password to read. Keep an unencrypted package only on a trusted device; it is still an integrity-checked compressed container rather than a text file. Runtimes, caches, logs, and workspace files are deliberately excluded. Import attempts to rebuild plugin dependencies and validate each profile. If plugins cannot be restored offline or fail compatibility checks, Portable rolls back that attempt, then imports usable sessions and settings; plugin files and their credentials remain in the original package. Other import errors still roll back instead of reporting success.
+Normal updates preserve `data` and `workspace` in place. To move data into a clean Portable environment, open **Settings → Desktop & data → Migration and backup → Export data**, then choose a plain or password-encrypted package. Both contain the same sessions, settings, plugin configuration, and API credentials; only the private package requires a password to read. Keep an unencrypted package only on a trusted device; it is still an integrity-checked compressed container rather than a text file. Runtimes, caches, logs, and workspace files are deliberately excluded. Import attempts to rebuild plugin dependencies and validate each profile. If plugins cannot be restored offline or fail compatibility checks, Portable rolls back that attempt, then imports usable sessions and settings; plugin files and their credentials remain in the original package. Other import errors still roll back instead of reporting success.
 
 `docs/DATA-MIGRATION.en.txt` in every finished package documents the English inspect and restore commands; `docs/DATA-MIGRATION.zh-CN.txt` provides a separate Chinese guide. Restore imports only missing data by default; explicit replacement first creates a rollback copy under `data/backups/`.
 
@@ -349,4 +343,4 @@ If the Windows desktop cannot open, run `DSH-Recovery.exe` from the package root
 
 Choose "Sessions and settings only" under migration contents to exclude plugin installation configuration and credential files. Conversations remain private data. Exit Portable before moving the complete folder; copying isolated session files can omit grouping, related storage, and path metadata. Prefer a migration package for selective transfers.
 
-Deleting a plugin ZIP/TGZ does not uninstall it. Use the plugin market or `dsh plugin --profile web remove <package>` to remove dependencies and activation configuration. Deleting a locally referenced archive can prevent reinstallation.
+Deleting a plugin ZIP/TGZ does not uninstall it. Use **Plugins → Installed** or `dsh plugin --profile web remove <package>` to remove dependencies and activation configuration. Deleting a locally referenced archive can prevent reinstallation.

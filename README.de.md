@@ -23,11 +23,11 @@ Laden Sie das Paket für Ihr System aus der neuesten Veröffentlichung herunter,
 
 ## Sprache
 
-Im noch unveröffentlichten main folgen Menüs, Infobereich, Updates und Wartung der Spracheinstellung von DSH. Zusätzliche Sprachen benötigen einen passenden offiziellen Kern wie DSH 0.2.2-rc.1. Englisch ist die Ausweichsprache. Plugins liefern ihre eigenen Übersetzungen. Bereits veröffentlichte Pakete bleiben unverändert.
+Menüs, Infobereich, Updates und Wartung folgen der Spracheinstellung von DSH. Die verfügbaren Sprachen hängen von der Kernversion ab. Englisch dient als Ausweichsprache.
 
 ## Updates und Wiederherstellung
 
-Der Kern kann getrennt aktualisiert werden. Ein vollständiges Portable-Update kann zum mitgelieferten Kern wechseln. Offline-Updates, Sicherung, Reparatur und Rückkehr zu früheren Versionen beschreibt die englische Anleitung.
+In 0.x lassen sich Portable und der Kern unter **Einstellungen → Updates** getrennt aktualisieren. Kopieren Sie für ein Offline-Update unter Windows den erhaltenen Ordner und wählen Sie seine JSON-Datei. [Anleitung auf Englisch](README.md#update-an-existing-installation)
 
 ## Umfang
 

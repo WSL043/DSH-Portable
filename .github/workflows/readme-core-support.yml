@@ -3,6 +3,10 @@ on:
   schedule:
     - cron: '53 * * * *'
   workflow_dispatch:
+  workflow_run:
+    workflows: [Publish tested release]
+    branches: [main]
+    types: [completed]
   repository_dispatch:
     types: [core-catalog-published]
 permissions:
@@ -12,6 +16,7 @@ concurrency:
   cancel-in-progress: false
 jobs:
   sync:
+    if: github.event_name != 'workflow_run' || github.event.workflow_run.conclusion == 'success'
     runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:

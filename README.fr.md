@@ -23,11 +23,11 @@ Téléchargez le paquet de votre système depuis la dernière version, extrayez-
 
 ## Langue
 
-Dans main, non encore publié, les menus, la zone de notification, les mises à jour et la maintenance suivent la langue de DSH officiel. Les langues supplémentaires nécessitent un noyau compatible, tel que DSH 0.2.2-rc.1. La langue de secours est l’anglais. Chaque extension fournit ses traductions. Les paquets déjà publiés restent inchangés.
+Les menus, la zone de notification, les mises à jour et la maintenance suivent la langue de DSH. Les langues disponibles dépendent de la version du noyau. L’anglais sert de langue de secours.
 
 ## Mise à jour et récupération
 
-Le noyau peut être mis à jour séparément. Une mise à jour complète de Portable peut basculer vers le noyau fourni. Consultez le guide anglais pour les mises à jour hors ligne, sauvegardes, réparations et retours en arrière.
+Dans la version 0.x, mettez à jour Portable et le noyau séparément dans **Paramètres → Mises à jour**. Pour une mise à jour hors ligne sous Windows, copiez le dossier obtenu et sélectionnez le JSON qu’il contient. [Guide en anglais](README.md#update-an-existing-installation)
 
 ## Périmètre
 

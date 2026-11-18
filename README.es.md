@@ -23,11 +23,11 @@ Descarga el paquete de tu sistema desde la última versión, extráelo por compl
 
 ## Idioma
 
-En main, aún no publicado, los menús, la bandeja, las actualizaciones y el mantenimiento siguen el idioma de DSH oficial. Los idiomas adicionales requieren un núcleo compatible, como DSH 0.2.2-rc.1. El idioma de respaldo es inglés. Cada complemento ofrece sus propias traducciones. Los paquetes ya publicados no cambian.
+Los menús, la bandeja, las actualizaciones y el mantenimiento siguen el idioma de DSH. Los idiomas disponibles dependen de la versión del núcleo. El idioma de respaldo es inglés.
 
 ## Actualización y recuperación
 
-El núcleo puede actualizarse por separado. Una actualización completa de Portable puede cambiar al núcleo incluido. Consulta la guía en inglés para actualizar sin conexión, hacer copias de seguridad, reparar y volver a una versión anterior.
+En 0.x, actualiza Portable y el núcleo por separado en **Ajustes → Actualizaciones**. Para actualizar Windows sin conexión, copia la carpeta obtenida y selecciona el JSON que contiene. [Guía en inglés](README.md#update-an-existing-installation)
 
 ## Alcance
 

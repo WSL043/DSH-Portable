@@ -6,14 +6,13 @@
 
 1. **补丁锚点**：`scripts/intake-upstream-core.mjs` 的接口与补丁检查会用真实官方包验证 `scripts/patch-native-settings-command.mjs` 的锚点。失败说明官方改了页面代码（例如 0.2.1-alpha.2 把卡片标签数组改成逐行排版），修补丁并补测试，用官方新旧两版真实文件各验证一次。
 2. **旧会话兼容性**：自动内核资格使用真实旧格式 writer、官方续接、重开及中断恢复探针。已知的官方 descriptor-v2 限制单独记录为 `upstream-limitation`，不修改官方内核；出现其他失败时停止资格流程。锁定内核仍通过 `config/historical-descriptor-versions.json` 记录已验证的旧格式兼容范围。正式自动发现与资格由 `upstream-watch.yml` 和更新仓库的 `sync-core.yml` 负责。
-3. **插件声明**：默认插件的 peer 范围必须列出该内核。图片查看器和会话管理的定时任务会在官方 Release 发布后自动发新版；想提前可手动运行它们的 `upstream-compatibility.yml`。
+3. **插件入口**：日常管理交由官方 DSH。确认新内核能打开「已安装 / 发现」，并能保留原有插件配置。当前版本没有默认安装社区插件。
 
-## 2. 采纳插件并发版
+## 2. 准备并发布 Portable
 
-先冻结本次交付的插件、版本和双语说明：
+同步版本号并准备双语更新说明。
 
 ```bash
-node scripts/adopt-default-plugins.mjs --write      # 仅在决定采纳已发布且兼容的默认插件时运行
 node scripts/set-product-version.mjs x.y.z           # 同步所有版本号
 # 编写 release-notes/vx.y.z.json（中英文及致谢），本地 npm test 通过后推送 main
 ```
@@ -67,6 +66,7 @@ FINAL_ACCEPTANCE_FILE=/path/to/final-acceptance.json scripts/ship-stable.sh x.y.
 2. 触发“Publish tested release”，但 `publish_feed=false`：版本专属 Release 和下载包已发布。应用内更新源和 GitHub Latest 仍指向上一版，避免默认下载的启动器读取到旧版清单。
 3. 检查**最新五个内核、至少两个 RC 或正式版**的窗口。脚本回读五个平台的签名目录；每个平台均已有同一 `requiredShellContract` 和 Node 版本的内核时可沿用验收。只绑定版本的内核需有本次完整发布提交的成功记录，且已出现在对应目录。其余触发更新仓库的“Sync verified DSH core”并等待自动队列。窗口内曾被 `blocked` 且从未在任何外壳验收成功的内核记为 `excused`。其他 `failed`/`blocked` 会退出，目录缺项仍为 `pending`。
 4. 全部通过后再用 `publish_feed=true` 发布稳定更新源与兼容镜像，最后将新 Release 标记为 GitHub Latest。
+5. 发布成功后，`Sync README core support` 从 GitHub Latest 及五个平台的更新目录同步中英文 README 的可选内核表。更新入口或操作有变化时，随实现同步修改 README 和用户指南。
 
 Windows 首次从 0.9.10 或更早版本升级且需要保留已选内核时，应使用新发行页的 Windows 便携启动器。验收此路径时，让新版启动器更新隔离的旧版文件夹，核对外壳版本、同版本内核、实际启动和会话保留。旧版内置更新器仍按其原有流程运行。
 

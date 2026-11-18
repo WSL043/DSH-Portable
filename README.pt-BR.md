@@ -23,11 +23,11 @@ Baixe o pacote do seu sistema na versão mais recente, extraia tudo e inicie o a
 
 ## Idioma
 
-No main ainda não publicado, menus, bandeja, atualizações e manutenção seguem o idioma do DSH oficial. Idiomas adicionais exigem um núcleo compatível, como DSH 0.2.2-rc.1. O idioma de fallback é inglês. Cada plugin fornece suas próprias traduções. Pacotes já publicados permanecem inalterados.
+Menus, bandeja, atualizações e manutenção seguem o idioma do DSH. Os idiomas disponíveis dependem da versão do núcleo. O inglês é o idioma de reserva.
 
 ## Atualização e recuperação
 
-O núcleo pode ser atualizado separadamente. Uma atualização completa do Portable pode usar o núcleo incluído no pacote. Consulte o guia em inglês para atualizações offline, backups, reparos e reversão.
+Na versão 0.x, atualize o Portable e o núcleo separadamente em **Configurações → Atualizações**. Para atualizar o Windows offline, copie a pasta obtida e selecione o arquivo JSON dentro dela. [Guia em inglês](README.md#update-an-existing-installation)
 
 ## Escopo
 

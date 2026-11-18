@@ -15,6 +15,7 @@
   <a href="https://wsl043.github.io/DSH-Portable/"><strong>官网</strong></a>
   · <a href="#下载"><strong>下载</strong></a>
   · <a href="#三步启动">开始使用</a>
+  · <a href="#更新已有安装">更新</a>
   · <a href="docs/user-guide.zh-CN.md">用户指南</a>
   · <a href="#插件">插件</a>
   · <a href="#获取帮助">帮助</a>
@@ -78,8 +79,6 @@ DSH-Portable 由社区独立维护。今后人工维护和发版可能减少，�
 
 AppImage 与完整目录的启动和数据位置见[Linux 使用说明](docs/user-guide.zh-CN.md#linux)。
 
-已有 0.x 便携目录的文件更新见[离线更新指南](docs/offline-updates.md)。
-
 ### 1.x 候选版
 
 | Windows x64 下载 | 适用情况 |
@@ -102,6 +101,12 @@ AppImage 与完整目录的启动和数据位置见[Linux 使用说明](docs/use
 macOS、Linux 解压后直接运行，首次打开的注意事项见[用户指南](docs/user-guide.zh-CN.md#macos)。
 
 关闭按钮默认将应用收进托盘，任务会继续。完全退出请用 **文件 → 退出 DeepSeek Harness**；Windows 可按 Ctrl+Q，托盘菜单提供备用退出。
+
+## 更新已有安装
+
+- **0.x 在线更新**：打开 **设置 → 更新**，在 **DSH-Portable** 或 **DeepSeek Harness** 区域点击 **检查更新**。两个区域各自检查和安装，更新 Portable 会保留当前选用的内核。
+- **0.x Windows 离线更新**：在联网电脑为目标版本点击 **获取文件**。将包含 JSON、配套 `.sig` 和 ZIP 的新建子文件夹整个复制到目标电脑。在对应的更新区域点击 **从文件更新**，选中子文件夹里的 JSON。若无法使用 **获取文件**，按[离线更新指南](docs/offline-updates.md#文件从哪里下载)手动下载。
+- **1.x**：桌面端提示有更新时，选择 **安装并重启**。启动时按住 **Shift** 可打开离线更新和恢复工具，详见 [1.x 指南](docs/pure-portable-operations.md)。
 
 ## 它怎么做便携
 
@@ -138,7 +143,7 @@ https://cdn.jsdelivr.net/gh/WSL043/DSH-Portable-Updates@market-index/awesome-ind
 **可选内核（最多 5 个已验证版本）** · 设置 → 更新 · 正式版 0.6.5 起支持（首发 0.6.5-rc.1）。
 
 <details>
-<summary>查看 Portable 0.9.13 的可选内核</summary>
+<summary>查看 Portable 0.9.14 的可选内核</summary>
 
 | 平台 | 可选内核 |
 | --- | --- |

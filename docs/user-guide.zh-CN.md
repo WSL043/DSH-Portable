@@ -9,13 +9,13 @@
 - [更新与修复](#更新与修复)
 - [便携数据与迁移](#便携数据)
 - [DSH 终端与插件管理命令](#dsh-终端与插件管理)
-- [插件市场与安装](#插件)
+- [插件发现与安装](#插件)
 - [DSH-Recovery.exe](#dsh-recoveryexe)
 - [Linux AppImage 与完整目录](#linux)
 - [macOS 首次打开](#macos)
 - [离线部署](#离线部署)
 <p align="center">
-  <img src="assets/DSH-Portable.svg" width="82" alt="DeepSeek Harness">
+  <img src="../assets/DSH-Portable.svg" width="82" alt="DeepSeek Harness">
 </p>
 
 <h1 align="center">DSH-Portable</h1>
@@ -29,7 +29,7 @@
   <a href="https://wsl043.github.io/DSH-Portable/"><strong>官网</strong></a>
   · <a href="https://github.com/WSL043/DSH-Portable/releases/latest"><strong>下载</strong></a>
   · <a href="#三步启动">开始使用</a>
-  · <a href="docs/move-between-computers.md">迁移</a>
+  · <a href="move-between-computers.md">迁移</a>
   · <a href="#插件">插件</a>
   · <a href="#获取帮助">帮助</a>
   · <strong>简体中文</strong> · <a href="README.en.md">English</a>
@@ -48,7 +48,7 @@
 </p>
 
 <p align="center">
-  <img src="assets/portable-hero-zh.png" width="1040" alt="DSH-Portable：以真实 DSH 暗色主界面为参考的便携工作环境主视觉">
+  <img src="../assets/portable-hero-zh.png" width="1040" alt="DSH-Portable：以真实 DSH 暗色主界面为参考的便携工作环境主视觉">
 </p>
 
 > [!NOTE]
@@ -73,9 +73,9 @@
 <details>
 <summary>查看历史实机界面（界面以当前版本为准）</summary>
 
-![DSH-Portable 0.6.4 工作台实测截图](assets/dsh-workspace-0.6.4.png)
+![DSH-Portable 0.6.4 工作台实测截图](../assets/dsh-workspace-0.6.4.png)
 
-![0.6.5-rc.1 更新设置实机截图](assets/portable-updates.png)
+![0.6.5-rc.1 更新设置实机截图](../assets/portable-updates.png)
 
 Portable 与内核分别选择；可用版本以应用内兼容检查为准。当前入口为设置 → 更新。
 
@@ -88,7 +88,7 @@ Portable 与内核分别选择；可用版本以应用内兼容检查为准。�
 | 你想做什么 | 在 Portable 中怎么做 |
 | --- | --- |
 | **直接开始工作** | 自带 Node.js 和插件工具，通过桌面入口启动，无需先安装开发环境。 |
-| **点几下装插件** | 内置插件市场，在设置里搜索、安装和管理插件，常规安装不用输入命令。 |
+| **点几下装插件** | 通过官方 DSH 插件页面发现、安装和管理插件。 |
 | **把环境带走** | 完全退出后，复制文件夹到相同操作系统和 CPU 架构的电脑；外部项目需另外搬迁。 |
 | **长期保留自己的配置** | 产品更新保留会话、设置、插件和工作区；官方内核与 Portable 分开提供更新。 |
 | **像桌面应用一样使用** | 独立窗口、托盘、快捷键、全屏、任务通知和窗口位置恢复。 |
@@ -96,7 +96,7 @@ Portable 与内核分别选择；可用版本以应用内兼容检查为准。�
 
 如果你已经习惯自行部署官方 DSH、管理运行环境并在终端启动，也可以继续使用上游。Portable 的价值是把安装、桌面操作、移动和维护集中起来；模型能力仍来自你连接的服务。标准 ZIP 可免去首次下载程序组件，但在线模型和新插件下载仍需网络。
 
-离线部署需提前准备本地模型服务与模型权重。Windows 标准 ZIP 需要系统 WebView2；0.6.5 起另提供[完整离线 ZIP](https://github.com/WSL043/DSH-Portable/releases/latest/download/DSH-Portable-windows-x64-complete-offline.zip)，内含 WebView2 和默认插件依赖，不含模型。验收范围见[离线部署说明](docs/offline-deployment-acceptance.md)。
+离线部署需提前准备本地模型服务与模型权重。Windows 标准 ZIP 需要系统 WebView2；[完整离线 ZIP](https://github.com/WSL043/DSH-Portable/releases/latest/download/DSH-Portable-windows-x64-complete-offline.zip) 内含 WebView2。验收范围见[离线部署说明](offline-deployment-acceptance.md)。
 
 | 一个文件夹 | 换位置继续 | 更新不动数据 |
 | --- | --- | --- |
@@ -109,7 +109,7 @@ Windows 开启“任务通知”后，后台任务完成或需要回答、批准
 | 从哪里开始 | Portable 为你处理什么 |
 | --- | --- |
 | **联网使用** | 下载轻量启动器，把它放到希望保存的位置后运行；它会在旁边自动准备并校验完整工作目录。 |
-| **离线使用** | 完整 ZIP 自带官方 DSH、运行环境、插件市场和插件管理工具。 |
+| **离线使用** | 完整 ZIP 自带官方 DSH、运行环境和 WebView2。 |
 | **同平台换电脑或 U 盘** | 复制文件夹即可；启动时修正由 Portable 管理的旧路径。 |
 | **只迁移个人数据** | 导出同一份迁移内容，可选择普通包或密码加密的私密包。 |
 | **长期更新** | DSH-Portable 与官方 DSH 内核分开更新，均保留 `data` 和 `workspace`。 |
@@ -139,7 +139,7 @@ DSH-Portable 的桌面壳、便携目录、更新、修复和迁移流程由本�
 
 ## 下载
 
-[1.0 开发路线 · 官方 Electron 成品便携化](experiments/official-payload/README.md)：已有仅 Windows 的 [alpha.5 公开预览](https://github.com/WSL043/DSH-Portable/releases/tag/v1.0.0-alpha.5)，不是 0.x 的升级路径。后续开发代码与该旧包不同，本轮仅维护验收、不发布；当前安全债和限制见[维护记录](docs/one-x-maintenance-2026-10-23.md)。日常使用请选择下面的稳定版。
+[1.0 候选版](https://github.com/WSL043/DSH-Portable/releases/tag/v1.0.0-rc.1) 在独立的便携文件夹中运行官方 Windows x64 桌面版。下方提供 0.x 稳定版下载。
 
 ### Windows
 
@@ -153,7 +153,7 @@ DSH-Portable 的桌面壳、便携目录、更新、修复和迁移流程由本�
 
 窗口显示组件叫 WebView2，[Windows 11 预装，大多数 Windows 10 电脑也已有](https://learn.microsoft.com/en-us/microsoft-edge/webview2/concepts/end-user-faq)。标准 ZIP 使用电脑已有的组件；完整离线 ZIP 额外自带一份。
 
-三种入口均不包含模型服务和模型权重。离线使用需提前准备本地模型；标准 ZIP 和完整离线 ZIP 均内含程序运行环境及默认插件依赖。
+三种入口均不包含模型服务和模型权重。离线使用需提前准备本地模型；标准 ZIP 和完整离线 ZIP 均内含程序运行环境。
 
 
 
@@ -184,11 +184,11 @@ AppImage 的会话、设置、插件和工作区保存在旁边的 `DSH-Portable
 
 ## 离线部署
 
-离线部署准备、模型要求与验收边界见[离线部署说明](docs/offline-deployment-acceptance.md)。Windows 完整离线 ZIP 包含 WebView2 与默认插件依赖，但不含模型；使用离线模型服务时还需预先准备模型权重。
+离线部署准备、模型要求与验收边界见[离线部署说明](offline-deployment-acceptance.md)。Windows 完整离线 ZIP 包含 WebView2。使用离线模型服务时需预先准备模型权重。
 
 ## 移动与备份
 
-完整步骤、数据包迁移和无需第二台电脑的验证方法见[跨电脑迁移指南](docs/move-between-computers.md)。
+完整步骤、数据包迁移和无需第二台电脑的验证方法见[跨电脑迁移指南](move-between-computers.md)。
 
 1. 完全退出应用，等窗口和托盘图标消失。Windows 可使用 **文件 → 退出**、`Ctrl+Q` 或托盘的 **退出**。
 2. 在相同平台的新位置复制整个 `DSH-Portable` 文件夹。
@@ -200,17 +200,11 @@ AppImage 的会话、设置、插件和工作区保存在旁边的 `DSH-Portable
 
 ## 插件
 
-支持公开插件扩展接口的新内核由官方页面处理已装插件的常规更新和单项管理。官方插件市场启用时，Portable 只显示「高级管理」；未启用或检测失败时保留「插件市场」和「高级管理」两个标签，发现与确认安装沿用原有流程，不会替用户开启官方可选插件。高级视图保留分组、主题、诊断与显式恢复；分组总开关应用 Portable 分组，成员的「管理」进入官方页面。旧内核保留原入口。
+在官方 DSH 的 **插件 → 已安装 / 发现** 页面管理插件。新版本不再默认安装社区插件。普通升级会保留现有 Profile、已安装插件及启停状态。
 
-打开 **设置 → 插件 → 插件市场**，可以搜索、筛选、查看项目主页，并安装、更新、停用或卸载社区插件。市场跟随 DSH 的中文/英文和明暗外观，不会为了安装插件静默中断正在运行的任务。
+如需添加社区索引，请在 **发现** 中打开索引源菜单，选择 **管理索引源**，粘贴 [README](../README.zh-CN.md#社区索引源) 中的地址。
 
-**常规安装不需要打开终端或输入代码。** 搜索插件，打开详情，再点击安装；需要刷新或重启时按页面提示操作即可。从 Portable 0.7.3 起，市场默认安装正式版；只有 npm 的 Beta 标签指向更新的预发布版本时，才会单独显示安装或试用 Beta 的按钮。已装 Beta 也可明确切回当前正式版，不会被普通更新悄悄降级。插件市场参考上游 [dsh-market](https://github.com/dsh-market/dsh-market)，安装操作交给 DSH 官方插件管理页面。
-
-使用官方 **插件 → 添加插件** 时，输入的是**包名或地址，不是终端命令**。例如安装订阅插件填写 `dsh-codex-subscription`；指定候选版本填写 `dsh-codex-subscription@2.1.3-beta.1`。不要把 `dsh plugin --profile web add` 一起粘贴进去。确认来源后，由页面显示安装结果；只有明确提示需要重启时再重启。
-
-如果 GitHub 源码仓库安装报 `ERR_PNPM_GIT_DEP_PREPARE_NOT_ALLOWED`，说明该源码需要在本机执行构建脚本。请在「添加插件」输入维护者发布的 npm 包名或 Release 提供的 `.tgz` 地址。例如社区市场的 npm 包名是 `dshmarket`。
-
-新版本不再默认安装社区插件。社区插件仍按需从插件市场或通过标准 DSH 命令安装。普通升级会保留现有 Profile、已安装插件及启停状态。
+在 **插件 → 添加插件** 中输入维护者发布的包名或地址。若从 GitHub 源码安装时遇到 `ERR_PNPM_GIT_DEP_PREPARE_NOT_ALLOWED`，请改用维护者发布的 npm 包名或 Release 提供的 `.tgz` 地址。
 
 ### DSH 终端与插件管理命令
 
@@ -227,11 +221,11 @@ dsh --profile web --dump-config
 便携版的 DSH 终端只在当前窗口临时识别 `dsh`，不会修改系统 `PATH`。移动整个 Portable 文件夹后，新开的 DSH 终端会自动使用新位置，不需要修复环境变量。
 
 
-能安全热加载的插件会立即生效，纯界面插件只需刷新；已经载入宿主代码的插件更新会标记为待重启。市场不会在任务运行时更新、卸载或偷偷重启 DSH。只安装你信任的插件。
+能安全热加载的插件会立即生效，纯界面插件只需刷新；已经载入宿主代码的插件更新会标记为待重启。只安装你信任的插件。
 
 ## Windows 桌面操作
 
-![Windows native navigation](assets/windows-navigation-dark.png)
+![Windows native navigation](../assets/windows-navigation-dark.png)
 
 原生导航栏支持亮暗主题、侧栏折叠和前进后退。
 
@@ -254,23 +248,23 @@ dsh --profile web --dump-config
 
 > 下图拍摄于 0.6.5-rc.1。当前版本请从「设置 → 更新」进入。
 
-![独立更新设置页](assets/portable-updates.png)
+![独立更新设置页](../assets/portable-updates.png)
 
 - DSH-Portable 会先打开本地工作台；只有对应的“启动时检查更新”已开启时，才会在后台检查更新。产品更新与官方 DeepSeek Harness 内核更新各自独立，两个启动检查默认关闭；**设置 → 更新** 是主要更新入口：可分别检查 DSH-Portable 和官方 DeepSeek Harness 内核，检查后在页面内经桌面宿主确认即可安装更新；两者的检查和安装操作独立，统一使用稳定资格通道。
 - 更新统一使用 **stable 稳定资格通道**；**candidate** 仅保留为旧客户端的兼容镜像，旧候选偏好也归一到稳定通道。目录中的 Alpha、Beta 或 RC 必须通过相应的成品资格验证，不能仅凭阶段名称判断可用性。各阶段含义见[发布阶段规则](release-policy.md)。
 - Windows 启动检查只在后台查询；发现更新后，在托盘菜单相应项目旁显示“有更新”，不会恢复窗口或弹出更新确认卡片。主动检查后才显示确认界面。托盘菜单保留 Portable 与内核两种手动检查。
-- **main 未发布改进**：检查更新、查看可用版本及保存提醒选择不需要准备内核运行缓存；运行包损坏时仍可查询更新。实际启动、安装和兼容性检查继续验证运行组件。
+- 检查更新、查看可用版本及保存提醒选择不需要准备内核运行缓存；运行包损坏时仍可查询更新。实际启动、安装和兼容性检查继续验证运行组件。
 - 更新提示会明确写出正在更新 DSH-Portable 还是 DeepSeek Harness，并显示对应的当前版本和目标版本。
 - 一般更新只下载变化的 DSH 应用组件，并显示真实下载百分比；会话、设置、凭据和工作区全部保留。
-- 运行环境兼容性变化时，会直接下载经过验证的完整版本并原地更新，仍然保留用户数据。
+- Windows 运行环境兼容性变化时，Portable 会直接下载经过验证的完整版本并原地更新，保留当前选用的内核及用户数据。无法保留当前内核时会停止更新。
 - 可以选择稍后或**跳过此版本**；安装前会确认没有任务运行。替换内核前会先用新内核检查现有 Profile 和插件能否组合启动；不兼容时保持当前版本不变。更新后只有工作台真正就绪才会提交新版本，启动失败或超时会自动恢复更新前的程序，同时保留会话、设置、插件和工作区。
 - 「设置 → 更新」可分别选择 Portable 与官方内核版本。Portable 历史目录从 0.6.5-rc.1 开始保留经过成品验收的版本；更早版本不自动加入，已知问题版本会从可选目录排除。
 
 内核列表只提供通过成品验证且与当前外壳兼容的版本。带有 `requiredShellContract` 的内核按接口号匹配，仍会检查 Node 版本、运行时布局与更新器要求；没有接口号的旧包仍须匹配确切 Portable 版本和外壳指纹。详见[外壳接口版本](shell-contract.md)。
 
-从 **0.9.5** 起支持**从文件更新**：Windows Native 的帮助菜单可分别选择 Portable 或内核的原始签名清单，新版设置 → 更新也提供相同入口。切换到随带旧设置页的内核后，仍可用帮助菜单。同一目录必须放齐清单、同名 `.sig` 和清单对应的 ZIP；验证不通过不会联网补取。旧版窗口未提供此入口时，需要先升级外壳。完整包、组件包与内核包的区别和命令见[离线更新](offline-updates.md)。
+Windows 离线更新时，在联网电脑上打开 **设置 → 更新** 并点击 **获取文件**。把生成的子文件夹整个复制到目标电脑，保留其中的 JSON、签名和 ZIP。在对应的 Portable 或内核区域点击 **从文件更新**，选择该 JSON。原生 **帮助** 菜单也可打开文件选择窗口。手动下载及文件名详见[离线更新指南](offline-updates.md#文件从哪里下载)。
 
-- **设置 → Portable** 提供检查、修复和脱敏支持报告。启动轨迹和桌面／后台健康采样按启动批次保存在 `data/logs/history/`，默认保留 14 天内最近 30 次，总量上限 32 MiB；单类日志按 128 KiB 轮转。支持报告包含多次启动的脱敏历史，导出达到大小限制时会明确标记截断，本地历史仍可供进一步排查。反馈启动慢或启动失败时请优先附上该报告，不要直接发送可能含登录令牌的原始日志。修复保留用户数据，只重建可再生组件。
+- **设置 → 桌面与数据 → 检查与修复** 提供检查、修复和脱敏支持报告。启动轨迹和桌面／后台健康采样按启动批次保存在 `data/logs/history/`，默认保留 14 天内最近 30 次，总量上限 32 MiB；单类日志按 128 KiB 轮转。支持报告包含多次启动的脱敏历史，导出达到大小限制时会明确标记截断，本地历史仍可供进一步排查。反馈启动慢或启动失败时请优先附上该报告，不要直接发送可能含登录令牌的原始日志。修复保留用户数据，只重建可再生组件。
 
 官方 DSH 版本每小时从官方 npm 发现。候选版本须记录不可变的包完整性与可核验的官方源码来源，并在对应目标平台完成成品资格验证后才会提供；目标包括 Windows x64、macOS arm64、macOS x64、Linux x64 和 Linux arm64。资格窗口按最新 5 个候选版本、至少 2 个非 Alpha 版本维护，目录优先处理最新缺失版本。失败版本不会替换已接受的目录。兼容的官方版本可独立进入内核通道，无需发布新的 DSH-Portable 版本；官方发布不会直接替换正在使用的工作环境，两条发布线的版本号和时间可以不同。
 
@@ -282,11 +276,11 @@ dsh --profile web --dump-config
 
 ## 便携数据
 
-正常更新会原地保留 `data` 和 `workspace`。需要迁入新的 Portable 环境时，可在**设置 → Portable → 数据与迁移**选择「导出迁移包」或「导出加密私密包」。两者内容相同，都包含会话、设置、插件配置和 API 凭据；只有后者需要密码才能读取。未加密包只应保存在信任的设备上，它仍是带完整性校验的压缩容器而不是文本文件。运行时、缓存、日志和工作区文件不会被塞进迁移包。导入会尝试恢复插件依赖并验证 Profile；若插件因离线或兼容性问题无法恢复，会先回滚这次尝试，再导入会话、设置等可用数据，插件及其专用凭据留在原数据包中。其他导入错误仍会回滚，不会报告为成功。
+正常更新会原地保留 `data` 和 `workspace`。需要迁入新的 Portable 环境时，可打开 **设置 → 桌面与数据 → 迁移与备份 → 导出数据**，选择普通包或加密包。两者内容相同，都包含会话、设置、插件配置和 API 凭据；只有后者需要密码才能读取。未加密包只应保存在信任的设备上，它仍是带完整性校验的压缩容器而不是文本文件。运行时、缓存、日志和工作区文件不会被塞进迁移包。导入会尝试恢复插件依赖并验证 Profile；若插件因离线或兼容性问题无法恢复，会先回滚这次尝试，再导入会话、设置等可用数据，插件及其专用凭据留在原数据包中。其他导入错误仍会回滚，不会报告为成功。
 
 也可以选择「仅会话与设置」，不携带插件安装配置和凭据文件，适合从存在插件故障的环境迁出个人数据。迁移包仍可能包含私人对话，请妥善保管。完整目录搬家时先退出 Portable；只复制会话文件可能遗漏分组、关联存储和路径信息，优先使用迁移包。
 
-插件 ZIP/TGZ 是安装来源，不是卸载开关。请在插件市场卸载，或使用 `dsh plugin --profile web remove <包名>`；直接删除安装包不会清除依赖与启用配置，并可能使本地来源无法重装。
+插件 ZIP/TGZ 是安装来源，不是卸载开关。请在 **插件 → 已安装** 中卸载，或使用 `dsh plugin --profile web remove <包名>`；直接删除安装包不会清除依赖与启用配置，并可能使本地来源无法重装。
 
 成品 `docs/` 目录的 `DATA-MIGRATION.zh-CN.txt` 提供中文检查和恢复命令；`DATA-MIGRATION.en.txt` 提供独立英文说明。恢复默认只补入缺失数据；明确选择覆盖时，先在 `data/backups/` 生成回滚副本。
 
