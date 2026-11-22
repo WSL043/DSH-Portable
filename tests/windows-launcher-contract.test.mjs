@@ -185,7 +185,7 @@ test('the loading surface says why a long step takes long, and stops once the wo
 test('the startup theme smoke attaches its colour probe before any slow step', async () => {
   const smoke = await readFile(path.join(projectRoot, 'scripts', 'smoke-windows-startup-theme.mjs'), 'utf8')
   const probe = smoke.indexOf("Page.addScriptToEvaluateOnNewDocument")
-  const capture = smoke.indexOf("capture-windows-native-window.ps1")
+  const capture = smoke.indexOf("const captureError = await nativeCapture")
   assert.ok(probe > 0 && capture > 0, 'both steps exist')
   // A faster start makes the workspace navigate sooner; a probe registered after the multi-second window capture misses the page.
   assert.ok(probe < capture, 'the probe is registered before the native-window capture')

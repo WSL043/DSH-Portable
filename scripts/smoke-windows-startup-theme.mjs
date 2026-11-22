@@ -33,6 +33,12 @@ for (const theme of ['dark', 'light', 'dark', 'system']) {
       DSH_PORTABLE_TEST_WEBVIEW2_ARGUMENTS: `--remote-debugging-port=${port}` },
   })
   try {
+    // Start the hidden HWND capture helper while the runtime initializes.
+    // Preparing PowerShell after CDP connects can outlast the loader hold.
+    const nativeCapture = exec('powershell.exe', ['-NoProfile', '-ExecutionPolicy', 'Bypass', '-File',
+      path.join(import.meta.dirname, 'capture-windows-native-window.ps1'), '-TargetProcessId', String(child.pid),
+      '-OutputDirectory', path.join(root, 'acceptance', `native-${results.length}-${theme}`), '-WindowTimeoutSeconds', '180'],
+      { windowsHide: true, timeout: 200000 }).then(() => null, error => error)
     let page
     // An isolated native UI job starts with an empty runtime cache. On the
     // slower Windows 2022 runner, verified capsule extraction can exceed 90s.
@@ -70,10 +76,8 @@ for (const theme of ['dark', 'light', 'dark', 'system']) {
     assert.ok(!String(await evaluate('location.href')).startsWith('http://127.0.0.1'), 'the colour probe must be attached before the workspace navigates')
     await send('Page.enable')
     await send('Page.addScriptToEvaluateOnNewDocument', { source: `window.__startupColors=[];const sample=()=>{if(document.body){const color=getComputedStyle(document.body).backgroundColor;if(!window.__startupColors.includes(color))window.__startupColors.push(color)}};document.addEventListener('DOMContentLoaded',sample);const timer=setInterval(sample,16);setTimeout(()=>clearInterval(timer),15000)` })
-    await exec('powershell.exe', ['-NoProfile', '-ExecutionPolicy', 'Bypass', '-File',
-      path.join(import.meta.dirname, 'capture-windows-native-window.ps1'), '-TargetProcessId', String(child.pid),
-      '-OutputDirectory', path.join(root, 'acceptance', `native-${results.length}-${theme}`)],
-      { windowsHide: true, timeout: 20000 })
+    const captureError = await nativeCapture
+    if (captureError) throw captureError
     let loading
     let animation
     const loadingDeadline = Date.now() + 10000
