@@ -741,7 +741,7 @@ jobs:
         with:
           name: windows-x64-build
           path: artifacts
-      - name: Upgrade a legacy candidate user to the single release line
+      - name: Upgrade a running published 0.x installation
         shell: powershell
         env:
           GH_TOKEN: ${{ github.token }}
@@ -773,12 +773,14 @@ jobs:
           $Releases = gh release list --repo "$env:GITHUB_REPOSITORY" --exclude-drafts `
             --limit 100 --json tagName,isPrerelease,publishedAt | ConvertFrom-Json
           # Only the 0.x line upgrades in place; the 1.0 pure-portable alpha is a separate, side-by-side package.
-          $Eligible = $Releases | Where-Object {
-            $_.isPrerelease -and $_.tagName -match '^v0\.\d+\.\d+-(alpha|beta|rc)\.\d+$'
-          } | Sort-Object publishedAt -Descending
-          if (-not $Eligible -and $TargetChannel -eq 'stable') {
-            $Eligible = $Releases | Where-Object {
+          $Eligible = if ($TargetChannel -eq 'stable') {
+            $Releases | Where-Object {
               -not $_.isPrerelease -and $_.tagName -match '^v0\.\d+\.\d+$' -and $_.tagName -ne "v$CandidateVersion"
+            } | Sort-Object publishedAt -Descending
+          }
+          if (-not $Eligible) {
+            $Eligible = $Releases | Where-Object {
+              $_.isPrerelease -and $_.tagName -match '^v0\.\d+\.\d+-(alpha|beta|rc)\.\d+$' -and $_.tagName -ne "v$CandidateVersion"
             } | Sort-Object publishedAt -Descending
           }
           $Prior = $Eligible | Select-Object -First 1
