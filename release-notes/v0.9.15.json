@@ -1,0 +1,25 @@
+{
+  "version": "0.9.15",
+  "zh": {
+    "summary": "更新 Native 便携版随附的 Node.js 运行环境。",
+    "highlights": [
+      "Windows、macOS 和 Linux 便携包随附 Node.js 24.22.3。",
+      "官方插件管理可用时，使用上游提供的设置入口。"
+    ],
+    "upgradeNotes": [
+      "Node.js 随 Portable 程序包更新。使用内核更新功能时，应用会按已安装的运行环境筛选可用内核。"
+    ],
+    "acknowledgements": []
+  },
+  "en": {
+    "summary": "Updates the Node.js runtime included with Native Portable.",
+    "highlights": [
+      "Windows, macOS, and Linux packages include Node.js 24.22.3.",
+      "Plugin settings use the official plugin manager when the installed core provides it."
+    ],
+    "upgradeNotes": [
+      "The Portable package updates Node.js. The core updater filters offered cores against the installed runtime."
+    ],
+    "acknowledgements": []
+  }
+}
