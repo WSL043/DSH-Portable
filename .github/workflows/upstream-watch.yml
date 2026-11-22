@@ -47,7 +47,7 @@ jobs:
       - uses: actions/checkout@v7
       - uses: actions/setup-node@v7
         with:
-          node-version: 24.22.1
+          node-version: 24.22.3
       - name: Collect official desktop source and release evidence
         env:
           GITHUB_TOKEN: ${{ github.token }}
@@ -65,7 +65,7 @@ jobs:
       - uses: actions/checkout@v7
       - uses: actions/setup-node@v7
         with:
-          node-version: 24.22.1
+          node-version: 24.22.3
       - name: Record the intake signal
         env:
           SOURCE: ${{ github.event.client_payload.source || inputs.source || github.event_name }}
@@ -114,7 +114,7 @@ jobs:
           PR=$(gh pr list --state open --head "$BRANCH" --json number --jq '.[0].number // empty')
           if [ -n "$PR" ]; then
             git fetch --no-tags origin "$BRANCH:refs/remotes/origin/$BRANCH"
-            if git diff --quiet "origin/$BRANCH" -- app/package.json app/package-lock.json app/vendor/dsh-portable-plugin-market/package.json upstream.lock.json launcher/default-plugins.mjs scripts/default-plugin-store/pnpm-lock.yaml; then
+            if git diff --quiet "origin/$BRANCH" -- app/package.json app/package-lock.json app/vendor/dsh-portable-plugin-market/package.json app/vendor/dsh-portable-plugin-market/pnpm-lock.yaml upstream.lock.json launcher/default-plugins.mjs scripts/default-plugin-store/pnpm-lock.yaml; then
               echo 'changed=false' >> "$GITHUB_OUTPUT"
               echo 'An identical dependency proposal is awaiting manual review; no new commit or product qualification was requested.' >> "$GITHUB_STEP_SUMMARY"
               exit 0
@@ -185,7 +185,7 @@ jobs:
           git config user.name github-actions[bot]
           git config user.email 41898282+github-actions[bot]@users.noreply.github.com
           git checkout -B "$BRANCH"
-          git add app/package.json app/package-lock.json app/vendor/dsh-portable-plugin-market/package.json upstream.lock.json launcher/default-plugins.mjs scripts/default-plugin-store/pnpm-lock.yaml
+          git add app/package.json app/package-lock.json app/vendor/dsh-portable-plugin-market/package.json app/vendor/dsh-portable-plugin-market/pnpm-lock.yaml upstream.lock.json launcher/default-plugins.mjs scripts/default-plugin-store/pnpm-lock.yaml
           git commit -m "chore: verify current DSH dependencies"
           git push --force origin "$BRANCH"
           BODY=$(mktemp)

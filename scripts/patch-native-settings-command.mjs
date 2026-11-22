@@ -263,21 +263,25 @@ export function patchPluginManagerActions(source) {
 async function main() {
   if (!process.argv[2]) throw new Error('usage: node patch-native-settings-command.mjs <app-root>')
   process.chdir(process.argv[2])
-  const targets = [
-    ['dsh-client-ui-settings-general', source => patchPortableUpdatesIcon(patchNativeSettingsCommand(source))],
-    ['dsh-client-ui-settings-plugins', patchPluginSettingsNavigation],
-    ['dsh-client-ui-plugin-manager', patchPluginManagerActions, true],
-  ]
-  for (const [name, patch, optional] of targets) {
-    const file = await safeDataTarget(process.cwd(), `node_modules/@deepseek-ai/${name}/lib/client.js`, { createParents: false })
-    if (!file) {
-      if (optional) continue
-      throw new Error(`Staged official client is missing: ${name}`)
-    }
-    const source = await readFile(file, 'utf8')
+  const resolveClient = name => safeDataTarget(process.cwd(), `node_modules/@deepseek-ai/${name}/lib/client.js`, { createParents: false })
+  const general = await resolveClient('dsh-client-ui-settings-general')
+  const legacy = await resolveClient('dsh-client-ui-settings-plugins')
+  const manager = await resolveClient('dsh-client-ui-plugin-manager')
+  if (!general) throw new Error('Staged official client is missing: dsh-client-ui-settings-general')
+  const managerSource = manager ? await readFile(manager, 'utf8') : ''
+  // Newer hosts route plugin settings through the official manager. An absent
+  // legacy client is only expected when the replacement exposes its public actions.
+  if (!legacy && !hasOfficialPluginManagement(managerSource)) {
+    throw new Error('Plugin settings seam changed upstream: neither the legacy page nor the official manager is available')
+  }
+  const patchFile = async (file, patch, source = null) => {
+    source ??= await readFile(file, 'utf8')
     const patched = patch(source)
     if (patched !== source) await writeFile(file, patched, 'utf8')
   }
+  await patchFile(general, source => patchPortableUpdatesIcon(patchNativeSettingsCommand(source)))
+  if (legacy) await patchFile(legacy, patchPluginSettingsNavigation)
+  if (manager) await patchFile(manager, patchPluginManagerActions, managerSource)
 }
 
 if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url)) await main()

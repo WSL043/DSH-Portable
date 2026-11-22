@@ -1,7 +1,8 @@
 import { spawnSync } from 'node:child_process'
 import { createHash } from 'node:crypto'
 import { existsSync } from 'node:fs'
-import { appendFile, readFile, rename, writeFile } from 'node:fs/promises'
+import { appendFile, mkdir, mkdtemp, readFile, rename, rm, writeFile } from 'node:fs/promises'
+import os from 'node:os'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { evaluateUpstream } from './upstream-state.mjs'
@@ -101,25 +102,28 @@ if (changed) {
   if (!verifiedRanges.includes(verifiedTrain)) {
     marketManifest.peerDependencies ??= {}
     marketManifest.peerDependencies['@deepseek-ai/dsh-settings'] = [...verifiedRanges, verifiedTrain].join(' || ')
-    await writeFile(marketManifestPath, `${JSON.stringify(marketManifest, null, 2)}\n`, 'utf8')
   }
-  // Keep the standalone frozen build in sync without refreshing its dependency graph.
   const marketLockPath = path.join(path.dirname(marketManifestPath), 'pnpm-lock.yaml')
   const marketLock = await readFile(marketLockPath, 'utf8')
   const settingsEntry = /^(      '@deepseek-ai\/dsh-settings':\r?\n        specifier: )[^\r\n]+$/gm
   if ([...marketLock.matchAll(settingsEntry)].length !== 1) {
     throw new Error('Expected one vendored market settings peer in the lockfile root importer')
   }
-  await writeFile(marketLockPath, marketLock.replace(settingsEntry,
-    (_, prefix) => prefix + marketManifest.peerDependencies['@deepseek-ai/dsh-settings']), 'utf8')
+  const updatedMarketLock = marketLock.replace(settingsEntry,
+    (_, prefix) => prefix + marketManifest.peerDependencies['@deepseek-ai/dsh-settings'])
 
-  const installArgs = [
-    'install', '--package-lock-only', '--ignore-scripts', '--no-audit', '--no-fund', '--save-exact',
-    `@deepseek-ai/dsh@${version}`, `@deepseek-ai/dsh-settings@${version}`,
-    // dsh-settings peers dsh-brand and dsh-session at its own version; naming them keeps an incremental lock refresh
-    // from tripping over the previous release's peer entries (0.2.1-rc.1 did).
-    `@deepseek-ai/dsh-brand@${version}`, `@deepseek-ai/dsh-session@${version}`, `pnpm@${currentLock.pnpm.version}`,
-  ]
+  const runtimeManifestPath = path.join(root, 'app', 'package.json')
+  const packageLockPath = path.join(root, 'app', 'package-lock.json')
+  const runtimeManifest = JSON.parse(await readFile(runtimeManifestPath, 'utf8'))
+  // Official runtime packages share a release train. Resolve the new train
+  // together without constraints from the previous train's transitive lock.
+  for (const name of Object.keys(runtimeManifest.dependencies)) {
+    if (name === '@deepseek-ai/dsh' || name.startsWith('@deepseek-ai/dsh-')) runtimeManifest.dependencies[name] = version
+  }
+  runtimeManifest.version = version
+  runtimeManifest.dependencies.pnpm = currentLock.pnpm.version
+  const installArgs = ['install', '--package-lock-only', '--ignore-scripts', '--no-audit', '--no-fund']
+
   const npmCliCandidates = [
     process.env.npm_execpath,
     path.join(path.dirname(process.execPath), 'node_modules', 'npm', 'bin', 'npm-cli.js'),
@@ -131,20 +135,33 @@ if (changed) {
   }
   const command = process.platform === 'win32' ? process.execPath : 'npm'
   const args = process.platform === 'win32' ? [npmCli, ...installArgs] : installArgs
-  const install = spawnSync(command, args, {
-    cwd: path.join(root, 'app'),
-    encoding: 'utf8',
-    timeout: 30 * 60 * 1000,
-  })
-  if (install.error || install.status !== 0) {
-    const signal = install.signal ? ` signal=${install.signal}` : ''
-    throw new Error(`npm lock refresh failed${signal}:\n${install.error?.message || install.stderr || install.stdout}`)
+  const stagingRoot = await mkdtemp(path.join(os.tmpdir(), 'dsh-upstream-lock-'))
+  let packageLock
+  try {
+    const manifests = [
+      ['app/package.json', runtimeManifest],
+      ['app/vendor/dsh-portable-plugin-market/package.json', marketManifest],
+      ['desktop-bridge/package.json', JSON.parse(await readFile(path.join(root, 'desktop-bridge/package.json'), 'utf8'))],
+    ]
+    for (const [relative, manifest] of manifests) {
+      const file = path.join(stagingRoot, relative)
+      await mkdir(path.dirname(file), { recursive: true })
+      await writeFile(file, JSON.stringify(manifest), 'utf8')
+    }
+    const install = spawnSync(command, args, {
+      cwd: path.join(stagingRoot, 'app'),
+      encoding: 'utf8',
+      timeout: 30 * 60 * 1000,
+      windowsHide: true,
+    })
+    if (install.error || install.status !== 0) {
+      const signal = install.signal ? ` signal=${install.signal}` : ''
+      throw new Error(`npm lock refresh failed${signal}:\n${install.error?.message || install.stderr || install.stdout}`)
+    }
+    packageLock = JSON.parse(await readFile(path.join(stagingRoot, 'app/package-lock.json'), 'utf8'))
+  } finally {
+    await rm(stagingRoot, { recursive: true, force: true })
   }
-
-  const runtimeManifestPath = path.join(root, 'app', 'package.json')
-  const packageLockPath = path.join(root, 'app', 'package-lock.json')
-  const runtimeManifest = JSON.parse(await readFile(runtimeManifestPath, 'utf8'))
-  const packageLock = JSON.parse(await readFile(packageLockPath, 'utf8'))
   const lockedDsh = packageLock.packages?.['node_modules/@deepseek-ai/dsh']
   if (lockedDsh?.version !== version || lockedDsh?.integrity !== state.integrity) {
     throw new Error('refreshed package lock does not match the official npm version and integrity')
@@ -158,15 +175,14 @@ if (changed) {
   if (missingScriptPackages.length > 0) {
     throw new Error(`refreshed package lock is missing required runtime dependencies: ${missingScriptPackages.join(', ')}`)
   }
-  runtimeManifest.version = version
   runtimeManifest.allowScripts = Object.fromEntries(scriptPackages.map((name) => [
     `${name}@${lockedScriptVersions[name]}`,
     true,
   ]))
-  packageLock.version = version
-  packageLock.packages[''].version = version
   await writeFile(runtimeManifestPath, `${JSON.stringify(runtimeManifest, null, 2)}\n`, 'utf8')
   await writeFile(packageLockPath, `${JSON.stringify(packageLock, null, 2)}\n`, 'utf8')
+  await writeFile(marketManifestPath, `${JSON.stringify(marketManifest, null, 2)}\n`, 'utf8')
+  await writeFile(marketLockPath, updatedMarketLock, 'utf8')
   currentLock.dsh.version = version
   currentLock.dsh.tag = `dsh-v${version}`
   currentLock.dsh.integrity = state.integrity
