@@ -113,6 +113,12 @@ export function startSourceCache(portableRoot, runtimeRoot, env = process.env, o
         const range = sources.get(filename)
         const format = context.format ?? range?.format
         if (range !== undefined && ['module', 'commonjs', 'json'].includes(format)) {
+          // The gap between the import start and the first served module is loader work; the span
+          // between the first and last hit is the module-read window. Both land in the
+          // "startup-source-cache-released" trace so a slow start is attributable without guessing.
+          const hitAt = Math.round(performance.now() - started)
+          if (result.hits === 0) result.firstHitMs = hitAt
+          result.lastHitMs = hitAt
           result.hits++
           result.servedBytes += range.end - range.offset
           if (!fromPack) loaded.add(filename)
