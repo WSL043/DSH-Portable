@@ -803,3 +803,17 @@ test('full updater uses the external state root for Native health, stop and outc
     await removeTestRoot(root)
   }
 })
+
+test('core staging follows the system proxy and allows a slow core download to finish', async () => {
+  const bootstrap = await readFile(source, 'utf8')
+  assert.match(bootstrap, /private const int CorePreparationTimeoutMs = 1800000;/)
+  assert.match(bootstrap, /if \(!process\.WaitForExit\(CorePreparationTimeoutMs\)\)/)
+  assert.doesNotMatch(bootstrap, /WaitForExit\(240000\)/)
+  const stage = await readFile(new URL('../launcher/windows/stage-portable-core.mjs', import.meta.url), 'utf8')
+  assert.match(stage, /import \{ installSystemProxy \} from '\.\/launcher\/system-proxy\.mjs'/)
+  assert.match(stage, /try \{ installSystemProxy\(\) \} catch/)
+  assert.ok(
+    stage.indexOf('installSystemProxy()') < stage.indexOf('listEngineVersions({ layout })'),
+    'the proxy must be installed before the first catalog fetch',
+  )
+})

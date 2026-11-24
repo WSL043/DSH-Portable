@@ -7,8 +7,13 @@ import {
   copyVerifiedLocalComponent, installAvailableAppUpdate, listEngineVersions,
   prepareOfflineUpdateFiles, readInstalledUpdateState, readLocalUpdate,
 } from './launcher/update-core.mjs'
+import { installSystemProxy } from './launcher/system-proxy.mjs'
 
 // Embedded in the Windows updater. Node runs this with the verified package as its working directory.
+// This child is started by the updater, not by portable-cli, so it must install the same system proxy
+// portable-cli installs for every other maintenance command; otherwise the core package download
+// goes direct and can stall behind the proxy users already have.
+try { installSystemProxy() } catch { /* a proxy lookup problem must never stop staging */ }
 const root = process.cwd()
 const state = process.env.DSH_PORTABLE_STAGE_STATE
 const version = process.env.DSH_PORTABLE_STAGE_CORE

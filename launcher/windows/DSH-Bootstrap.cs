@@ -717,6 +717,11 @@ namespace DshPortableBootstrap
                 "This Portable package cannot keep the current DSH core. The update was stopped. To switch cores, use Core Updates."));
         }
 
+        // The staging child downloads the current core package (about 140 MB), verifies its signature
+        // and repacks the capsule. A flat four-minute budget aborts that on slow links before the
+        // transactional replace; give it the same half hour the downloader itself allows.
+        private const int CorePreparationTimeoutMs = 1800000;
+
         private static void StageCurrentCore(string extracted, string state, string version, CancellationToken cancellationToken)
         {
             cancellationToken.ThrowIfCancellationRequested();
@@ -745,7 +750,7 @@ namespace DshPortableBootstrap
                     Task<string> error = process.StandardError.ReadToEndAsync();
                     process.StandardInput.Write(script.ReadToEnd());
                     process.StandardInput.Close();
-                    if (!process.WaitForExit(240000))
+                    if (!process.WaitForExit(CorePreparationTimeoutMs))
                     {
                         try { process.Kill(); } catch (InvalidOperationException) { }
                         throw new TimeoutException(BootstrapText.L("当前内核准备超时，未安装更新。", "Current core preparation timed out. The update was not installed."));
