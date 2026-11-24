@@ -30,8 +30,12 @@ function safeRelativePath(value) {
   return normalized
 }
 
-function runtimeCacheParent(env = process.env) {
+export function runtimeCacheParent(env = process.env) {
   if (env.DSH_PORTABLE_RUNTIME_CACHE) return path.resolve(env.DSH_PORTABLE_RUNTIME_CACHE)
+  // One root for every portable cache keeps a portable folder self-contained; the specific
+  // DSH_PORTABLE_RUNTIME_CACHE override still wins.
+  const configuredDataRoot = String(env.DSH_PORTABLE_DATA_ROOT ?? '').trim()
+  if (configuredDataRoot) return path.join(path.resolve(configuredDataRoot), 'runtime-cache')
   const local = env.LOCALAPPDATA || (process.platform === 'win32'
     ? path.join(os.homedir(), 'AppData', 'Local')
     : path.join(os.homedir(), '.cache'))
