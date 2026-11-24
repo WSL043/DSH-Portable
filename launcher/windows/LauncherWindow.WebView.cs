@@ -579,14 +579,26 @@ namespace DshPortable
                     : Path.Combine(installedWebView, "environments", environmentId);
             }
             string portableWebView = Path.Combine(
-                Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
-                "DSH-Portable",
+                ResolvePortableDataRoot(),
                 "webview2",
                 ResolvePortableInstanceId(),
                 ResolvePortableLocationKey());
             return String.Equals(environmentId, "default", StringComparison.Ordinal)
                 ? portableWebView
                 : Path.Combine(portableWebView, "environments", environmentId);
+        }
+
+        // DSH_PORTABLE_DATA_ROOT lets a portable folder keep its WebView2 profile on the same drive
+        // as the rest of its data instead of the Windows LocalAppData tree. Relative values are
+        // rejected so a stray working directory can never decide where the profile is written.
+        private static string ResolvePortableDataRoot()
+        {
+            string configured = Environment.GetEnvironmentVariable("DSH_PORTABLE_DATA_ROOT");
+            if (String.IsNullOrWhiteSpace(configured))
+                return Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "DSH-Portable");
+            if (!Path.IsPathRooted(configured))
+                throw new InvalidOperationException("DSH_PORTABLE_DATA_ROOT must be an absolute path.");
+            return Path.GetFullPath(configured).TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
         }
 
         private string ResolveLauncherLogDirectory()

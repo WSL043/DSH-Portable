@@ -379,3 +379,12 @@ test('native startup history survives a locked latest log and concurrent writers
     for (const worker of ['one', 'two']) for (let index = 0; index < 32; index++) assert.ok(phases.has(worker + '-' + index))
   }
 })
+
+
+test('the portable WebView profile can follow DSH_PORTABLE_DATA_ROOT', async () => {
+  const source = await readFile(path.join(projectRoot, 'launcher/windows/LauncherWindow.WebView.cs'), 'utf8')
+  assert.match(source, /Environment\.GetEnvironmentVariable\("DSH_PORTABLE_DATA_ROOT"\)/)
+  assert.match(source, /Path\.Combine\(\s*ResolvePortableDataRoot\(\),\s*"webview2",\s*ResolvePortableInstanceId\(\),\s*ResolvePortableLocationKey\(\)\)/)
+  assert.match(source, /if \(!Path\.IsPathRooted\(configured\)\)/)
+  assert.doesNotMatch(source, /LocalApplicationData\),\s*"DSH-Portable",\s*"webview2"/)
+})
