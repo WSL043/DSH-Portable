@@ -34,7 +34,10 @@ test('startup cache preserves ESM, CommonJS and JSON, leaves profile files alone
       assert.equal((await import(${JSON.stringify(pathToFileURL(mutable).href)})).default,99);
       await assert.rejects(import(${JSON.stringify(pathToFileURL(path.join(target, 'data.json')).href + '?no-attribute')}),{code:'ERR_IMPORT_ATTRIBUTE_MISSING'});
       assert.equal((await import(${JSON.stringify(pathToFileURL(path.join(target, 'esm.js')).href)})).default,43);
-      assert.equal(cache.finish().hits,6);
+      const done = cache.finish();
+      assert.equal(done.hits,6);
+      assert.ok(done.firstHitMs > 0, 'the first served module is timed');
+      assert.ok(done.lastHitMs >= done.firstHitMs, 'the hit window spans the import');
       await assert.rejects(import(${JSON.stringify(pathToFileURL(path.join(target, 'main.mjs')).href + '?after')}),/disk source read/);`
     execFileSync(process.execPath, ['--input-type=module', '-e', code], { windowsHide: true })
     await writeFile(path.join(root, 'runtime/DSH-App.dshpack'), 'damaged')
